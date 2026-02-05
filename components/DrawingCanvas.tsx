@@ -46,6 +46,18 @@ const DrawingCanvas = forwardRef<DrawingCanvasRef, DrawingCanvasProps>(
     const currentPathRef = useRef<string>("");
     const currentStrokeIdRef = useRef<string>("");
     const canvasSizeRef = useRef({ width: 0, height: 0 });
+    
+    const strokeColorRef = useRef(strokeColor);
+    const strokeWidthRef = useRef(strokeWidth);
+    const strokesRef = useRef(strokes);
+    const onStrokesChangeRef = useRef(onStrokesChange);
+    const disabledRef = useRef(disabled);
+
+    strokeColorRef.current = strokeColor;
+    strokeWidthRef.current = strokeWidth;
+    strokesRef.current = strokes;
+    onStrokesChangeRef.current = onStrokesChange;
+    disabledRef.current = disabled;
 
     const handleLayout = useCallback((event: LayoutChangeEvent) => {
       const { width, height } = event.nativeEvent.layout;
@@ -65,10 +77,10 @@ const DrawingCanvas = forwardRef<DrawingCanvasRef, DrawingCanvasProps>(
 
     const panResponder = useRef(
       PanResponder.create({
-        onStartShouldSetPanResponder: () => !disabled,
-        onMoveShouldSetPanResponder: () => !disabled,
+        onStartShouldSetPanResponder: () => !disabledRef.current,
+        onMoveShouldSetPanResponder: () => !disabledRef.current,
         onPanResponderGrant: (event: GestureResponderEvent) => {
-          if (disabled) return;
+          if (disabledRef.current) return;
           const point = getPoint(event);
           currentStrokeIdRef.current = generateId();
           currentPathRef.current = `M${point.x.toFixed(2)},${point.y.toFixed(2)}`;
@@ -76,25 +88,25 @@ const DrawingCanvas = forwardRef<DrawingCanvasRef, DrawingCanvasProps>(
           const newStroke: Stroke = {
             id: currentStrokeIdRef.current,
             path: currentPathRef.current,
-            color: strokeColor,
-            strokeWidth: strokeWidth,
+            color: strokeColorRef.current,
+            strokeWidth: strokeWidthRef.current,
           };
-          onStrokesChange([...strokes, newStroke]);
+          onStrokesChangeRef.current([...strokesRef.current, newStroke]);
         },
         onPanResponderMove: (
           event: GestureResponderEvent,
           _gestureState: PanResponderGestureState
         ) => {
-          if (disabled || !currentStrokeIdRef.current) return;
+          if (disabledRef.current || !currentStrokeIdRef.current) return;
           const point = getPoint(event);
           currentPathRef.current += ` L${point.x.toFixed(2)},${point.y.toFixed(2)}`;
 
-          const updatedStrokes = strokes.map((stroke) =>
+          const updatedStrokes = strokesRef.current.map((stroke) =>
             stroke.id === currentStrokeIdRef.current
               ? { ...stroke, path: currentPathRef.current }
               : stroke
           );
-          onStrokesChange(updatedStrokes);
+          onStrokesChangeRef.current(updatedStrokes);
         },
         onPanResponderRelease: () => {
           currentPathRef.current = "";
@@ -109,16 +121,16 @@ const DrawingCanvas = forwardRef<DrawingCanvasRef, DrawingCanvasProps>(
 
     useImperativeHandle(ref, () => ({
       undo: () => {
-        if (strokes.length > 0) {
-          onStrokesChange(strokes.slice(0, -1));
+        if (strokesRef.current.length > 0) {
+          onStrokesChangeRef.current(strokesRef.current.slice(0, -1));
         }
       },
       clear: () => {
-        onStrokesChange([]);
+        onStrokesChangeRef.current([]);
       },
-      getStrokes: () => strokes,
+      getStrokes: () => strokesRef.current,
       setStrokes: (newStrokes: Stroke[]) => {
-        onStrokesChange(newStrokes);
+        onStrokesChangeRef.current(newStrokes);
       },
     }));
 
@@ -127,7 +139,7 @@ const DrawingCanvas = forwardRef<DrawingCanvasRef, DrawingCanvasProps>(
         style={[
           styles.container,
           {
-            backgroundColor: colors.canvasBackground,
+            backgroundColor: "#FFFFFF",
             borderColor: colors.border,
           },
         ]}

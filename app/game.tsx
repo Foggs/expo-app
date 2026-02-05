@@ -114,7 +114,7 @@ export default function GameScreen() {
     }
   };
 
-  const activeColor = isEraser ? colors.canvasBackground : strokeColor;
+  const activeColor = isEraser ? "#FFFFFF" : strokeColor;
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
