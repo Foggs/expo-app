@@ -63,3 +63,29 @@ Preferred communication style: Simple, everyday language.
 - ESLint with Expo configuration
 - Babel with expo preset
 - patch-package for dependency patches
+
+## Game Features (Current Implementation)
+
+### Drawing Canvas
+- **Component**: DrawingCanvas.tsx using react-native-svg
+- **Gesture Handling**: PanResponder for touch/mouse input
+- **Features**: 12 colors, 5 brush sizes, eraser, undo, clear
+- **Canvas**: Always white background, full-area drawing support
+
+### Game Timer & State
+- **useGameTimer Hook**: 2-minute countdown per turn, auto-submit on expiry
+- **Timer States**: Active (teal), Warning (yellow, <30s), Critical (red, <10s)
+- **useGameState Hook**: Manages rounds (1-3), turns (player1/player2), and game completion
+
+### Game Flow
+- 3 rounds total, 2 players alternating turns
+- 2 minutes per turn with visual countdown
+- Auto-opponent simulation for single-player testing (2-second delay)
+- Canvas clears between turns, strokes saved per turn
+- Pulsing timer animation when time is critical (<10 seconds)
+
+### Accessibility Features
+- All buttons have accessibilityLabel and accessibilityRole
+- Timer has accessibilityRole="timer" with time remaining
+- Screen reader hints for key interactions
+- Haptic feedback on native platforms
