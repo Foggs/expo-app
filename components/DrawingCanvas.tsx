@@ -68,8 +68,8 @@ const DrawingCanvas = forwardRef<DrawingCanvasRef, DrawingCanvasProps>(
       (event: GestureResponderEvent) => {
         const { locationX, locationY } = event.nativeEvent;
         return {
-          x: Math.max(0, Math.min(locationX, canvasSizeRef.current.width)),
-          y: Math.max(0, Math.min(locationY, canvasSizeRef.current.height)),
+          x: Math.max(0, locationX),
+          y: Math.max(0, locationY),
         };
       },
       []
@@ -146,7 +146,7 @@ const DrawingCanvas = forwardRef<DrawingCanvasRef, DrawingCanvasProps>(
         onLayout={handleLayout}
         {...panResponder.panHandlers}
       >
-        <Svg style={StyleSheet.absoluteFill} pointerEvents="none">
+        <Svg width="100%" height="100%" style={StyleSheet.absoluteFill} pointerEvents="none">
           {strokes.map((stroke) => (
             <Path
               key={stroke.id}
