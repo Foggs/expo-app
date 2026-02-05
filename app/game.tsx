@@ -1,7 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
 import * as Haptics from "expo-haptics";
-import React from "react";
+import React, { useRef, useState, useCallback } from "react";
 import {
   Platform,
   Pressable,
@@ -9,9 +9,19 @@ import {
   Text,
   View,
   useColorScheme,
+  Alert,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Colors from "@/constants/colors";
+import DrawingCanvas, {
+  DrawingCanvasRef,
+  Stroke,
+} from "@/components/DrawingCanvas";
+import ColorPicker from "@/components/ColorPicker";
+import BrushSizePicker from "@/components/BrushSizePicker";
+
+const DEFAULT_COLOR = "#6C5CE7";
+const DEFAULT_BRUSH_SIZE = 4;
 
 export default function GameScreen() {
   const insets = useSafeAreaInsets();
@@ -19,22 +29,92 @@ export default function GameScreen() {
   const isDark = colorScheme === "dark";
   const colors = isDark ? Colors.dark : Colors.light;
 
+  const canvasRef = useRef<DrawingCanvasRef>(null);
+
+  const [strokes, setStrokes] = useState<Stroke[]>([]);
+  const [strokeColor, setStrokeColor] = useState(DEFAULT_COLOR);
+  const [strokeWidth, setStrokeWidth] = useState(DEFAULT_BRUSH_SIZE);
+  const [isEraser, setIsEraser] = useState(false);
+  const [showColorPicker, setShowColorPicker] = useState(false);
+  const [showBrushPicker, setShowBrushPicker] = useState(false);
+
   const topPadding = Platform.OS === "web" ? 67 : insets.top;
   const bottomPadding = Platform.OS === "web" ? 34 : insets.bottom;
-
-  const handleEndGame = () => {
-    if (Platform.OS !== "web") {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    }
-    router.push("/results");
-  };
 
   const handleBack = () => {
     if (Platform.OS !== "web") {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     }
-    router.back();
+    if (strokes.length > 0) {
+      Alert.alert(
+        "Leave Game?",
+        "Your drawing will be lost if you leave now.",
+        [
+          { text: "Cancel", style: "cancel" },
+          { text: "Leave", style: "destructive", onPress: () => router.back() },
+        ]
+      );
+    } else {
+      router.back();
+    }
   };
+
+  const handleSubmit = () => {
+    if (Platform.OS !== "web") {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    }
+    router.push("/results");
+  };
+
+  const handleUndo = useCallback(() => {
+    if (Platform.OS !== "web") {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    }
+    canvasRef.current?.undo();
+  }, []);
+
+  const handleClear = useCallback(() => {
+    if (Platform.OS !== "web") {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    }
+    if (strokes.length > 0) {
+      Alert.alert("Clear Canvas?", "This will remove all your drawing.", [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Clear",
+          style: "destructive",
+          onPress: () => canvasRef.current?.clear(),
+        },
+      ]);
+    }
+  }, [strokes.length]);
+
+  const handleColorPress = () => {
+    if (Platform.OS !== "web") {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    }
+    setShowColorPicker(true);
+  };
+
+  const handleBrushPress = () => {
+    if (Platform.OS !== "web") {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    }
+    setShowBrushPicker(true);
+  };
+
+  const handleEraserToggle = () => {
+    if (Platform.OS !== "web") {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    }
+    if (isEraser) {
+      setIsEraser(false);
+    } else {
+      setIsEraser(true);
+    }
+  };
+
+  const activeColor = isEraser ? colors.canvasBackground : strokeColor;
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
@@ -70,56 +150,111 @@ export default function GameScreen() {
       </View>
 
       <View style={styles.canvasContainer}>
-        <View
-          style={[
-            styles.canvas,
-            {
-              backgroundColor: colors.canvasBackground,
-              borderColor: colors.border,
-            },
-          ]}
-        >
-          <View style={styles.canvasPlaceholder}>
-            <Ionicons name="brush" size={48} color={colors.textSecondary} />
-            <Text
-              style={[styles.placeholderText, { color: colors.textSecondary }]}
-            >
-              Drawing canvas will be here
-            </Text>
-          </View>
-        </View>
+        <DrawingCanvas
+          ref={canvasRef}
+          strokeColor={activeColor}
+          strokeWidth={strokeWidth}
+          strokes={strokes}
+          onStrokesChange={setStrokes}
+        />
       </View>
 
       <View style={[styles.toolbar, { paddingBottom: bottomPadding + 8 }]}>
         <View style={styles.toolGroup}>
-          <View style={[styles.toolButton, { backgroundColor: colors.card }]}>
-            <Ionicons name="brush" size={22} color={colors.tint} />
-          </View>
-          <View style={[styles.toolButton, { backgroundColor: colors.card }]}>
-            <View
-              style={[styles.colorSwatch, { backgroundColor: colors.tint }]}
+          <Pressable
+            onPress={handleBrushPress}
+            style={[
+              styles.toolButton,
+              { backgroundColor: colors.card },
+              !isEraser && styles.toolButtonActive,
+            ]}
+            accessibilityRole="button"
+            accessibilityLabel="Select brush size"
+          >
+            <Ionicons
+              name="brush"
+              size={22}
+              color={!isEraser ? colors.tint : colors.textSecondary}
             />
-          </View>
-          <View style={[styles.toolButton, { backgroundColor: colors.card }]}>
-            <Ionicons name="remove" size={22} color={colors.textSecondary} />
-          </View>
+          </Pressable>
+
+          <Pressable
+            onPress={handleColorPress}
+            style={[styles.toolButton, { backgroundColor: colors.card }]}
+            accessibilityRole="button"
+            accessibilityLabel="Select brush color"
+          >
+            <View
+              style={[
+                styles.colorSwatch,
+                {
+                  backgroundColor: strokeColor,
+                  borderColor:
+                    strokeColor === "#FFFFFF" ? colors.border : "transparent",
+                },
+              ]}
+            />
+          </Pressable>
+
+          <Pressable
+            onPress={handleEraserToggle}
+            style={[
+              styles.toolButton,
+              { backgroundColor: colors.card },
+              isEraser && styles.toolButtonActive,
+            ]}
+            accessibilityRole="button"
+            accessibilityLabel={isEraser ? "Switch to brush" : "Switch to eraser"}
+            accessibilityState={{ selected: isEraser }}
+          >
+            <Ionicons
+              name="remove-circle-outline"
+              size={22}
+              color={isEraser ? colors.tint : colors.textSecondary}
+            />
+          </Pressable>
         </View>
 
         <View style={styles.toolGroup}>
-          <View style={[styles.toolButton, { backgroundColor: colors.card }]}>
+          <Pressable
+            onPress={handleUndo}
+            style={[
+              styles.toolButton,
+              { backgroundColor: colors.card },
+              strokes.length === 0 && styles.toolButtonDisabled,
+            ]}
+            disabled={strokes.length === 0}
+            accessibilityRole="button"
+            accessibilityLabel="Undo last stroke"
+          >
             <Ionicons
               name="arrow-undo"
               size={22}
-              color={colors.textSecondary}
+              color={strokes.length > 0 ? colors.textSecondary : colors.border}
             />
-          </View>
-          <View style={[styles.toolButton, { backgroundColor: colors.card }]}>
-            <Ionicons name="trash" size={22} color={colors.error} />
-          </View>
+          </Pressable>
+
+          <Pressable
+            onPress={handleClear}
+            style={[
+              styles.toolButton,
+              { backgroundColor: colors.card },
+              strokes.length === 0 && styles.toolButtonDisabled,
+            ]}
+            disabled={strokes.length === 0}
+            accessibilityRole="button"
+            accessibilityLabel="Clear canvas"
+          >
+            <Ionicons
+              name="trash"
+              size={22}
+              color={strokes.length > 0 ? colors.error : colors.border}
+            />
+          </Pressable>
         </View>
 
         <Pressable
-          onPress={handleEndGame}
+          onPress={handleSubmit}
           style={[styles.submitButton, { backgroundColor: colors.tint }]}
           accessibilityRole="button"
           accessibilityLabel="Submit your drawing"
@@ -127,6 +262,24 @@ export default function GameScreen() {
           <Ionicons name="checkmark" size={24} color="#fff" />
         </Pressable>
       </View>
+
+      <ColorPicker
+        selectedColor={strokeColor}
+        onColorChange={(color) => {
+          setStrokeColor(color);
+          setIsEraser(false);
+        }}
+        visible={showColorPicker}
+        onClose={() => setShowColorPicker(false)}
+      />
+
+      <BrushSizePicker
+        selectedSize={strokeWidth}
+        onSizeChange={setStrokeWidth}
+        visible={showBrushPicker}
+        onClose={() => setShowBrushPicker(false)}
+        currentColor={strokeColor}
+      />
     </View>
   );
 }
@@ -194,22 +347,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 8,
   },
-  canvas: {
-    flex: 1,
-    borderRadius: 16,
-    borderWidth: 2,
-    overflow: "hidden",
-  },
-  canvasPlaceholder: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    gap: 16,
-  },
-  placeholderText: {
-    fontSize: 16,
-    fontFamily: "Inter_400Regular",
-  },
   toolbar: {
     flexDirection: "row",
     alignItems: "center",
@@ -229,10 +366,18 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
   },
+  toolButtonActive: {
+    borderWidth: 2,
+    borderColor: "#6C5CE7",
+  },
+  toolButtonDisabled: {
+    opacity: 0.5,
+  },
   colorSwatch: {
     width: 24,
     height: 24,
     borderRadius: 12,
+    borderWidth: 2,
   },
   submitButton: {
     width: 56,

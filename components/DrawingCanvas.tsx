@@ -1,0 +1,166 @@
+import React, { useRef, useCallback, useImperativeHandle, forwardRef } from "react";
+import {
+  View,
+  StyleSheet,
+  PanResponder,
+  GestureResponderEvent,
+  PanResponderGestureState,
+  useColorScheme,
+  LayoutChangeEvent,
+} from "react-native";
+import Svg, { Path } from "react-native-svg";
+import Colors from "@/constants/colors";
+
+export interface Stroke {
+  id: string;
+  path: string;
+  color: string;
+  strokeWidth: number;
+}
+
+export interface DrawingCanvasRef {
+  undo: () => void;
+  clear: () => void;
+  getStrokes: () => Stroke[];
+  setStrokes: (strokes: Stroke[]) => void;
+}
+
+interface DrawingCanvasProps {
+  strokeColor: string;
+  strokeWidth: number;
+  strokes: Stroke[];
+  onStrokesChange: (strokes: Stroke[]) => void;
+  disabled?: boolean;
+}
+
+function generateId(): string {
+  return Date.now().toString() + Math.random().toString(36).substr(2, 9);
+}
+
+const DrawingCanvas = forwardRef<DrawingCanvasRef, DrawingCanvasProps>(
+  ({ strokeColor, strokeWidth, strokes, onStrokesChange, disabled = false }, ref) => {
+    const colorScheme = useColorScheme();
+    const isDark = colorScheme === "dark";
+    const colors = isDark ? Colors.dark : Colors.light;
+
+    const currentPathRef = useRef<string>("");
+    const currentStrokeIdRef = useRef<string>("");
+    const canvasSizeRef = useRef({ width: 0, height: 0 });
+
+    const handleLayout = useCallback((event: LayoutChangeEvent) => {
+      const { width, height } = event.nativeEvent.layout;
+      canvasSizeRef.current = { width, height };
+    }, []);
+
+    const getPoint = useCallback(
+      (event: GestureResponderEvent) => {
+        const { locationX, locationY } = event.nativeEvent;
+        return {
+          x: Math.max(0, Math.min(locationX, canvasSizeRef.current.width)),
+          y: Math.max(0, Math.min(locationY, canvasSizeRef.current.height)),
+        };
+      },
+      []
+    );
+
+    const panResponder = useRef(
+      PanResponder.create({
+        onStartShouldSetPanResponder: () => !disabled,
+        onMoveShouldSetPanResponder: () => !disabled,
+        onPanResponderGrant: (event: GestureResponderEvent) => {
+          if (disabled) return;
+          const point = getPoint(event);
+          currentStrokeIdRef.current = generateId();
+          currentPathRef.current = `M${point.x.toFixed(2)},${point.y.toFixed(2)}`;
+
+          const newStroke: Stroke = {
+            id: currentStrokeIdRef.current,
+            path: currentPathRef.current,
+            color: strokeColor,
+            strokeWidth: strokeWidth,
+          };
+          onStrokesChange([...strokes, newStroke]);
+        },
+        onPanResponderMove: (
+          event: GestureResponderEvent,
+          _gestureState: PanResponderGestureState
+        ) => {
+          if (disabled || !currentStrokeIdRef.current) return;
+          const point = getPoint(event);
+          currentPathRef.current += ` L${point.x.toFixed(2)},${point.y.toFixed(2)}`;
+
+          const updatedStrokes = strokes.map((stroke) =>
+            stroke.id === currentStrokeIdRef.current
+              ? { ...stroke, path: currentPathRef.current }
+              : stroke
+          );
+          onStrokesChange(updatedStrokes);
+        },
+        onPanResponderRelease: () => {
+          currentPathRef.current = "";
+          currentStrokeIdRef.current = "";
+        },
+        onPanResponderTerminate: () => {
+          currentPathRef.current = "";
+          currentStrokeIdRef.current = "";
+        },
+      })
+    ).current;
+
+    useImperativeHandle(ref, () => ({
+      undo: () => {
+        if (strokes.length > 0) {
+          onStrokesChange(strokes.slice(0, -1));
+        }
+      },
+      clear: () => {
+        onStrokesChange([]);
+      },
+      getStrokes: () => strokes,
+      setStrokes: (newStrokes: Stroke[]) => {
+        onStrokesChange(newStrokes);
+      },
+    }));
+
+    return (
+      <View
+        style={[
+          styles.container,
+          {
+            backgroundColor: colors.canvasBackground,
+            borderColor: colors.border,
+          },
+        ]}
+        onLayout={handleLayout}
+        {...panResponder.panHandlers}
+      >
+        <Svg style={StyleSheet.absoluteFill}>
+          {strokes.map((stroke) => (
+            <Path
+              key={stroke.id}
+              d={stroke.path}
+              stroke={stroke.color}
+              strokeWidth={stroke.strokeWidth}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              fill="none"
+            />
+          ))}
+        </Svg>
+      </View>
+    );
+  }
+);
+
+DrawingCanvas.displayName = "DrawingCanvas";
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    borderRadius: 16,
+    borderWidth: 2,
+    overflow: "hidden",
+  },
+});
+
+export default DrawingCanvas;
