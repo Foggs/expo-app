@@ -1,7 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
 import * as Haptics from "expo-haptics";
-import React, { useRef, useState, useCallback } from "react";
+import React, { useRef, useState, useCallback, useEffect } from "react";
 import {
   Platform,
   Pressable,
@@ -11,6 +11,14 @@ import {
   useColorScheme,
   Alert,
 } from "react-native";
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withTiming,
+  withSequence,
+  withRepeat,
+  Easing,
+} from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Colors from "@/constants/colors";
 import DrawingCanvas, {
@@ -19,6 +27,8 @@ import DrawingCanvas, {
 } from "@/components/DrawingCanvas";
 import ColorPicker from "@/components/ColorPicker";
 import BrushSizePicker from "@/components/BrushSizePicker";
+import { useGameTimer } from "@/hooks/useGameTimer";
+import { useGameState } from "@/hooks/useGameState";
 
 const DEFAULT_COLOR = "#6C5CE7";
 const DEFAULT_BRUSH_SIZE = 4;
@@ -37,6 +47,61 @@ export default function GameScreen() {
   const [isEraser, setIsEraser] = useState(false);
   const [showColorPicker, setShowColorPicker] = useState(false);
   const [showBrushPicker, setShowBrushPicker] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const timerPulse = useSharedValue(1);
+
+  const { gameState, isMyTurn, roundDisplay, turnDisplay, submitTurn, resetGame } =
+    useGameState("player1");
+
+  const handleSubmitTurn = useCallback(() => {
+    if (isSubmitting) return;
+    setIsSubmitting(true);
+
+    if (Platform.OS !== "web") {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    }
+
+    submitTurn(strokes);
+    setStrokes([]);
+
+    if (gameState.currentRound >= 3 && gameState.currentPlayer === "player2") {
+      router.push("/results");
+    } else {
+      setIsSubmitting(false);
+      timer.reset();
+      timer.start();
+    }
+  }, [strokes, isSubmitting, gameState.currentRound, gameState.currentPlayer]);
+
+  const timer = useGameTimer({
+    onTimeUp: handleSubmitTurn,
+    autoStart: true,
+  });
+
+  useEffect(() => {
+    if (gameState.isGameComplete) {
+      router.push("/results");
+    }
+  }, [gameState.isGameComplete]);
+
+  useEffect(() => {
+    if (timer.timerColor === "critical") {
+      timerPulse.value = withRepeat(
+        withSequence(
+          withTiming(1.1, { duration: 300, easing: Easing.inOut(Easing.ease) }),
+          withTiming(1, { duration: 300, easing: Easing.inOut(Easing.ease) })
+        ),
+        -1
+      );
+    } else {
+      timerPulse.value = withTiming(1, { duration: 200 });
+    }
+  }, [timer.timerColor]);
+
+  const timerAnimatedStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: timerPulse.value }],
+  }));
 
   const topPadding = Platform.OS === "web" ? 67 : insets.top;
   const bottomPadding = Platform.OS === "web" ? 34 : insets.bottom;
@@ -45,25 +110,30 @@ export default function GameScreen() {
     if (Platform.OS !== "web") {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     }
-    if (strokes.length > 0) {
-      Alert.alert(
-        "Leave Game?",
-        "Your drawing will be lost if you leave now.",
-        [
-          { text: "Cancel", style: "cancel" },
-          { text: "Leave", style: "destructive", onPress: () => router.back() },
-        ]
-      );
-    } else {
-      router.back();
-    }
+    timer.pause();
+    Alert.alert(
+      "Leave Game?",
+      "Your progress will be lost if you leave now.",
+      [
+        { text: "Cancel", style: "cancel", onPress: () => timer.start() },
+        {
+          text: "Leave",
+          style: "destructive",
+          onPress: () => {
+            resetGame();
+            router.back();
+          },
+        },
+      ]
+    );
   };
 
   const handleSubmit = () => {
     if (Platform.OS !== "web") {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     }
-    router.push("/results");
+    timer.pause();
+    handleSubmitTurn();
   };
 
   const handleUndo = useCallback(() => {
@@ -107,14 +177,21 @@ export default function GameScreen() {
     if (Platform.OS !== "web") {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     }
-    if (isEraser) {
-      setIsEraser(false);
-    } else {
-      setIsEraser(true);
-    }
+    setIsEraser(!isEraser);
   };
 
   const activeColor = isEraser ? "#FFFFFF" : strokeColor;
+
+  const getTimerColor = () => {
+    switch (timer.timerColor) {
+      case "critical":
+        return colors.timerCritical;
+      case "warning":
+        return colors.timerWarning;
+      default:
+        return colors.timerActive;
+    }
+  };
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
@@ -129,23 +206,54 @@ export default function GameScreen() {
         </Pressable>
 
         <View style={styles.timerContainer}>
-          <View style={[styles.timerBadge, { backgroundColor: colors.card }]}>
-            <Ionicons name="timer" size={20} color={colors.timerActive} />
-            <Text style={[styles.timerText, { color: colors.text }]}>2:00</Text>
-          </View>
+          <Animated.View
+            style={[
+              styles.timerBadge,
+              { backgroundColor: colors.card },
+              timerAnimatedStyle,
+            ]}
+          >
+            <Ionicons name="timer" size={20} color={getTimerColor()} />
+            <Text
+              style={[
+                styles.timerText,
+                { color: getTimerColor() },
+              ]}
+              accessibilityLabel={`Time remaining: ${timer.formattedTime}`}
+              accessibilityRole="timer"
+            >
+              {timer.formattedTime}
+            </Text>
+          </Animated.View>
         </View>
 
         <View style={styles.roundBadge}>
-          <Text style={[styles.roundText, { color: colors.textSecondary }]}>
-            Round 1/3
+          <Text
+            style={[styles.roundText, { color: colors.textSecondary }]}
+            accessibilityLabel={roundDisplay}
+          >
+            {roundDisplay}
           </Text>
         </View>
       </View>
 
       <View style={styles.turnIndicator}>
-        <View style={[styles.playerDot, { backgroundColor: colors.player1 }]} />
-        <Text style={[styles.turnText, { color: colors.text }]}>
-          Your Turn to Draw
+        <View
+          style={[
+            styles.playerDot,
+            {
+              backgroundColor:
+                gameState.currentPlayer === "player1"
+                  ? colors.player1
+                  : colors.player2,
+            },
+          ]}
+        />
+        <Text
+          style={[styles.turnText, { color: colors.text }]}
+          accessibilityLabel={turnDisplay}
+        >
+          {turnDisplay}
         </Text>
       </View>
 
@@ -156,7 +264,13 @@ export default function GameScreen() {
           strokeWidth={strokeWidth}
           strokes={strokes}
           onStrokesChange={setStrokes}
+          disabled={!isMyTurn || isSubmitting}
         />
+        {!isMyTurn && (
+          <View style={styles.canvasOverlay}>
+            <Text style={styles.waitingText}>Waiting for opponent...</Text>
+          </View>
+        )}
       </View>
 
       <View style={[styles.toolbar, { paddingBottom: bottomPadding + 8 }]}>
@@ -168,6 +282,7 @@ export default function GameScreen() {
               { backgroundColor: colors.card },
               !isEraser && styles.toolButtonActive,
             ]}
+            disabled={!isMyTurn}
             accessibilityRole="button"
             accessibilityLabel="Select brush size"
           >
@@ -181,6 +296,7 @@ export default function GameScreen() {
           <Pressable
             onPress={handleColorPress}
             style={[styles.toolButton, { backgroundColor: colors.card }]}
+            disabled={!isMyTurn}
             accessibilityRole="button"
             accessibilityLabel="Select brush color"
           >
@@ -203,6 +319,7 @@ export default function GameScreen() {
               { backgroundColor: colors.card },
               isEraser && styles.toolButtonActive,
             ]}
+            disabled={!isMyTurn}
             accessibilityRole="button"
             accessibilityLabel={isEraser ? "Switch to brush" : "Switch to eraser"}
             accessibilityState={{ selected: isEraser }}
@@ -223,7 +340,7 @@ export default function GameScreen() {
               { backgroundColor: colors.card },
               strokes.length === 0 && styles.toolButtonDisabled,
             ]}
-            disabled={strokes.length === 0}
+            disabled={strokes.length === 0 || !isMyTurn}
             accessibilityRole="button"
             accessibilityLabel="Undo last stroke"
           >
@@ -241,7 +358,7 @@ export default function GameScreen() {
               { backgroundColor: colors.card },
               strokes.length === 0 && styles.toolButtonDisabled,
             ]}
-            disabled={strokes.length === 0}
+            disabled={strokes.length === 0 || !isMyTurn}
             accessibilityRole="button"
             accessibilityLabel="Clear canvas"
           >
@@ -255,9 +372,14 @@ export default function GameScreen() {
 
         <Pressable
           onPress={handleSubmit}
-          style={[styles.submitButton, { backgroundColor: colors.tint }]}
+          style={[
+            styles.submitButton,
+            { backgroundColor: colors.tint },
+            (!isMyTurn || isSubmitting) && styles.submitButtonDisabled,
+          ]}
+          disabled={!isMyTurn || isSubmitting}
           accessibilityRole="button"
-          accessibilityLabel="Submit your drawing"
+          accessibilityLabel="Submit your drawing and end turn"
         >
           <Ionicons name="checkmark" size={24} color="#fff" />
         </Pressable>
@@ -319,7 +441,7 @@ const styles = StyleSheet.create({
     fontFamily: "Inter_600SemiBold",
   },
   roundBadge: {
-    width: 44,
+    width: 70,
     alignItems: "flex-end",
   },
   roundText: {
@@ -346,6 +468,21 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingHorizontal: 16,
     paddingVertical: 8,
+    position: "relative",
+  },
+  canvasOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
+    justifyContent: "center",
+    alignItems: "center",
+    marginHorizontal: 16,
+    marginVertical: 8,
+    borderRadius: 16,
+  },
+  waitingText: {
+    color: "#fff",
+    fontSize: 18,
+    fontFamily: "Inter_600SemiBold",
   },
   toolbar: {
     flexDirection: "row",
@@ -385,5 +522,8 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     justifyContent: "center",
     alignItems: "center",
+  },
+  submitButtonDisabled: {
+    opacity: 0.6,
   },
 });
