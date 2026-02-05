@@ -1,12 +1,46 @@
-// template
-const tintColorLight = "#2f95dc";
-
-export default {
+const Colors = {
   light: {
-    text: "#000",
-    background: "#fff",
-    tint: tintColorLight,
-    tabIconDefault: "#ccc",
-    tabIconSelected: tintColorLight,
+    text: "#1a1a2e",
+    textSecondary: "#4a4a6a",
+    background: "#f8f9ff",
+    card: "#ffffff",
+    tint: "#6c5ce7",
+    accent: "#00cec9",
+    accentSecondary: "#fd79a8",
+    warning: "#fdcb6e",
+    error: "#d63031",
+    success: "#00b894",
+    border: "#e0e0f0",
+    tabIconDefault: "#8e8ea0",
+    tabIconSelected: "#6c5ce7",
+    canvasBackground: "#ffffff",
+    timerActive: "#00cec9",
+    timerWarning: "#fdcb6e",
+    timerCritical: "#d63031",
+    player1: "#6c5ce7",
+    player2: "#00cec9",
+  },
+  dark: {
+    text: "#ffffff",
+    textSecondary: "#a0a0b8",
+    background: "#1a1a2e",
+    card: "#252542",
+    tint: "#a29bfe",
+    accent: "#00cec9",
+    accentSecondary: "#fd79a8",
+    warning: "#fdcb6e",
+    error: "#ff7675",
+    success: "#00b894",
+    border: "#3a3a5c",
+    tabIconDefault: "#6e6e8a",
+    tabIconSelected: "#a29bfe",
+    canvasBackground: "#2d2d4a",
+    timerActive: "#00cec9",
+    timerWarning: "#fdcb6e",
+    timerCritical: "#ff7675",
+    player1: "#a29bfe",
+    player2: "#00cec9",
   },
 };
+
+export default Colors;
