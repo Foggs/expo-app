@@ -1,0 +1,61 @@
+# SketchDuel: Complete Development Prompt for Replit
+
+**Project:** SketchDuel - Turn-Based Multiplayer Drawing Game for iOS
+**Author:** Manus AI
+**Date:** January 27, 2026
+**Target Platform:** iOS (SwiftUI, PencilKit, GameKit)
+**Total Duration:** 8 Weeks (4 Sprints × 2 Weeks)
+
+---
+
+## Executive Summary
+
+SketchDuel is a competitive, turn-based multiplayer drawing game for iOS. Two players take turns drawing on a shared canvas, with Game Center handling matchmaking and turn synchronization. The application uses SwiftUI for the user interface, PencilKit for drawing capabilities, and GameKit for multiplayer functionality.
+
+This document provides a comprehensive development roadmap organized into four manageable two-week sprints. Each sprint builds upon the previous one, delivering incremental functionality while maintaining code quality and architectural integrity.
+
+---
+
+## Project Architecture Overview
+
+The application follows a Model-View-ViewModel (MVVM) pattern with a dedicated Manager layer for external services. The core architecture consists of five primary components:
+
+**GameView** serves as the main user interface, displaying the canvas, turn status, and game controls. **GameState** acts as the central source of truth, managing turn logic, round progression, and holding the current drawing data while implementing a formal state machine. **GameCenterManager** handles all Game Center interactions including authentication, matchmaking, and turn-based data exchange. **CanvasView** provides a SwiftUI wrapper around PencilKit's PKCanvasView, managing drawing rendering and tool selection. **MatchData** is a Codable structure that represents the serializable payload exchanged between players.
+
+The drawing data will be normalized to a fixed 4:3 aspect ratio to ensure consistency across different iOS device sizes, and compression will be applied to keep payloads within GameKit's limits.
+
+---
+
+## Critical Architectural Fixes
+
+The initial proposal contained several significant gaps that must be addressed before development begins:
+
+**Multiplayer Management**: The original design mixed GameKit logic directly into GameState. The proposed solution creates a dedicated GameCenterManager singleton that decouples authentication and event handling from core game state, improving modularity and testability.
+
+**Drawing Data Handling**: Large PKDrawing files can exceed GameKit's data transfer limits, and different screen sizes (iPhone vs. iPad) cause drawing misalignment. The solution implements data normalization using a fixed aspect ratio and compression algorithms to keep payloads manageable.
+
+**Game Flow Control**: The simple GameStatus enum was insufficient for managing complex game phases. A formal state machine with states including authenticating, matching, waitingForTurn, drawing, submitting, and gameOver provides robust handling of all game phases.
+
+**Authentication**: The original code lacked Game Center authentication. All GameKit features require mandatory user authentication via GKLocalPlayer, which must be implemented before any multiplayer functionality.
+
+**Error Handling**: No mechanisms existed for handling network failures, timeouts, or invalid match states. Dedicated error states and recovery logic are essential for a stable multiplayer experience.
+
+**User Experience**: Missing drawing tools, turn indicators, and feedback mechanisms. Full PKToolPicker integration and visual cues provide a professional drawing experience.
+
+---
+
+## Sprint 1: Core Architecture & Authentication (Weeks 1-2)
+
+**Sprint Goal**: Establish the foundational architecture, successful Game Center authentication, and basic state management.
+
+### Task 1.1: Project Setup (1 Day)
+
+Initialize the iOS project with SwiftUI as the primary UI framework. Configure the project to include PencilKit and GameKit frameworks. Set up the project structure with the following directories: Models (for data structures), Views (for SwiftUI components), ViewModels (for state management), and Managers (for external service integrations). Create a basic App entry point using the @main attribute and set up the environment for the GameState observable.
+
+**Deliverables**: A clean, organized Xcode project with proper folder structure and all necessary frameworks imported.
+
+### Task 1.2: Implement GameCenterManager (3 Days)
+
+Create a singleton GameCenterManager class that handles all Game Center interactions. Implement the GKLocalPlayer authentication handler to manage user sign-in. The authentication handler should check if the player is already authenticated and present the Game Center sign-in interface if needed. Implement GKTurnBasedEventListener to handle match invitations and turn updates in real-time. Create methods for initiating matchmaking, accepting matches, and retrieving active matches. The manager should maintain a reference to the current match and provide callbacks to notify the GameState when match status changes.
+
+**Key Implementation Details**: U...
