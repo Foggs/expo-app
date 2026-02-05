@@ -86,6 +86,17 @@ export default function GameScreen() {
   }, [gameState.isGameComplete]);
 
   useEffect(() => {
+    if (!isMyTurn && !gameState.isGameComplete) {
+      const opponentTimeout = setTimeout(() => {
+        submitTurn([]);
+        timer.reset();
+        timer.start();
+      }, 2000);
+      return () => clearTimeout(opponentTimeout);
+    }
+  }, [isMyTurn, gameState.isGameComplete]);
+
+  useEffect(() => {
     if (timer.timerColor === "critical") {
       timerPulse.value = withRepeat(
         withSequence(

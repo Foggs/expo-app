@@ -146,7 +146,7 @@ const DrawingCanvas = forwardRef<DrawingCanvasRef, DrawingCanvasProps>(
         onLayout={handleLayout}
         {...panResponder.panHandlers}
       >
-        <Svg width="100%" height="100%" style={StyleSheet.absoluteFill} pointerEvents="none">
+        <Svg width="100%" height="100%" style={[StyleSheet.absoluteFill, { pointerEvents: "none" }]}>
           {strokes.map((stroke) => (
             <Path
               key={stroke.id}
