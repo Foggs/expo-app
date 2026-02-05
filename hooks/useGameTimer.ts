@@ -16,6 +16,7 @@ interface UseGameTimerReturn {
   start: () => void;
   pause: () => void;
   reset: () => void;
+  restart: () => void;
 }
 
 export function useGameTimer({
@@ -51,6 +52,12 @@ export function useGameTimer({
     setIsRunning(false);
   }, [clearTimer]);
 
+  const restart = useCallback(() => {
+    clearTimer();
+    setTimeRemaining(TURN_DURATION_SECONDS);
+    setIsRunning(true);
+  }, [clearTimer]);
+
   useEffect(() => {
     if (isRunning && timeRemaining > 0) {
       intervalRef.current = setInterval(() => {
@@ -69,7 +76,7 @@ export function useGameTimer({
     }
 
     return () => clearTimer();
-  }, [isRunning, clearTimer]);
+  }, [isRunning, timeRemaining, clearTimer]);
 
   const progress = timeRemaining / TURN_DURATION_SECONDS;
 
@@ -93,6 +100,7 @@ export function useGameTimer({
     start,
     pause,
     reset,
+    restart,
   };
 }
 

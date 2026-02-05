@@ -54,6 +54,8 @@ export default function GameScreen() {
   const { gameState, isMyTurn, roundDisplay, turnDisplay, submitTurn, resetGame } =
     useGameState("player1");
 
+  const timerRestartRef = useRef<(() => void) | null>(null);
+
   const handleSubmitTurn = useCallback(() => {
     if (isSubmitting) return;
     setIsSubmitting(true);
@@ -69,8 +71,7 @@ export default function GameScreen() {
       router.push("/results");
     } else {
       setIsSubmitting(false);
-      timer.reset();
-      timer.start();
+      timerRestartRef.current?.();
     }
   }, [strokes, isSubmitting, gameState.currentRound, gameState.currentPlayer]);
 
@@ -78,6 +79,8 @@ export default function GameScreen() {
     onTimeUp: handleSubmitTurn,
     autoStart: true,
   });
+
+  timerRestartRef.current = timer.restart;
 
   useEffect(() => {
     if (gameState.isGameComplete) {
@@ -89,8 +92,7 @@ export default function GameScreen() {
     if (!isMyTurn && !gameState.isGameComplete) {
       const opponentTimeout = setTimeout(() => {
         submitTurn([]);
-        timer.reset();
-        timer.start();
+        timerRestartRef.current?.();
       }, 2000);
       return () => clearTimeout(opponentTimeout);
     }
