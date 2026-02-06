@@ -114,6 +114,31 @@ Preferred communication style: Simple, everyday language.
 - Timer has accessibilityRole="timer" with time remaining
 - Screen reader hints for key interactions
 - Haptic feedback on native platforms
+- WCAG AA contrast: timer warning color #b8860b (dark goldenrod) passes 4.5:1 on light backgrounds
+- Live regions: assertive for turn changes, polite for timer/search/queue status
+- Color picker: Uses friendly names (Red, Blue, etc.) instead of hex values for screen readers
+- Brush size picker: accessibilityHint on each size option
+- Canvas: Dynamic accessibilityLabel for drawing vs view-only states
+- Info rows on home screen: Grouped with accessible labels
+- Results screen: All stats and player cards have accessibility labels
+
+### Results Screen
+- Displays game stats: rounds, total time, artists
+- **Round Gallery**: Shows round-by-round drawing thumbnails from both players side by side
+- **DrawingThumbnail** component renders SVG strokes in 120x120 mini canvas with viewBox "0 0 400 400"
+- **Game Store** (`lib/gameStore.ts`): Module-level storage persists drawings across screens
+  - `addRoundDrawing()`: Saves player/opponent strokes per round during gameplay
+  - `getRoundDrawings()`: Retrieves all stored drawings for results display
+  - `clearRoundDrawings()`: Resets on game start and results unmount
+- Shows "No drawings recorded" when no strokes are available
+
+### Haptic Feedback
+- Turn start: Warning notification when it becomes player's turn
+- Timer warning (30s): Medium impact feedback
+- Timer critical (10s): Error notification feedback
+- Turn submit: Success notification
+- Match found: Success notification
+- Button interactions: Light/Medium impact on native platforms only
 
 ### Future Roadmap
 - Private game rooms (create/join with room codes)
