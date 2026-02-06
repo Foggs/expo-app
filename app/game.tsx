@@ -30,6 +30,7 @@ import BrushSizePicker from "@/components/BrushSizePicker";
 import { useGameTimer } from "@/hooks/useGameTimer";
 import { useGameState, PlayerId } from "@/hooks/useGameState";
 import { useWebSocket } from "@/hooks/useWebSocket";
+import { addRoundDrawing, clearRoundDrawings } from "@/lib/gameStore";
 
 const DEFAULT_COLOR = "#6C5CE7";
 const DEFAULT_BRUSH_SIZE = 4;
@@ -160,6 +161,11 @@ export default function GameScreen() {
     }));
 
     ws.submitTurn(wsStrokes);
+    addRoundDrawing({
+      round: currentRound,
+      playerRole,
+      strokes: [...strokes],
+    });
     setStrokes([]);
     timer.pause();
   }, [strokes, isSubmitting, isMyTurn, ws.submitTurn, localSubmitTurn]);
@@ -173,6 +179,7 @@ export default function GameScreen() {
 
   useEffect(() => {
     if (ws.connectionStatus === "disconnected" && gameId) {
+      clearRoundDrawings();
       ws.connect();
     }
   }, []);
@@ -182,6 +189,16 @@ export default function GameScreen() {
     prevIsMyTurnRef.current = isMyTurn;
 
     if (isMyTurn && wasMyTurn !== null && wasMyTurn !== isMyTurn) {
+      if (Platform.OS !== "web") {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+      }
+      if (opponentStrokes.length > 0) {
+        addRoundDrawing({
+          round: currentRound,
+          playerRole: playerRole === "player1" ? "player2" : "player1",
+          strokes: [...opponentStrokes],
+        });
+      }
       setStrokes([]);
       setOpponentStrokes([]);
       canvasRef.current?.clear();
@@ -208,6 +225,18 @@ export default function GameScreen() {
       timerPulse.value = withTiming(1, { duration: 200 });
     }
   }, [timer.timerColor]);
+
+  useEffect(() => {
+    if (timer.timerColor === "warning" && timer.timeRemaining === 30) {
+      if (Platform.OS !== "web") {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      }
+    } else if (timer.timerColor === "critical" && timer.timeRemaining === 10) {
+      if (Platform.OS !== "web") {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      }
+    }
+  }, [timer.timerColor, timer.timeRemaining]);
 
   const timerAnimatedStyle = useAnimatedStyle(() => ({
     transform: [{ scale: timerPulse.value }],
@@ -400,6 +429,7 @@ export default function GameScreen() {
         <Text
           style={[styles.turnText, { color: colors.text }]}
           accessibilityLabel={turnDisplay}
+          accessibilityLiveRegion="assertive"
         >
           {turnDisplay}
         </Text>
@@ -410,7 +440,7 @@ export default function GameScreen() {
         )}
       </View>
 
-      <View style={styles.canvasContainer}>
+      <View style={styles.canvasContainer} accessible={true} accessibilityLabel={isMyTurn ? "Drawing canvas. Touch and drag to draw." : "Opponent's drawing canvas. View only."}>
         <DrawingCanvas
           ref={canvasRef}
           strokeColor={activeColor}
@@ -421,7 +451,7 @@ export default function GameScreen() {
         />
         {!isMyTurn && (
           <View style={styles.canvasOverlay}>
-            <View style={styles.opponentDrawingLabel}>
+            <View style={styles.opponentDrawingLabel} accessible={true} accessibilityLiveRegion="polite" accessibilityLabel={opponentStrokes.length > 0 ? "Opponent is currently drawing" : "Waiting for opponent to draw"}>
               <Ionicons name="pencil" size={14} color="#fff" />
               <Text style={styles.opponentDrawingText}>
                 {opponentStrokes.length > 0

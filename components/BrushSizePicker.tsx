@@ -88,6 +88,7 @@ export default function BrushSizePicker({
                 ]}
                 accessibilityRole="button"
                 accessibilityLabel={`Select ${label} brush size`}
+                accessibilityHint="Double tap to select this brush size"
                 accessibilityState={{ selected: selectedSize === size }}
               >
                 <View style={styles.previewContainer}>

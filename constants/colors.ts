@@ -15,7 +15,7 @@ const Colors = {
     tabIconSelected: "#6c5ce7",
     canvasBackground: "#ffffff",
     timerActive: "#00cec9",
-    timerWarning: "#fdcb6e",
+    timerWarning: "#b8860b",
     timerCritical: "#d63031",
     player1: "#6c5ce7",
     player2: "#00cec9",

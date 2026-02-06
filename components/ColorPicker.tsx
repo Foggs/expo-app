@@ -27,6 +27,21 @@ const DRAWING_COLORS = [
   "#00CEC9",
 ];
 
+const COLOR_NAMES: Record<string, string> = {
+  "#000000": "Black",
+  "#FFFFFF": "White",
+  "#FF6B6B": "Red",
+  "#FF8E53": "Orange",
+  "#FECA57": "Yellow",
+  "#48DBFB": "Light Blue",
+  "#1DD1A1": "Green",
+  "#5F27CD": "Dark Purple",
+  "#6C5CE7": "Purple",
+  "#FD79A8": "Pink",
+  "#A29BFE": "Lavender",
+  "#00CEC9": "Teal",
+};
+
 interface ColorPickerProps {
   selectedColor: string;
   onColorChange: (color: string) => void;
@@ -93,7 +108,7 @@ export default function ColorPicker({
                   selectedColor === color && styles.selectedColor,
                 ]}
                 accessibilityRole="button"
-                accessibilityLabel={`Select color ${color}`}
+                accessibilityLabel={`Select ${COLOR_NAMES[color] || color} color`}
                 accessibilityState={{ selected: selectedColor === color }}
               >
                 {selectedColor === color && (

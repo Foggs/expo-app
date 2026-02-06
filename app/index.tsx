@@ -185,7 +185,7 @@ export default function HomeScreen() {
 
         <View style={styles.centerContent}>
           <View style={styles.gameInfo}>
-            <View style={styles.infoRow}>
+            <View style={styles.infoRow} accessible={true} accessibilityLabel="2 Players per game">
               <View
                 style={[styles.iconContainer, { backgroundColor: colors.card }]}
               >
@@ -196,7 +196,7 @@ export default function HomeScreen() {
               </Text>
             </View>
 
-            <View style={styles.infoRow}>
+            <View style={styles.infoRow} accessible={true} accessibilityLabel="2 Minutes per Turn">
               <View
                 style={[styles.iconContainer, { backgroundColor: colors.card }]}
               >
@@ -207,7 +207,7 @@ export default function HomeScreen() {
               </Text>
             </View>
 
-            <View style={styles.infoRow}>
+            <View style={styles.infoRow} accessible={true} accessibilityLabel="3 Rounds per game">
               <View
                 style={[styles.iconContainer, { backgroundColor: colors.card }]}
               >
@@ -270,12 +270,12 @@ export default function HomeScreen() {
               <ActivityIndicator size="large" color={colors.tint} />
             </Animated.View>
 
-            <Text style={[styles.searchTitle, { color: colors.text }]}>
+            <Text style={[styles.searchTitle, { color: colors.text }]} accessibilityLiveRegion="polite" accessibilityRole="alert">
               Searching for opponent...
             </Text>
 
             {ws.queuePosition > 0 && (
-              <Text style={[styles.queueText, { color: colors.textSecondary }]}>
+              <Text style={[styles.queueText, { color: colors.textSecondary }]} accessibilityLiveRegion="polite">
                 Queue position: {ws.queuePosition}
               </Text>
             )}
