@@ -1,5 +1,7 @@
 import express from "express";
 import type { Request, Response, NextFunction } from "express";
+import helmet from "helmet";
+import rateLimit from "express-rate-limit";
 import { registerRoutes } from "./routes";
 import * as fs from "fs";
 import * as path from "path";
@@ -225,7 +227,41 @@ function setupErrorHandler(app: express.Application) {
   });
 }
 
+function setupSecurity(app: express.Application) {
+  app.use(
+    helmet({
+      contentSecurityPolicy: false,
+      crossOriginEmbedderPolicy: false,
+    }),
+  );
+
+  app.use(
+    "/api/",
+    rateLimit({
+      windowMs: 15 * 60 * 1000,
+      max: 200,
+      standardHeaders: true,
+      legacyHeaders: false,
+      message: { message: "Too many requests, please try again later" },
+    }),
+  );
+
+  app.use(
+    "/api/games",
+    rateLimit({
+      windowMs: 60 * 1000,
+      max: 30,
+      standardHeaders: true,
+      legacyHeaders: false,
+      message: { message: "Too many game requests, please slow down" },
+    }),
+  );
+
+  app.disable("x-powered-by");
+}
+
 (async () => {
+  setupSecurity(app);
   setupCors(app);
   setupBodyParsing(app);
   setupRequestLogging(app);
