@@ -34,12 +34,19 @@ const RECONNECT_DELAYS = [1000, 2000, 4000, 8000, 16000];
 const PING_INTERVAL = 25_000;
 
 function getWsUrl(): string {
+  if (Platform.OS === "web" && typeof window !== "undefined") {
+    const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+    const host = window.location.hostname;
+    const port = "5000";
+    return `${protocol}//${host}:${port}/ws`;
+  }
+
   const domain = process.env.EXPO_PUBLIC_DOMAIN;
   if (!domain) throw new Error("EXPO_PUBLIC_DOMAIN not set");
 
   const [host, port] = domain.split(":");
   if (port) {
-    return `ws://${host}:${port}/ws`;
+    return `wss://${host}:${port}/ws`;
   }
   return `wss://${host}/ws`;
 }
