@@ -1,5 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
-import { router } from "expo-router";
+import { router, useLocalSearchParams } from "expo-router";
 import * as Haptics from "expo-haptics";
 import React, { useRef, useState, useCallback, useEffect } from "react";
 import {
@@ -28,7 +28,8 @@ import DrawingCanvas, {
 import ColorPicker from "@/components/ColorPicker";
 import BrushSizePicker from "@/components/BrushSizePicker";
 import { useGameTimer } from "@/hooks/useGameTimer";
-import { useGameState } from "@/hooks/useGameState";
+import { useGameState, PlayerId } from "@/hooks/useGameState";
+import { useWebSocket } from "@/hooks/useWebSocket";
 
 const DEFAULT_COLOR = "#6C5CE7";
 const DEFAULT_BRUSH_SIZE = 4;
@@ -39,7 +40,18 @@ export default function GameScreen() {
   const isDark = colorScheme === "dark";
   const colors = isDark ? Colors.dark : Colors.light;
 
+  const params = useLocalSearchParams<{
+    gameId: string;
+    playerRole: string;
+    opponentName: string;
+  }>();
+
+  const gameId = params.gameId ?? "";
+  const playerRole = (params.playerRole as PlayerId) ?? "player1";
+  const opponentName = params.opponentName ?? "Opponent";
+
   const canvasRef = useRef<DrawingCanvasRef>(null);
+  const navigatedRef = useRef(false);
 
   const [strokes, setStrokes] = useState<Stroke[]>([]);
   const [strokeColor, setStrokeColor] = useState(DEFAULT_COLOR);
@@ -50,53 +62,121 @@ export default function GameScreen() {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const timerPulse = useSharedValue(1);
+  const prevIsMyTurnRef = useRef<boolean | null>(null);
 
-  const { gameState, isMyTurn, roundDisplay, turnDisplay, submitTurn, resetGame } =
-    useGameState("player1");
+  const ws = useWebSocket({
+    onTurnSubmitted: (data) => {
+      if (data.playerRole !== playerRole) {
+        handleServerTurnSubmitted({
+          playerRole: data.playerRole as PlayerId,
+          round: data.round,
+          strokes: data.strokes,
+        });
+      }
+    },
+    onGameState: () => {
+      setIsSubmitting(false);
+    },
+    onGameComplete: () => {
+      if (!navigatedRef.current) {
+        navigatedRef.current = true;
+        router.push("/results");
+      }
+    },
+    onOpponentDisconnected: () => {
+      if (navigatedRef.current) return;
+      navigatedRef.current = true;
+      timer.pause();
+      if (Platform.OS === "web") {
+        alert("Your opponent has disconnected. Returning to home.");
+        router.replace("/");
+      } else {
+        Alert.alert(
+          "Opponent Disconnected",
+          "Your opponent has left the game.",
+          [
+            {
+              text: "OK",
+              onPress: () => router.replace("/"),
+            },
+          ]
+        );
+      }
+    },
+    onError: (message) => {
+      console.warn("Game WebSocket error:", message);
+    },
+  });
+
+  const {
+    isMyTurn,
+    currentRound,
+    currentPlayer,
+    roundDisplay,
+    turnDisplay,
+    submitTurn: localSubmitTurn,
+    handleServerTurnSubmitted,
+    resetGame,
+  } = useGameState(playerRole, ws.gameState);
 
   const timerRestartRef = useRef<(() => void) | null>(null);
 
   const handleSubmitTurn = useCallback(() => {
-    if (isSubmitting) return;
+    if (isSubmitting || !isMyTurn) return;
     setIsSubmitting(true);
 
     if (Platform.OS !== "web") {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     }
 
-    submitTurn(strokes);
-    setStrokes([]);
+    localSubmitTurn(strokes);
 
-    if (gameState.currentRound >= 3 && gameState.currentPlayer === "player2") {
-      router.push("/results");
-    } else {
-      setIsSubmitting(false);
-      timerRestartRef.current?.();
-    }
-  }, [strokes, isSubmitting, gameState.currentRound, gameState.currentPlayer]);
+    const wsStrokes = strokes.map((s) => ({
+      points: s.path
+        .split(/[ML]/)
+        .filter(Boolean)
+        .map((p) => {
+          const [x, y] = p.trim().split(",").map(Number);
+          return { x: x || 0, y: y || 0 };
+        }),
+      color: s.color,
+      width: s.strokeWidth,
+    }));
+
+    ws.submitTurn(wsStrokes);
+    setStrokes([]);
+    timer.pause();
+  }, [strokes, isSubmitting, isMyTurn, ws.submitTurn, localSubmitTurn]);
 
   const timer = useGameTimer({
     onTimeUp: handleSubmitTurn,
-    autoStart: true,
+    autoStart: false,
   });
 
   timerRestartRef.current = timer.restart;
 
   useEffect(() => {
-    if (gameState.isGameComplete) {
-      router.push("/results");
+    if (ws.connectionStatus === "disconnected" && gameId) {
+      ws.connect();
     }
-  }, [gameState.isGameComplete]);
+  }, []);
 
   useEffect(() => {
-    if (!isMyTurn && !gameState.isGameComplete) {
-      const opponentTimeout = setTimeout(() => {
-        submitTurn([]);
-        timerRestartRef.current?.();
-      }, 2000);
-      return () => clearTimeout(opponentTimeout);
+    const wasMyTurn = prevIsMyTurnRef.current;
+    prevIsMyTurnRef.current = isMyTurn;
+
+    if (isMyTurn && wasMyTurn !== null && wasMyTurn !== isMyTurn) {
+      setStrokes([]);
+      canvasRef.current?.clear();
+      timerRestartRef.current?.();
+    } else if (isMyTurn && wasMyTurn === null) {
+      timerRestartRef.current?.();
     }
-  }, [isMyTurn, gameState.isGameComplete]);
+
+    if (!isMyTurn) {
+      timer.pause();
+    }
+  }, [isMyTurn]);
 
   useEffect(() => {
     if (timer.timerColor === "critical") {
@@ -124,28 +204,39 @@ export default function GameScreen() {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     }
     timer.pause();
-    Alert.alert(
-      "Leave Game?",
-      "Your progress will be lost if you leave now.",
-      [
-        { text: "Cancel", style: "cancel", onPress: () => timer.start() },
-        {
-          text: "Leave",
-          style: "destructive",
-          onPress: () => {
-            resetGame();
-            router.back();
+
+    const doLeave = () => {
+      resetGame();
+      ws.disconnect();
+      router.replace("/");
+    };
+
+    if (Platform.OS === "web") {
+      if (confirm("Leave Game?\nYour progress will be lost if you leave now.")) {
+        doLeave();
+      } else {
+        if (isMyTurn) timer.start();
+      }
+    } else {
+      Alert.alert(
+        "Leave Game?",
+        "Your progress will be lost if you leave now.",
+        [
+          { text: "Cancel", style: "cancel", onPress: () => { if (isMyTurn) timer.start(); } },
+          {
+            text: "Leave",
+            style: "destructive",
+            onPress: doLeave,
           },
-        },
-      ]
-    );
+        ]
+      );
+    }
   };
 
   const handleSubmit = () => {
     if (Platform.OS !== "web") {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     }
-    timer.pause();
     handleSubmitTurn();
   };
 
@@ -161,14 +252,20 @@ export default function GameScreen() {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     }
     if (strokes.length > 0) {
-      Alert.alert("Clear Canvas?", "This will remove all your drawing.", [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Clear",
-          style: "destructive",
-          onPress: () => canvasRef.current?.clear(),
-        },
-      ]);
+      if (Platform.OS === "web") {
+        if (confirm("Clear Canvas?\nThis will remove all your drawing.")) {
+          canvasRef.current?.clear();
+        }
+      } else {
+        Alert.alert("Clear Canvas?", "This will remove all your drawing.", [
+          { text: "Cancel", style: "cancel" },
+          {
+            text: "Clear",
+            style: "destructive",
+            onPress: () => canvasRef.current?.clear(),
+          },
+        ]);
+      }
     }
   }, [strokes.length]);
 
@@ -256,7 +353,7 @@ export default function GameScreen() {
             styles.playerDot,
             {
               backgroundColor:
-                gameState.currentPlayer === "player1"
+                currentPlayer === "player1"
                   ? colors.player1
                   : colors.player2,
             },
@@ -268,6 +365,11 @@ export default function GameScreen() {
         >
           {turnDisplay}
         </Text>
+        {!isMyTurn && (
+          <Text style={[styles.opponentLabel, { color: colors.textSecondary }]}>
+            ({opponentName})
+          </Text>
+        )}
       </View>
 
       <View style={styles.canvasContainer}>
@@ -476,6 +578,10 @@ const styles = StyleSheet.create({
   turnText: {
     fontSize: 15,
     fontFamily: "Inter_500Medium",
+  },
+  opponentLabel: {
+    fontSize: 13,
+    fontFamily: "Inter_400Regular",
   },
   canvasContainer: {
     flex: 1,

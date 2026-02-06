@@ -1,5 +1,6 @@
 import { useState, useCallback, useMemo } from "react";
 import { Stroke } from "@/components/DrawingCanvas";
+import type { GameStateFromServer } from "@/hooks/useWebSocket";
 
 const TOTAL_ROUNDS = 3;
 const PLAYERS_PER_GAME = 2;
@@ -13,119 +14,90 @@ export interface TurnData {
   submittedAt?: number;
 }
 
-export interface GameState {
+interface UseGameStateReturn {
+  turns: TurnData[];
+  isMyTurn: boolean;
   currentRound: number;
   currentPlayer: PlayerId;
-  turns: TurnData[];
-  isGameComplete: boolean;
-  localPlayerId: PlayerId;
-}
-
-interface UseGameStateReturn {
-  gameState: GameState;
-  isMyTurn: boolean;
   roundDisplay: string;
   turnDisplay: string;
   submitTurn: (strokes: Stroke[]) => void;
-  startNextTurn: () => void;
+  handleServerTurnSubmitted: (data: { playerRole: PlayerId; round: number; strokes: unknown[] }) => void;
   resetGame: () => void;
   getCurrentRoundStrokes: () => Stroke[];
   getAllStrokes: () => Stroke[];
 }
 
-export function useGameState(localPlayerId: PlayerId = "player1"): UseGameStateReturn {
-  const [gameState, setGameState] = useState<GameState>({
-    currentRound: 1,
-    currentPlayer: "player1",
-    turns: [],
-    isGameComplete: false,
-    localPlayerId,
-  });
+export function useGameState(
+  playerRole: PlayerId = "player1",
+  serverGameState: GameStateFromServer | null = null
+): UseGameStateReturn {
+  const [turns, setTurns] = useState<TurnData[]>([]);
+
+  const currentRound = serverGameState?.currentRound ?? 1;
+  const currentPlayer: PlayerId = (serverGameState?.currentPlayer as PlayerId) ?? "player1";
+  const totalRounds = serverGameState?.totalRounds ?? TOTAL_ROUNDS;
+  const isComplete = serverGameState?.status === "completed";
 
   const isMyTurn = useMemo(
-    () => gameState.currentPlayer === gameState.localPlayerId,
-    [gameState.currentPlayer, gameState.localPlayerId]
+    () => !isComplete && currentPlayer === playerRole,
+    [currentPlayer, playerRole, isComplete]
   );
 
-  const roundDisplay = `Round ${gameState.currentRound}/${TOTAL_ROUNDS}`;
+  const roundDisplay = `Round ${currentRound}/${totalRounds}`;
 
   const turnDisplay = useMemo(() => {
-    if (gameState.isGameComplete) {
+    if (isComplete) {
       return "Game Complete!";
     }
     return isMyTurn ? "Your Turn to Draw" : "Opponent's Turn";
-  }, [isMyTurn, gameState.isGameComplete]);
+  }, [isMyTurn, isComplete]);
 
   const submitTurn = useCallback((strokes: Stroke[]) => {
-    setGameState((prev) => {
+    const turnData: TurnData = {
+      playerId: playerRole,
+      round: currentRound,
+      strokes,
+      submittedAt: Date.now(),
+    };
+    setTurns((prev) => [...prev, turnData]);
+  }, [playerRole, currentRound]);
+
+  const handleServerTurnSubmitted = useCallback((data: { playerRole: PlayerId; round: number; strokes: unknown[] }) => {
+    if (data.playerRole !== playerRole) {
+      const opponentStrokes: Stroke[] = (data.strokes as Stroke[]) || [];
       const turnData: TurnData = {
-        playerId: prev.currentPlayer,
-        round: prev.currentRound,
-        strokes,
+        playerId: data.playerRole,
+        round: data.round,
+        strokes: opponentStrokes,
         submittedAt: Date.now(),
       };
-
-      const newTurns = [...prev.turns, turnData];
-
-      const turnsThisRound = newTurns.filter((t) => t.round === prev.currentRound);
-      const roundComplete = turnsThisRound.length >= PLAYERS_PER_GAME;
-
-      let nextRound = prev.currentRound;
-      let nextPlayer: PlayerId = prev.currentPlayer === "player1" ? "player2" : "player1";
-      let isComplete = false;
-
-      if (roundComplete) {
-        if (prev.currentRound >= TOTAL_ROUNDS) {
-          isComplete = true;
-        } else {
-          nextRound = prev.currentRound + 1;
-          nextPlayer = "player1";
-        }
-      }
-
-      return {
-        ...prev,
-        turns: newTurns,
-        currentRound: nextRound,
-        currentPlayer: nextPlayer,
-        isGameComplete: isComplete,
-      };
-    });
-  }, []);
-
-  const startNextTurn = useCallback(() => {
-    // For single-player testing, this simulates starting the next turn
-    // In multiplayer, this would be triggered by WebSocket
-  }, []);
+      setTurns((prev) => [...prev, turnData]);
+    }
+  }, [playerRole]);
 
   const resetGame = useCallback(() => {
-    setGameState({
-      currentRound: 1,
-      currentPlayer: "player1",
-      turns: [],
-      isGameComplete: false,
-      localPlayerId,
-    });
-  }, [localPlayerId]);
+    setTurns([]);
+  }, []);
 
   const getCurrentRoundStrokes = useCallback(() => {
-    const roundTurns = gameState.turns.filter(
-      (t) => t.round === gameState.currentRound
-    );
+    const roundTurns = turns.filter((t) => t.round === currentRound);
     return roundTurns.flatMap((t) => t.strokes);
-  }, [gameState.turns, gameState.currentRound]);
+  }, [turns, currentRound]);
 
   const getAllStrokes = useCallback(() => {
-    return gameState.turns.flatMap((t) => t.strokes);
-  }, [gameState.turns]);
+    return turns.flatMap((t) => t.strokes);
+  }, [turns]);
 
   return {
-    gameState,
+    turns,
     isMyTurn,
+    currentRound,
+    currentPlayer,
     roundDisplay,
     turnDisplay,
     submitTurn,
-    startNextTurn,
+    handleServerTurnSubmitted,
     resetGame,
     getCurrentRoundStrokes,
     getAllStrokes,

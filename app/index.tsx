@@ -2,8 +2,10 @@ import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { router } from "expo-router";
 import * as Haptics from "expo-haptics";
-import React from "react";
+import React, { useCallback, useEffect, useRef } from "react";
 import {
+  ActivityIndicator,
+  Modal,
   Platform,
   Pressable,
   StyleSheet,
@@ -21,6 +23,7 @@ import Animated, {
 } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Colors from "@/constants/colors";
+import { useWebSocket } from "@/hooks/useWebSocket";
 
 export default function HomeScreen() {
   const insets = useSafeAreaInsets();
@@ -30,6 +33,31 @@ export default function HomeScreen() {
 
   const buttonScale = useSharedValue(1);
   const pulseOpacity = useSharedValue(0.4);
+  const searchPulse = useSharedValue(0.6);
+  const navigatedRef = useRef(false);
+
+  const ws = useWebSocket({
+    onMatchFound: (info) => {
+      if (navigatedRef.current) return;
+      navigatedRef.current = true;
+      if (Platform.OS !== "web") {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      }
+      router.push({
+        pathname: "/game",
+        params: {
+          gameId: info.gameId,
+          playerRole: info.playerRole,
+          opponentName: info.opponentName,
+        },
+      });
+    },
+    onError: (message) => {
+      console.warn("WebSocket error:", message);
+    },
+  });
+
+  const isSearching = ws.matchStatus === "searching" || ws.matchStatus === "matched";
 
   React.useEffect(() => {
     pulseOpacity.value = withRepeat(
@@ -42,12 +70,29 @@ export default function HomeScreen() {
     );
   }, []);
 
+  useEffect(() => {
+    if (isSearching) {
+      searchPulse.value = withRepeat(
+        withSequence(
+          withTiming(1, { duration: 1000 }),
+          withTiming(0.6, { duration: 1000 })
+        ),
+        -1,
+        true
+      );
+    }
+  }, [isSearching]);
+
   const pulseStyle = useAnimatedStyle(() => ({
     opacity: pulseOpacity.value,
   }));
 
   const buttonAnimatedStyle = useAnimatedStyle(() => ({
     transform: [{ scale: buttonScale.value }],
+  }));
+
+  const searchPulseStyle = useAnimatedStyle(() => ({
+    opacity: searchPulse.value,
   }));
 
   const handlePressIn = () => {
@@ -58,12 +103,37 @@ export default function HomeScreen() {
     buttonScale.value = withSpring(1);
   };
 
-  const handleFindMatch = () => {
+  const wantToJoinRef = useRef(false);
+
+  const handleFindMatch = useCallback(() => {
     if (Platform.OS !== "web") {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     }
-    router.push("/game");
-  };
+    navigatedRef.current = false;
+    wantToJoinRef.current = true;
+
+    if (ws.connectionStatus === "connected") {
+      ws.joinQueue();
+    } else {
+      ws.connect();
+    }
+  }, [ws.connectionStatus, ws.connect, ws.joinQueue]);
+
+  useEffect(() => {
+    if (ws.connectionStatus === "connected" && wantToJoinRef.current && ws.matchStatus === "idle") {
+      wantToJoinRef.current = false;
+      ws.joinQueue();
+    }
+  }, [ws.connectionStatus, ws.matchStatus, ws.joinQueue]);
+
+  const handleCancelSearch = useCallback(() => {
+    if (Platform.OS !== "web") {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    }
+    wantToJoinRef.current = false;
+    ws.leaveQueue();
+    ws.disconnect();
+  }, [ws.leaveQueue, ws.disconnect]);
 
   const topPadding = Platform.OS === "web" ? 67 : insets.top;
   const bottomPadding = Platform.OS === "web" ? 34 : insets.bottom;
@@ -169,13 +239,14 @@ export default function HomeScreen() {
               onPress={handleFindMatch}
               onPressIn={handlePressIn}
               onPressOut={handlePressOut}
+              disabled={isSearching}
               accessibilityRole="button"
               accessibilityLabel="Find a match to play"
               accessibilityHint="Searches for another player to start a drawing game"
             >
               <LinearGradient
                 colors={[colors.tint, colors.accent]}
-                style={styles.findMatchButton}
+                style={[styles.findMatchButton, isSearching && styles.buttonDisabled]}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 1 }}
               >
@@ -186,6 +257,47 @@ export default function HomeScreen() {
           </Animated.View>
         </View>
       </View>
+
+      <Modal
+        visible={isSearching}
+        transparent
+        animationType="fade"
+        onRequestClose={handleCancelSearch}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.searchModal, { backgroundColor: colors.card }]}>
+            <Animated.View style={searchPulseStyle}>
+              <ActivityIndicator size="large" color={colors.tint} />
+            </Animated.View>
+
+            <Text style={[styles.searchTitle, { color: colors.text }]}>
+              Searching for opponent...
+            </Text>
+
+            {ws.queuePosition > 0 && (
+              <Text style={[styles.queueText, { color: colors.textSecondary }]}>
+                Queue position: {ws.queuePosition}
+              </Text>
+            )}
+
+            <Text style={[styles.searchHint, { color: colors.textSecondary }]}>
+              This may take a moment
+            </Text>
+
+            <Pressable
+              onPress={handleCancelSearch}
+              style={[styles.cancelButton, { borderColor: colors.border }]}
+              accessibilityRole="button"
+              accessibilityLabel="Cancel search"
+            >
+              <Ionicons name="close" size={20} color={colors.error} />
+              <Text style={[styles.cancelText, { color: colors.error }]}>
+                Cancel
+              </Text>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -276,9 +388,55 @@ const styles = StyleSheet.create({
     borderRadius: 28,
     minWidth: 200,
   },
+  buttonDisabled: {
+    opacity: 0.6,
+  },
   buttonText: {
     color: "#fff",
     fontSize: 18,
     fontFamily: "Inter_600SemiBold",
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0, 0, 0, 0.6)",
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 24,
+  },
+  searchModal: {
+    width: "100%",
+    maxWidth: 320,
+    borderRadius: 24,
+    padding: 32,
+    alignItems: "center",
+    gap: 16,
+  },
+  searchTitle: {
+    fontSize: 20,
+    fontFamily: "Inter_600SemiBold",
+    textAlign: "center",
+  },
+  queueText: {
+    fontSize: 14,
+    fontFamily: "Inter_500Medium",
+  },
+  searchHint: {
+    fontSize: 14,
+    fontFamily: "Inter_400Regular",
+    textAlign: "center",
+  },
+  cancelButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    borderRadius: 16,
+    borderWidth: 1,
+    marginTop: 8,
+  },
+  cancelText: {
+    fontSize: 16,
+    fontFamily: "Inter_500Medium",
   },
 });
