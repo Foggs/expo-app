@@ -3,6 +3,7 @@ import type { Request, Response, NextFunction } from "express";
 import helmet from "helmet";
 import rateLimit from "express-rate-limit";
 import { registerRoutes } from "./routes";
+import { setupWebSocket } from "./websocket";
 import * as fs from "fs";
 import * as path from "path";
 
@@ -269,6 +270,8 @@ function setupSecurity(app: express.Application) {
   configureExpoAndLanding(app);
 
   const server = await registerRoutes(app);
+
+  setupWebSocket(server);
 
   setupErrorHandler(app);
 

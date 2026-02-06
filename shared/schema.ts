@@ -65,6 +65,45 @@ export const submitTurnSchema = z.object({
   })),
 });
 
+export const strokeSchema = z.object({
+  points: z.array(z.object({
+    x: z.number(),
+    y: z.number(),
+  })).max(5000),
+  color: z.string().max(20),
+  width: z.number().min(1).max(50),
+});
+
+export const wsClientMessageSchema = z.discriminatedUnion("type", [
+  z.object({
+    type: z.literal("join_queue"),
+  }),
+  z.object({
+    type: z.literal("leave_queue"),
+  }),
+  z.object({
+    type: z.literal("submit_turn"),
+    strokes: z.array(strokeSchema).max(500),
+  }),
+  z.object({
+    type: z.literal("ping"),
+  }),
+]);
+
+export type WsClientMessage = z.infer<typeof wsClientMessageSchema>;
+
+export type WsServerMessage =
+  | { type: "queue_joined"; position: number }
+  | { type: "queue_left" }
+  | { type: "match_found"; gameId: string; playerRole: "player1" | "player2"; opponentName: string }
+  | { type: "game_state"; gameId: string; currentRound: number; currentPlayer: "player1" | "player2"; totalRounds: number; status: string }
+  | { type: "turn_submitted"; playerRole: "player1" | "player2"; round: number; strokes: unknown[] }
+  | { type: "round_complete"; round: number; nextRound: number }
+  | { type: "game_complete"; gameId: string }
+  | { type: "opponent_disconnected" }
+  | { type: "error"; message: string; code?: string }
+  | { type: "pong" };
+
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type User = typeof users.$inferSelect;
 export type Game = typeof games.$inferSelect;
