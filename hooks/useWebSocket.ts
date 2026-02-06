@@ -27,6 +27,8 @@ interface UseWebSocketOptions {
   onRoundComplete?: (data: { round: number; nextRound: number }) => void;
   onGameComplete?: (gameId: string) => void;
   onOpponentDisconnected?: () => void;
+  onOpponentStroke?: (stroke: { id: string; path: string; color: string; strokeWidth: number }) => void;
+  onOpponentClear?: () => void;
   onError?: (message: string, code?: string) => void;
 }
 
@@ -151,6 +153,14 @@ export function useWebSocket(options: UseWebSocketOptions = {}) {
         optionsRef.current.onGameComplete?.(msg.gameId);
         break;
 
+      case "opponent_stroke":
+        optionsRef.current.onOpponentStroke?.(msg.stroke);
+        break;
+
+      case "opponent_clear":
+        optionsRef.current.onOpponentClear?.();
+        break;
+
       case "opponent_disconnected":
         setMatchStatus("opponent_disconnected");
         optionsRef.current.onOpponentDisconnected?.();
@@ -243,6 +253,14 @@ export function useWebSocket(options: UseWebSocketOptions = {}) {
     sendMessage({ type: "submit_turn", strokes });
   }, [sendMessage]);
 
+  const sendStroke = useCallback((stroke: { id: string; path: string; color: string; strokeWidth: number }) => {
+    sendMessage({ type: "draw_stroke", stroke });
+  }, [sendMessage]);
+
+  const sendClear = useCallback(() => {
+    sendMessage({ type: "draw_clear" });
+  }, [sendMessage]);
+
   useEffect(() => {
     return () => {
       intentionalCloseRef.current = true;
@@ -266,5 +284,7 @@ export function useWebSocket(options: UseWebSocketOptions = {}) {
     joinQueue,
     leaveQueue,
     submitTurn,
+    sendStroke,
+    sendClear,
   };
 }

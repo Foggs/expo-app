@@ -7,7 +7,7 @@ import { storage } from "./storage";
 const MAX_MESSAGE_SIZE = 512 * 1024; // 512KB
 const HEARTBEAT_INTERVAL = 30_000;
 const HEARTBEAT_TIMEOUT = 10_000;
-const MAX_MESSAGES_PER_MINUTE = 60;
+const MAX_MESSAGES_PER_MINUTE = 300;
 const MATCHMAKING_TIMEOUT = 120_000; // 2 minutes
 const RATE_LIMIT_WINDOW = 60_000;
 
@@ -393,6 +393,50 @@ function handleMessage(conn: PlayerConnection, data: Buffer | ArrayBuffer | Buff
       removeFromQueue(conn.id);
       sendMessage(conn, { type: "queue_left" });
       break;
+
+    case "draw_stroke": {
+      if (!conn.gameId || !conn.playerRole) {
+        sendMessage(conn, { type: "error", message: "Not in a game", code: "NOT_IN_GAME" });
+        return;
+      }
+      const drawStrokeRoom = gameRooms.get(conn.gameId);
+      if (!drawStrokeRoom) {
+        sendMessage(conn, { type: "error", message: "Game room not found", code: "ROOM_NOT_FOUND" });
+        return;
+      }
+      if (drawStrokeRoom.currentPlayer !== conn.playerRole) {
+        sendMessage(conn, { type: "error", message: "Not your turn", code: "NOT_YOUR_TURN" });
+        return;
+      }
+      const strokeOpponentRole = conn.playerRole === "player1" ? "player2" : "player1";
+      const strokeOpponentConn = drawStrokeRoom[strokeOpponentRole];
+      if (strokeOpponentConn) {
+        sendMessage(strokeOpponentConn, { type: "opponent_stroke", stroke: msg.stroke });
+      }
+      break;
+    }
+
+    case "draw_clear": {
+      if (!conn.gameId || !conn.playerRole) {
+        sendMessage(conn, { type: "error", message: "Not in a game", code: "NOT_IN_GAME" });
+        return;
+      }
+      const drawClearRoom = gameRooms.get(conn.gameId);
+      if (!drawClearRoom) {
+        sendMessage(conn, { type: "error", message: "Game room not found", code: "ROOM_NOT_FOUND" });
+        return;
+      }
+      if (drawClearRoom.currentPlayer !== conn.playerRole) {
+        sendMessage(conn, { type: "error", message: "Not your turn", code: "NOT_YOUR_TURN" });
+        return;
+      }
+      const clearOpponentRole = conn.playerRole === "player1" ? "player2" : "player1";
+      const clearOpponentConn = drawClearRoom[clearOpponentRole];
+      if (clearOpponentConn) {
+        sendMessage(clearOpponentConn, { type: "opponent_clear" });
+      }
+      break;
+    }
 
     case "submit_turn":
       handleSubmitTurn(conn, msg.strokes);

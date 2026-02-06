@@ -82,6 +82,18 @@ export const wsClientMessageSchema = z.discriminatedUnion("type", [
     type: z.literal("leave_queue"),
   }),
   z.object({
+    type: z.literal("draw_stroke"),
+    stroke: z.object({
+      id: z.string().max(50),
+      path: z.string().max(50000),
+      color: z.string().max(20),
+      strokeWidth: z.number().min(1).max(50),
+    }),
+  }),
+  z.object({
+    type: z.literal("draw_clear"),
+  }),
+  z.object({
     type: z.literal("submit_turn"),
     strokes: z.array(strokeSchema).max(500),
   }),
@@ -101,6 +113,8 @@ export type WsServerMessage =
   | { type: "round_complete"; round: number; nextRound: number }
   | { type: "game_complete"; gameId: string }
   | { type: "opponent_disconnected" }
+  | { type: "opponent_stroke"; stroke: { id: string; path: string; color: string; strokeWidth: number } }
+  | { type: "opponent_clear" }
   | { type: "error"; message: string; code?: string }
   | { type: "pong" };
 
