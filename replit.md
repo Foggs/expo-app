@@ -75,14 +75,24 @@ Preferred communication style: Simple, everyday language.
 ### Game Timer & State
 - **useGameTimer Hook**: 2-minute countdown per turn, auto-submit on expiry
 - **Timer States**: Active (teal), Warning (yellow, <30s), Critical (red, <10s)
-- **useGameState Hook**: Manages rounds (1-3), turns (player1/player2), and game completion
+- **useGameState Hook**: Server-driven state management, accepts playerRole and serverGameState from WebSocket
+
+### WebSocket Architecture
+- **Server**: `server/websocket.ts` - ws library attached to Express HTTP server on port 5000, path /ws
+- **Security**: Origin validation (matches CORS rules), Zod message validation, rate limiting (60 msg/min per connection), heartbeat ping/pong (30s interval, 10s timeout), 512KB max message size
+- **Matchmaking**: Queue-based with automatic pairing, 2-minute timeout protection, queue position tracking
+- **Game Rooms**: Server-authoritative state transitions, turn validation, opponent disconnect detection
+- **Client Hook**: `hooks/useWebSocket.ts` - connection lifecycle management, exponential backoff reconnection [1s, 2s, 4s, 8s, 16s], WSS/WS protocol auto-detection
+- **Message Types**: Defined in `shared/schema.ts` with Zod validation for both client and server messages
 
 ### Game Flow
-- 3 rounds total, 2 players alternating turns
-- 2 minutes per turn with visual countdown
-- Auto-opponent simulation for single-player testing (2-second delay)
-- Canvas clears between turns, strokes saved per turn
-- Pulsing timer animation when time is critical (<10 seconds)
+- Home screen: Connect WebSocket -> Join matchmaking queue -> Wait for opponent
+- Match found: Navigate to /game with gameId, playerRole, opponentName params
+- Gameplay: 3 rounds, 2 players alternating turns, 2 minutes per turn
+- Timer runs only during player's own turn, pauses during opponent's turn
+- Canvas clears when turn switches to player, strokes submitted via WebSocket
+- Game completion navigates to results screen
+- Opponent disconnection shows alert and returns to home
 
 ### Accessibility Features
 - All buttons have accessibilityLabel and accessibilityRole
