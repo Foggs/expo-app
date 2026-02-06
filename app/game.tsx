@@ -54,6 +54,7 @@ export default function GameScreen() {
   const navigatedRef = useRef(false);
 
   const [strokes, setStrokes] = useState<Stroke[]>([]);
+  const [opponentStrokes, setOpponentStrokes] = useState<Stroke[]>([]);
   const [strokeColor, setStrokeColor] = useState(DEFAULT_COLOR);
   const [strokeWidth, setStrokeWidth] = useState(DEFAULT_BRUSH_SIZE);
   const [isEraser, setIsEraser] = useState(false);
@@ -63,6 +64,7 @@ export default function GameScreen() {
 
   const timerPulse = useSharedValue(1);
   const prevIsMyTurnRef = useRef<boolean | null>(null);
+  const lastStrokeSendRef = useRef<number>(0);
 
   const ws = useWebSocket({
     onTurnSubmitted: (data) => {
@@ -80,8 +82,22 @@ export default function GameScreen() {
     onGameComplete: () => {
       if (!navigatedRef.current) {
         navigatedRef.current = true;
-        router.push("/results");
+        router.push({ pathname: "/results", params: { opponentName } });
       }
+    },
+    onOpponentStroke: (stroke) => {
+      setOpponentStrokes((prev) => {
+        const idx = prev.findIndex((s) => s.id === stroke.id);
+        if (idx >= 0) {
+          const updated = [...prev];
+          updated[idx] = { ...updated[idx], path: stroke.path };
+          return updated;
+        }
+        return [...prev, stroke];
+      });
+    },
+    onOpponentClear: () => {
+      setOpponentStrokes([]);
     },
     onOpponentDisconnected: () => {
       if (navigatedRef.current) return;
@@ -167,6 +183,7 @@ export default function GameScreen() {
 
     if (isMyTurn && wasMyTurn !== null && wasMyTurn !== isMyTurn) {
       setStrokes([]);
+      setOpponentStrokes([]);
       canvasRef.current?.clear();
       timerRestartRef.current?.();
     } else if (isMyTurn && wasMyTurn === null) {
@@ -195,6 +212,23 @@ export default function GameScreen() {
   const timerAnimatedStyle = useAnimatedStyle(() => ({
     transform: [{ scale: timerPulse.value }],
   }));
+
+  const handleStrokesChange = useCallback((newStrokes: Stroke[]) => {
+    setStrokes(newStrokes);
+    if (newStrokes.length > 0) {
+      const latestStroke = newStrokes[newStrokes.length - 1];
+      const now = Date.now();
+      if (now - lastStrokeSendRef.current >= 50) {
+        lastStrokeSendRef.current = now;
+        ws.sendStroke({
+          id: latestStroke.id,
+          path: latestStroke.path,
+          color: latestStroke.color,
+          strokeWidth: latestStroke.strokeWidth,
+        });
+      }
+    }
+  }, [ws.sendStroke]);
 
   const topPadding = Platform.OS === "web" ? 67 : insets.top;
   const bottomPadding = Platform.OS === "web" ? 34 : insets.bottom;
@@ -255,6 +289,7 @@ export default function GameScreen() {
       if (Platform.OS === "web") {
         if (confirm("Clear Canvas?\nThis will remove all your drawing.")) {
           canvasRef.current?.clear();
+          ws.sendClear();
         }
       } else {
         Alert.alert("Clear Canvas?", "This will remove all your drawing.", [
@@ -262,7 +297,10 @@ export default function GameScreen() {
           {
             text: "Clear",
             style: "destructive",
-            onPress: () => canvasRef.current?.clear(),
+            onPress: () => {
+              canvasRef.current?.clear();
+              ws.sendClear();
+            },
           },
         ]);
       }
@@ -377,13 +415,20 @@ export default function GameScreen() {
           ref={canvasRef}
           strokeColor={activeColor}
           strokeWidth={strokeWidth}
-          strokes={strokes}
-          onStrokesChange={setStrokes}
+          strokes={isMyTurn ? strokes : opponentStrokes}
+          onStrokesChange={handleStrokesChange}
           disabled={!isMyTurn || isSubmitting}
         />
         {!isMyTurn && (
           <View style={styles.canvasOverlay}>
-            <Text style={styles.waitingText}>Waiting for opponent...</Text>
+            <View style={styles.opponentDrawingLabel}>
+              <Ionicons name="pencil" size={14} color="#fff" />
+              <Text style={styles.opponentDrawingText}>
+                {opponentStrokes.length > 0
+                  ? "Opponent is drawing..."
+                  : "Waiting for opponent..."}
+              </Text>
+            </View>
           </View>
         )}
       </View>
@@ -591,17 +636,26 @@ const styles = StyleSheet.create({
   },
   canvasOverlay: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(0, 0, 0, 0.5)",
-    justifyContent: "center",
-    alignItems: "center",
+    backgroundColor: "rgba(0, 0, 0, 0.15)",
     marginHorizontal: 16,
     marginVertical: 8,
     borderRadius: 16,
   },
-  waitingText: {
+  opponentDrawingLabel: {
+    flexDirection: "row",
+    alignItems: "center",
+    alignSelf: "center",
+    gap: 6,
+    marginTop: 12,
+    backgroundColor: "rgba(0, 0, 0, 0.55)",
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 12,
+  },
+  opponentDrawingText: {
     color: "#fff",
-    fontSize: 18,
-    fontFamily: "Inter_600SemiBold",
+    fontSize: 13,
+    fontFamily: "Inter_500Medium",
   },
   toolbar: {
     flexDirection: "row",

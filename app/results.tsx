@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
-import { router } from "expo-router";
+import { router, useLocalSearchParams } from "expo-router";
 import * as Haptics from "expo-haptics";
 import React from "react";
 import {
@@ -21,6 +21,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Colors from "@/constants/colors";
 
 export default function ResultsScreen() {
+  const { opponentName } = useLocalSearchParams<{ opponentName?: string }>();
   const insets = useSafeAreaInsets();
   const colorScheme = useColorScheme();
   const isDark = colorScheme === "dark";
@@ -46,7 +47,7 @@ export default function ResultsScreen() {
     if (Platform.OS !== "web") {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     }
-    router.replace("/game");
+    router.replace("/");
   };
 
   const handleHome = () => {
@@ -83,33 +84,11 @@ export default function ResultsScreen() {
             Game Complete!
           </Text>
           <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
-            Here's your collaborative masterpiece
+            Great match!
           </Text>
         </View>
 
         <Animated.View style={[styles.artworkCard, cardStyle]}>
-          <View
-            style={[
-              styles.artwork,
-              {
-                backgroundColor: colors.canvasBackground,
-                borderColor: colors.border,
-              },
-            ]}
-          >
-            <View style={styles.artworkPlaceholder}>
-              <Ionicons name="image" size={64} color={colors.textSecondary} />
-              <Text
-                style={[
-                  styles.artworkPlaceholderText,
-                  { color: colors.textSecondary },
-                ]}
-              >
-                Final artwork will be displayed here
-              </Text>
-            </View>
-          </View>
-
           <View style={styles.statsRow}>
             <View style={styles.statItem}>
               <Ionicons name="brush" size={20} color={colors.tint} />
@@ -166,7 +145,7 @@ export default function ResultsScreen() {
               <Text style={styles.avatarText}>P2</Text>
             </View>
             <Text style={[styles.playerName, { color: colors.text }]}>
-              Opponent
+              {opponentName ?? "Opponent"}
             </Text>
           </View>
         </View>
@@ -228,22 +207,6 @@ const styles = StyleSheet.create({
   },
   artworkCard: {
     gap: 16,
-  },
-  artwork: {
-    aspectRatio: 4 / 3,
-    borderRadius: 20,
-    borderWidth: 2,
-    overflow: "hidden",
-  },
-  artworkPlaceholder: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    gap: 12,
-  },
-  artworkPlaceholderText: {
-    fontSize: 15,
-    fontFamily: "Inter_400Regular",
   },
   statsRow: {
     flexDirection: "row",
