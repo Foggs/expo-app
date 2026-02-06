@@ -79,23 +79,41 @@ Preferred communication style: Simple, everyday language.
 
 ### WebSocket Architecture
 - **Server**: `server/websocket.ts` - ws library attached to Express HTTP server on port 5000, path /ws
-- **Security**: Origin validation (matches CORS rules), Zod message validation, rate limiting (60 msg/min per connection), heartbeat ping/pong (30s interval, 10s timeout), 512KB max message size
+- **Security**: Origin validation (matches CORS rules), Zod message validation, rate limiting (300 msg/min per connection for live drawing), heartbeat ping/pong (30s interval, 10s timeout), 512KB max message size, SVG path sanitization regex, color hex validation
 - **Matchmaking**: Queue-based with automatic pairing, 2-minute timeout protection, queue position tracking
 - **Game Rooms**: Server-authoritative state transitions, turn validation, opponent disconnect detection
-- **Client Hook**: `hooks/useWebSocket.ts` - connection lifecycle management, exponential backoff reconnection [1s, 2s, 4s, 8s, 16s], WSS/WS protocol auto-detection
+- **Live Drawing Sync**: Real-time stroke broadcasting via `draw_stroke`/`draw_clear` messages; opponent sees strokes as they're drawn with 50ms throttling
+- **Client Hook**: `hooks/useWebSocket.ts` - connection lifecycle management, exponential backoff reconnection [1s, 2s, 4s, 8s, 16s], WSS/WS protocol auto-detection, sendStroke/sendClear methods for live drawing
 - **Message Types**: Defined in `shared/schema.ts` with Zod validation for both client and server messages
+  - Client: join_queue, leave_queue, draw_stroke, draw_clear, submit_turn, ping
+  - Server: queue_joined, queue_left, match_found, game_state, turn_submitted, round_complete, game_complete, opponent_stroke, opponent_clear, opponent_disconnected, error, pong
 
 ### Game Flow
 - Home screen: Connect WebSocket -> Join matchmaking queue -> Wait for opponent
 - Match found: Navigate to /game with gameId, playerRole, opponentName params
 - Gameplay: 3 rounds, 2 players alternating turns, 2 minutes per turn
 - Timer runs only during player's own turn, pauses during opponent's turn
+- Live drawing: Player's strokes broadcast to opponent in real-time; opponent sees strokes appear on canvas
 - Canvas clears when turn switches to player, strokes submitted via WebSocket
-- Game completion navigates to results screen
+- Game completion navigates to results screen with opponentName param
 - Opponent disconnection shows alert and returns to home
+
+### Security
+- **Helmet**: Enabled with full CSP (script-src self + unpkg.com, connect-src ws:/wss:, img-src data:/blob:, frame/object blocked)
+- **Rate Limiting**: 200 req/15min on /api, 30 req/min on /api/games, 300 msg/min on WebSocket
+- **Input Validation**: Zod schemas on all WebSocket messages, SVG path regex sanitization, hex color validation
+- **CORS**: Dynamic origin validation for Replit domains and localhost
+
+### SEO & Landing Page
+- **Landing Page**: `server/templates/landing-page.html` with Open Graph tags, Twitter cards (summary_large_image), JSON-LD structured data (MobileApplication schema with game metadata)
+- **Deep Linking**: al:ios:url and al:android:url meta tags for sketchduel:// scheme
+- **Mobile Web App**: apple-mobile-web-app-capable and mobile-web-app-capable meta tags
 
 ### Accessibility Features
 - All buttons have accessibilityLabel and accessibilityRole
 - Timer has accessibilityRole="timer" with time remaining
 - Screen reader hints for key interactions
 - Haptic feedback on native platforms
+
+### Future Roadmap
+- Private game rooms (create/join with room codes)
