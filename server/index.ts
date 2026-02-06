@@ -231,7 +231,20 @@ function setupErrorHandler(app: express.Application) {
 function setupSecurity(app: express.Application) {
   app.use(
     helmet({
-      contentSecurityPolicy: false,
+      contentSecurityPolicy: {
+        directives: {
+          defaultSrc: ["'self'"],
+          scriptSrc: ["'self'", "'unsafe-inline'", "https://unpkg.com"],
+          styleSrc: ["'self'", "'unsafe-inline'"],
+          imgSrc: ["'self'", "data:", "blob:"],
+          connectSrc: ["'self'", "ws:", "wss:"],
+          fontSrc: ["'self'"],
+          objectSrc: ["'none'"],
+          frameSrc: ["'none'"],
+          baseUri: ["'self'"],
+          formAction: ["'self'"],
+        },
+      },
       crossOriginEmbedderPolicy: false,
     }),
   );

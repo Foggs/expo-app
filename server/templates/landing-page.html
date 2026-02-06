@@ -13,14 +13,27 @@
     <meta property="og:description" content="Challenge friends to creative drawing battles! Take turns drawing over 3 rounds in this fun multiplayer game." />
     <meta property="og:url" content="BASE_URL_PLACEHOLDER" />
     <meta property="og:site_name" content="APP_NAME_PLACEHOLDER" />
+    <meta property="og:image" content="BASE_URL_PLACEHOLDER/assets/icon.png" />
+    <meta property="og:image:width" content="512" />
+    <meta property="og:image:height" content="512" />
 
-    <meta name="twitter:card" content="summary" />
+    <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="APP_NAME_PLACEHOLDER - Multiplayer Drawing Game" />
     <meta name="twitter:description" content="Challenge friends to creative drawing battles! Take turns drawing over 3 rounds." />
+    <meta name="twitter:image" content="BASE_URL_PLACEHOLDER/assets/icon.png" />
 
     <link rel="canonical" href="BASE_URL_PLACEHOLDER" />
-    <meta name="apple-itunes-app" content="app-id=982107779" />
     <link rel="alternate" href="exps://EXPS_URL_PLACEHOLDER" />
+
+    <meta name="application-name" content="APP_NAME_PLACEHOLDER" />
+    <meta name="apple-mobile-web-app-title" content="APP_NAME_PLACEHOLDER" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+
+    <meta property="al:ios:url" content="sketchduel://" />
+    <meta property="al:ios:app_name" content="APP_NAME_PLACEHOLDER" />
+    <meta property="al:android:url" content="sketchduel://" />
+    <meta property="al:android:app_name" content="APP_NAME_PLACEHOLDER" />
 
     <script type="application/ld+json">
     {
@@ -29,13 +42,21 @@
       "name": "APP_NAME_PLACEHOLDER",
       "description": "A turn-based multiplayer drawing game where two players compete in creative drawing battles across 3 rounds.",
       "applicationCategory": "GameApplication",
-      "operatingSystem": "iOS, Android",
+      "operatingSystem": "iOS, Android, Web",
       "offers": {
         "@type": "Offer",
         "price": "0",
         "priceCurrency": "USD"
       },
-      "url": "BASE_URL_PLACEHOLDER"
+      "url": "BASE_URL_PLACEHOLDER",
+      "image": "BASE_URL_PLACEHOLDER/assets/icon.png",
+      "genre": "Drawing Game",
+      "numberOfPlayers": {
+        "@type": "QuantitativeValue",
+        "minValue": 2,
+        "maxValue": 2
+      },
+      "gamePlatform": ["iOS", "Android", "Web Browser"]
     }
     </script>
     <style>

@@ -397,21 +397,26 @@ function handleMessage(conn: PlayerConnection, data: Buffer | ArrayBuffer | Buff
     case "draw_stroke": {
       if (!conn.gameId || !conn.playerRole) {
         sendMessage(conn, { type: "error", message: "Not in a game", code: "NOT_IN_GAME" });
-        return;
+        break;
       }
-      const drawStrokeRoom = gameRooms.get(conn.gameId);
-      if (!drawStrokeRoom) {
-        sendMessage(conn, { type: "error", message: "Game room not found", code: "ROOM_NOT_FOUND" });
-        return;
+      const room = gameRooms.get(conn.gameId);
+      if (!room || room.currentPlayer !== conn.playerRole) {
+        break;
       }
-      if (drawStrokeRoom.currentPlayer !== conn.playerRole) {
-        sendMessage(conn, { type: "error", message: "Not your turn", code: "NOT_YOUR_TURN" });
-        return;
+      const pathRegex = /^[MLml\d\s,.\-]+$/;
+      if (!pathRegex.test(msg.stroke.path)) {
+        sendMessage(conn, { type: "error", message: "Invalid stroke path", code: "INVALID_STROKE" });
+        break;
       }
-      const strokeOpponentRole = conn.playerRole === "player1" ? "player2" : "player1";
-      const strokeOpponentConn = drawStrokeRoom[strokeOpponentRole];
-      if (strokeOpponentConn) {
-        sendMessage(strokeOpponentConn, { type: "opponent_stroke", stroke: msg.stroke });
+      const colorRegex = /^#[0-9A-Fa-f]{3,8}$|^[a-zA-Z]+$/;
+      if (!colorRegex.test(msg.stroke.color)) {
+        sendMessage(conn, { type: "error", message: "Invalid stroke color", code: "INVALID_STROKE" });
+        break;
+      }
+      const otherRole = conn.playerRole === "player1" ? "player2" : "player1";
+      const otherConn = room[otherRole];
+      if (otherConn) {
+        sendMessage(otherConn, { type: "opponent_stroke", stroke: msg.stroke });
       }
       break;
     }
