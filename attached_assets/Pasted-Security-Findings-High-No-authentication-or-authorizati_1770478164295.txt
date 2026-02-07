@@ -1,0 +1,20 @@
+Security Findings
+
+High: No authentication or authorization on any REST endpoints, so anyone can create games, read games, or submit turns if they know a game ID. routes.ts (line 13) and routes.ts (line 59).
+Medium: WebSocket origin validation uses substring matching and allows originless connections, which can be bypassed by malicious subdomains (e.g. replit.dev.evil.com) or non‑browser clients. websocket.ts (line 75), websocket.ts (line 82), websocket.ts (line 86), websocket.ts (line 452).
+Medium: CSP allows unsafe-inline and loads scripts from https://unpkg.com, which increases XSS and supply‑chain risk if the landing page is exposed publicly. index.ts (line 231).
+Best Practice Gaps
+
+User passwords are modeled as plain text in the schema; if you ever expose user auth, you must hash/salt at write time. schema.ts (line 6).
+createGameSchema accepts totalRounds, but the server ignores it when creating a game, so clients can’t actually set custom rounds. schema.ts (line 50), storage.ts (line 53).
+Rate‑limits are configured, but there’s no trust proxy setting; behind a proxy, all users may share one IP and throttle each other. This is usually set near the rate‑limit middleware. index.ts (line 231).
+Edge Cases
+
+Matchmaking timeout uses joinedAt set at connection time, not queue join. Users who connect and wait >2 minutes before joining will be timed out immediately, and leaving/rejoining doesn’t reset the timer. websocket.ts (line 23), websocket.ts (line 485), websocket.ts (line 501).
+When a player disconnects, the in‑memory room is cleaned, but the DB game status is never updated (no “canceled/abandoned” state). This leaves active games stale forever. websocket.ts (line 103), websocket.ts (line 263).
+Game rooms and matchmaking are in-memory only, so a server restart drops all active games and queues; clients will receive ROOM_NOT_FOUND or hang. websocket.ts (line 36), websocket.ts (line 214).
+If you want, I can implement fixes for any of these. Recommended next steps:
+
+Add a simple auth token or session check for REST + WebSocket (and tighten origin matching).
+Reset matchmaking joinedAt on join_queue and update DB on disconnect.
+Decide whether to support custom totalRounds or remove it from the schema.
