@@ -100,9 +100,12 @@ Preferred communication style: Simple, everyday language.
 
 ### Security
 - **Helmet**: Enabled with full CSP (script-src self + unpkg.com, connect-src ws:/wss:, img-src data:/blob:, frame/object blocked)
-- **Rate Limiting**: 200 req/15min on /api, 30 req/min on /api/games, 300 msg/min on WebSocket
+- **Rate Limiting**: 200 req/15min on /api, 30 req/min on /api/games, 300 msg/min on WebSocket; trust proxy enabled for accurate client IP detection behind Replit proxy
 - **Input Validation**: Zod schemas on all WebSocket messages, SVG path regex sanitization, hex color validation
 - **CORS**: Dynamic origin validation for Replit domains and localhost
+- **WebSocket Origin**: Proper URL hostname parsing (not substring matching) to prevent bypass via malicious subdomains (e.g., replit.dev.evil.com is rejected)
+- **Game Abandonment**: DB game status updated to "abandoned" when player disconnects mid-game, preventing stale active games
+- **Matchmaking Timeout**: joinedAt timestamp set on queue join (not connection), so timeout accurately reflects queue wait time
 
 ### SEO & Landing Page
 - **Landing Page**: `server/templates/landing-page.html` with Open Graph tags, Twitter cards (summary_large_image), JSON-LD structured data (MobileApplication schema with game metadata)
