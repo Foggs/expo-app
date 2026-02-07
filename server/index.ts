@@ -229,6 +229,8 @@ function setupErrorHandler(app: express.Application) {
 }
 
 function setupSecurity(app: express.Application) {
+  app.set("trust proxy", 1);
+
   app.use(
     helmet({
       contentSecurityPolicy: {

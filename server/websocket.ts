@@ -75,18 +75,28 @@ function isRateLimited(conn: PlayerConnection): boolean {
 function validateOrigin(origin: string | undefined): boolean {
   if (!origin) return true; // Allow connections without origin (native apps)
 
-  if (origin.startsWith("http://localhost:") || origin.startsWith("http://127.0.0.1:")) {
+  let hostname: string;
+  try {
+    hostname = new URL(origin).hostname;
+  } catch {
+    return false;
+  }
+
+  if (hostname === "localhost" || hostname === "127.0.0.1") {
     return true;
   }
 
-  if (process.env.REPLIT_DEV_DOMAIN && origin.includes(process.env.REPLIT_DEV_DOMAIN)) {
-    return true;
+  if (process.env.REPLIT_DEV_DOMAIN) {
+    const devDomain = process.env.REPLIT_DEV_DOMAIN;
+    if (hostname === devDomain || hostname.endsWith("." + devDomain)) {
+      return true;
+    }
   }
 
   if (process.env.REPLIT_DOMAINS) {
     const domains = process.env.REPLIT_DOMAINS.split(",").map(d => d.trim());
     for (const domain of domains) {
-      if (origin.includes(domain)) return true;
+      if (hostname === domain || hostname.endsWith("." + domain)) return true;
     }
   }
 
@@ -116,6 +126,13 @@ function cleanupConnection(connId: string): void {
 
       if (otherConn) {
         sendMessage(otherConn, { type: "opponent_disconnected" });
+      }
+
+      if (room.status !== "completed") {
+        room.status = "abandoned";
+        storage.updateGame(conn.gameId, { status: "abandoned" }).catch((err) => {
+          console.error(`Failed to mark game ${conn.gameId} as abandoned:`, err);
+        });
       }
 
       if (!room.player1 && !room.player2) {
@@ -383,6 +400,7 @@ function handleMessage(conn: PlayerConnection, data: Buffer | ArrayBuffer | Buff
         sendMessage(conn, { type: "error", message: "Already in queue", code: "ALREADY_IN_QUEUE" });
         return;
       }
+      conn.joinedAt = Date.now();
       matchmakingQueue.push(conn.id);
       sendMessage(conn, { type: "queue_joined", position: matchmakingQueue.length });
       console.log(`${conn.playerName} joined queue (position ${matchmakingQueue.length})`);

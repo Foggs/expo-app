@@ -49,7 +49,6 @@ export const insertUserSchema = createInsertSchema(users).pick({
 
 export const createGameSchema = z.object({
   player1Id: z.string().optional(),
-  totalRounds: z.number().min(1).max(5).default(3),
 });
 
 export const submitTurnSchema = z.object({
