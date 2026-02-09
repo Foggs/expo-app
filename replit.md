@@ -12,7 +12,7 @@ Preferred communication style: Simple, everyday language.
 
 ### Frontend Architecture
 - **Framework**: Expo SDK 54 with React Native 0.81
-- **Navigation**: Expo Router with file-based routing (app directory contains index, game, and results screens)
+- **Navigation**: Expo Router with file-based routing (app directory contains index, game, results, and gallery screens)
 - **State Management**: React Query (@tanstack/react-query) for server state, React hooks for local state
 - **UI Components**: React Native core components with custom styling, Reanimated for animations
 - **Design Pattern**: Component-based architecture with shared constants for theming (Colors)
@@ -27,7 +27,7 @@ Preferred communication style: Simple, everyday language.
 - **ORM**: Drizzle ORM with PostgreSQL dialect
 - **Schema**: Defined in shared/schema.ts using Drizzle's pgTable, with Zod validation via drizzle-zod
 - **Migrations**: Managed through drizzle-kit (migrations output to ./migrations directory)
-- **Current Models**: Users table with id, username, and password fields
+- **Current Models**: Users table with id, username, password; GalleryDrawings table with id, playerName, opponentName, strokes (JSONB), roundCount, createdAt
 
 ### Cross-Platform Considerations
 - Platform-specific code handling (Platform.OS checks for web vs native)
@@ -129,15 +129,39 @@ Preferred communication style: Simple, everyday language.
 - Info rows on home screen: Grouped with accessible labels
 - Results screen: All stats and player cards have accessibility labels
 
+### Drawing Persistence (Cumulative Canvas)
+- Drawings accumulate across rounds: each player builds on previous rounds' work
+- `backgroundStrokes` array accumulates all completed strokes from prior turns
+- `DrawingCanvas` renders backgroundStrokes as a frozen non-editable layer beneath active drawing
+- Undo/clear only affect the current turn's strokes, not previous rounds
+- Round thumbnails show cumulative snapshots (Round 2 shows Round 1 + Round 2 strokes)
+
 ### Results Screen
 - Displays game stats: rounds, total time, artists
-- **Round Gallery**: Shows round-by-round drawing thumbnails from both players side by side
+- **Round Gallery**: Shows round-by-round cumulative drawing thumbnails from both players side by side
 - **DrawingThumbnail** component renders SVG strokes in 120x120 mini canvas with viewBox "0 0 400 400"
+- **Save to Gallery**: Button saves final drawing to PostgreSQL gallery table via POST /api/gallery
 - **Game Store** (`lib/gameStore.ts`): Module-level storage persists drawings across screens
-  - `addRoundDrawing()`: Saves player/opponent strokes per round during gameplay
+  - `addRoundDrawing()`: Saves player/opponent strokes per round during gameplay (includes backgroundStrokes for cumulative snapshots)
   - `getRoundDrawings()`: Retrieves all stored drawings for results display
   - `clearRoundDrawings()`: Resets on game start and results unmount
 - Shows "No drawings recorded" when no strokes are available
+
+### Gallery Feature
+- **Screen**: `app/gallery.tsx` - accessible from home screen via "Gallery" button
+- **API Endpoints**: POST /api/gallery (save), GET /api/gallery (list, ordered by createdAt desc), DELETE /api/gallery/:id (delete)
+- **Database**: `galleryDrawings` table in PostgreSQL with playerName, opponentName, strokes (JSONB), roundCount, createdAt
+- **UI**: Card-based list with SVG thumbnails, opponent name, round count, date, delete button
+- **Empty State**: Icon + message when no drawings saved
+
+### Get Ready Modal
+- 10-second countdown modal appears for the waiting player when opponent's turn is about to end
+- Client-side opponent timer starts when turn switches away from player (120s countdown)
+- Modal shows at ≤10 seconds with animated countdown number, brush icon, "Your turn starts in" text
+- Haptic feedback (Heavy impact) on each countdown tick
+- Countdown number turns red at ≤3 seconds
+- Modal auto-dismisses when turn switches to player, on opponent disconnect, or game complete
+- Accessibility: role="alert", assertive live region, descriptive label
 
 ### Haptic Feedback
 - Turn start: Warning notification when it becomes player's turn
@@ -145,6 +169,7 @@ Preferred communication style: Simple, everyday language.
 - Timer critical (10s): Error notification feedback
 - Turn submit: Success notification
 - Match found: Success notification
+- Get Ready countdown: Heavy impact on each tick
 - Button interactions: Light/Medium impact on native platforms only
 
 ### Future Roadmap
