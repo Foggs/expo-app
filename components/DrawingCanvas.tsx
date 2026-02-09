@@ -31,6 +31,7 @@ interface DrawingCanvasProps {
   strokes: Stroke[];
   onStrokesChange: (strokes: Stroke[]) => void;
   disabled?: boolean;
+  backgroundStrokes?: Stroke[];
 }
 
 function generateId(): string {
@@ -38,7 +39,7 @@ function generateId(): string {
 }
 
 const DrawingCanvas = forwardRef<DrawingCanvasRef, DrawingCanvasProps>(
-  ({ strokeColor, strokeWidth, strokes, onStrokesChange, disabled = false }, ref) => {
+  ({ strokeColor, strokeWidth, strokes, onStrokesChange, disabled = false, backgroundStrokes = [] }, ref) => {
     const colorScheme = useColorScheme();
     const isDark = colorScheme === "dark";
     const colors = isDark ? Colors.dark : Colors.light;
@@ -147,6 +148,17 @@ const DrawingCanvas = forwardRef<DrawingCanvasRef, DrawingCanvasProps>(
         {...panResponder.panHandlers}
       >
         <Svg width="100%" height="100%" style={[StyleSheet.absoluteFill, { pointerEvents: "none" }]}>
+          {backgroundStrokes.map((stroke) => (
+            <Path
+              key={`bg-${stroke.id}`}
+              d={stroke.path}
+              stroke={stroke.color}
+              strokeWidth={stroke.strokeWidth}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              fill="none"
+            />
+          ))}
           {strokes.map((stroke) => (
             <Path
               key={stroke.id}
