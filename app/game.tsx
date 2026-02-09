@@ -3,6 +3,7 @@ import { router, useLocalSearchParams } from "expo-router";
 import * as Haptics from "expo-haptics";
 import React, { useRef, useState, useCallback, useEffect } from "react";
 import {
+  Modal,
   Platform,
   Pressable,
   StyleSheet,
@@ -63,8 +64,13 @@ export default function GameScreen() {
   const [showColorPicker, setShowColorPicker] = useState(false);
   const [showBrushPicker, setShowBrushPicker] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [showGetReady, setShowGetReady] = useState(false);
+  const [getReadyCountdown, setGetReadyCountdown] = useState(10);
+  const opponentTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const opponentTimeRef = useRef(120);
 
   const timerPulse = useSharedValue(1);
+  const getReadyScale = useSharedValue(1);
   const prevIsMyTurnRef = useRef<boolean | null>(null);
   const lastStrokeSendRef = useRef<number>(0);
 
@@ -142,6 +148,8 @@ export default function GameScreen() {
       onGameComplete: () => {
         if (!navigatedRef.current) {
           navigatedRef.current = true;
+          clearOpponentTimer();
+          setShowGetReady(false);
           router.push({ pathname: "/results", params: { opponentName } });
         }
       },
@@ -163,6 +171,8 @@ export default function GameScreen() {
         if (navigatedRef.current) return;
         navigatedRef.current = true;
         timer.pause();
+        clearOpponentTimer();
+        setShowGetReady(false);
         if (Platform.OS === "web") {
           alert("Your opponent has disconnected. Returning to home.");
           router.replace("/");
@@ -189,11 +199,38 @@ export default function GameScreen() {
     };
   }, []);
 
+  const clearOpponentTimer = useCallback(() => {
+    if (opponentTimerRef.current) {
+      clearInterval(opponentTimerRef.current);
+      opponentTimerRef.current = null;
+    }
+  }, []);
+
+  const startOpponentTimer = useCallback(() => {
+    clearOpponentTimer();
+    opponentTimeRef.current = 120;
+    setShowGetReady(false);
+    setGetReadyCountdown(10);
+    opponentTimerRef.current = setInterval(() => {
+      opponentTimeRef.current -= 1;
+      if (opponentTimeRef.current <= 10 && opponentTimeRef.current > 0) {
+        setGetReadyCountdown(opponentTimeRef.current);
+        setShowGetReady(true);
+      }
+      if (opponentTimeRef.current <= 0) {
+        clearOpponentTimer();
+      }
+    }, 1000);
+  }, [clearOpponentTimer]);
+
   useEffect(() => {
     const wasMyTurn = prevIsMyTurnRef.current;
     prevIsMyTurnRef.current = isMyTurn;
 
     if (isMyTurn && wasMyTurn !== null && wasMyTurn !== isMyTurn) {
+      clearOpponentTimer();
+      setShowGetReady(false);
+
       if (Platform.OS !== "web") {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
       }
@@ -214,8 +251,15 @@ export default function GameScreen() {
 
     if (!isMyTurn) {
       timer.pause();
+      if (wasMyTurn === null || wasMyTurn !== isMyTurn) {
+        startOpponentTimer();
+      }
     }
   }, [isMyTurn]);
+
+  useEffect(() => {
+    return () => clearOpponentTimer();
+  }, [clearOpponentTimer]);
 
   useEffect(() => {
     if (timer.timerColor === "critical") {
@@ -242,6 +286,22 @@ export default function GameScreen() {
       }
     }
   }, [timer.timerColor, timer.timeRemaining]);
+
+  useEffect(() => {
+    if (showGetReady) {
+      if (Platform.OS !== "web") {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+      }
+      getReadyScale.value = withSequence(
+        withTiming(1.2, { duration: 200, easing: Easing.out(Easing.ease) }),
+        withTiming(1, { duration: 200, easing: Easing.inOut(Easing.ease) })
+      );
+    }
+  }, [getReadyCountdown]);
+
+  const getReadyAnimatedStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: getReadyScale.value }],
+  }));
 
   const timerAnimatedStyle = useAnimatedStyle(() => ({
     transform: [{ scale: timerPulse.value }],
@@ -274,6 +334,8 @@ export default function GameScreen() {
     timer.pause();
 
     const doLeave = () => {
+      clearOpponentTimer();
+      setShowGetReady(false);
       resetGame();
       setBackgroundStrokes([]);
       ws.disconnect();
@@ -599,6 +661,39 @@ export default function GameScreen() {
         onClose={() => setShowBrushPicker(false)}
         currentColor={strokeColor}
       />
+
+      <Modal
+        visible={showGetReady}
+        transparent
+        animationType="fade"
+        statusBarTranslucent
+      >
+        <View style={styles.getReadyOverlay}>
+          <Animated.View
+            style={[styles.getReadyModal, getReadyAnimatedStyle]}
+            accessible={true}
+            accessibilityRole="alert"
+            accessibilityLabel={`Get ready! Your turn starts in ${getReadyCountdown} seconds`}
+            accessibilityLiveRegion="assertive"
+          >
+            <Ionicons name="brush" size={40} color={colors.tint} />
+            <Text style={[styles.getReadyTitle, { color: colors.text }]}>
+              Get Ready!
+            </Text>
+            <Text style={[styles.getReadySubtitle, { color: colors.textSecondary }]}>
+              Your turn starts in
+            </Text>
+            <Animated.Text
+              style={[
+                styles.getReadyCountdown,
+                { color: getReadyCountdown <= 3 ? colors.timerCritical : colors.tint },
+              ]}
+            >
+              {getReadyCountdown}
+            </Animated.Text>
+          </Animated.View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -735,5 +830,35 @@ const styles = StyleSheet.create({
   },
   submitButtonDisabled: {
     opacity: 0.6,
+  },
+  getReadyOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0, 0, 0, 0.6)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  getReadyModal: {
+    backgroundColor: "#1a1a2e",
+    borderRadius: 28,
+    padding: 36,
+    alignItems: "center",
+    gap: 8,
+    minWidth: 240,
+    borderWidth: 2,
+    borderColor: "rgba(108, 92, 231, 0.3)",
+  },
+  getReadyTitle: {
+    fontSize: 28,
+    fontFamily: "Inter_700Bold",
+    marginTop: 8,
+  },
+  getReadySubtitle: {
+    fontSize: 15,
+    fontFamily: "Inter_400Regular",
+  },
+  getReadyCountdown: {
+    fontSize: 56,
+    fontFamily: "Inter_700Bold",
+    marginTop: 4,
   },
 });
