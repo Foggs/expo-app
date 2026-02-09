@@ -29,7 +29,7 @@ import ColorPicker from "@/components/ColorPicker";
 import BrushSizePicker from "@/components/BrushSizePicker";
 import { useGameTimer } from "@/hooks/useGameTimer";
 import { useGameState, PlayerId } from "@/hooks/useGameState";
-import { useWebSocket } from "@/hooks/useWebSocket";
+import { useGameWebSocket } from "@/contexts/WebSocketContext";
 import { addRoundDrawing, clearRoundDrawings } from "@/lib/gameStore";
 
 const DEFAULT_COLOR = "#6C5CE7";
@@ -67,63 +67,7 @@ export default function GameScreen() {
   const prevIsMyTurnRef = useRef<boolean | null>(null);
   const lastStrokeSendRef = useRef<number>(0);
 
-  const ws = useWebSocket({
-    onTurnSubmitted: (data) => {
-      if (data.playerRole !== playerRole) {
-        handleServerTurnSubmitted({
-          playerRole: data.playerRole as PlayerId,
-          round: data.round,
-          strokes: data.strokes,
-        });
-      }
-    },
-    onGameState: () => {
-      setIsSubmitting(false);
-    },
-    onGameComplete: () => {
-      if (!navigatedRef.current) {
-        navigatedRef.current = true;
-        router.push({ pathname: "/results", params: { opponentName } });
-      }
-    },
-    onOpponentStroke: (stroke) => {
-      setOpponentStrokes((prev) => {
-        const idx = prev.findIndex((s) => s.id === stroke.id);
-        if (idx >= 0) {
-          const updated = [...prev];
-          updated[idx] = { ...updated[idx], path: stroke.path };
-          return updated;
-        }
-        return [...prev, stroke];
-      });
-    },
-    onOpponentClear: () => {
-      setOpponentStrokes([]);
-    },
-    onOpponentDisconnected: () => {
-      if (navigatedRef.current) return;
-      navigatedRef.current = true;
-      timer.pause();
-      if (Platform.OS === "web") {
-        alert("Your opponent has disconnected. Returning to home.");
-        router.replace("/");
-      } else {
-        Alert.alert(
-          "Opponent Disconnected",
-          "Your opponent has left the game.",
-          [
-            {
-              text: "OK",
-              onPress: () => router.replace("/"),
-            },
-          ]
-        );
-      }
-    },
-    onError: (message) => {
-      console.warn("Game WebSocket error:", message);
-    },
-  });
+  const ws = useGameWebSocket();
 
   const {
     isMyTurn,
@@ -178,10 +122,69 @@ export default function GameScreen() {
   timerRestartRef.current = timer.restart;
 
   useEffect(() => {
-    if (ws.connectionStatus === "disconnected" && gameId) {
-      clearRoundDrawings();
-      ws.connect();
-    }
+    clearRoundDrawings();
+
+    ws.setCallbacks({
+      onTurnSubmitted: (data) => {
+        if (data.playerRole !== playerRole) {
+          handleServerTurnSubmitted({
+            playerRole: data.playerRole as PlayerId,
+            round: data.round,
+            strokes: data.strokes,
+          });
+        }
+      },
+      onGameState: () => {
+        setIsSubmitting(false);
+      },
+      onGameComplete: () => {
+        if (!navigatedRef.current) {
+          navigatedRef.current = true;
+          router.push({ pathname: "/results", params: { opponentName } });
+        }
+      },
+      onOpponentStroke: (stroke) => {
+        setOpponentStrokes((prev) => {
+          const idx = prev.findIndex((s) => s.id === stroke.id);
+          if (idx >= 0) {
+            const updated = [...prev];
+            updated[idx] = { ...updated[idx], path: stroke.path };
+            return updated;
+          }
+          return [...prev, stroke];
+        });
+      },
+      onOpponentClear: () => {
+        setOpponentStrokes([]);
+      },
+      onOpponentDisconnected: () => {
+        if (navigatedRef.current) return;
+        navigatedRef.current = true;
+        timer.pause();
+        if (Platform.OS === "web") {
+          alert("Your opponent has disconnected. Returning to home.");
+          router.replace("/");
+        } else {
+          Alert.alert(
+            "Opponent Disconnected",
+            "Your opponent has left the game.",
+            [
+              {
+                text: "OK",
+                onPress: () => router.replace("/"),
+              },
+            ]
+          );
+        }
+      },
+      onError: (message) => {
+        console.warn("Game WebSocket error:", message);
+      },
+    });
+
+    return () => {
+      ws.setCallbacks({});
+    };
   }, []);
 
   useEffect(() => {

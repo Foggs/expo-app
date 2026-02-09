@@ -23,7 +23,7 @@ import Animated, {
 } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Colors from "@/constants/colors";
-import { useWebSocket } from "@/hooks/useWebSocket";
+import { useGameWebSocket } from "@/contexts/WebSocketContext";
 
 export default function HomeScreen() {
   const insets = useSafeAreaInsets();
@@ -36,26 +36,34 @@ export default function HomeScreen() {
   const searchPulse = useSharedValue(0.6);
   const navigatedRef = useRef(false);
 
-  const ws = useWebSocket({
-    onMatchFound: (info) => {
-      if (navigatedRef.current) return;
-      navigatedRef.current = true;
-      if (Platform.OS !== "web") {
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      }
-      router.push({
-        pathname: "/game",
-        params: {
-          gameId: info.gameId,
-          playerRole: info.playerRole,
-          opponentName: info.opponentName,
-        },
-      });
-    },
-    onError: (message) => {
-      console.warn("WebSocket error:", message);
-    },
-  });
+  const ws = useGameWebSocket();
+
+  useEffect(() => {
+    ws.setCallbacks({
+      onMatchFound: (info) => {
+        if (navigatedRef.current) return;
+        navigatedRef.current = true;
+        if (Platform.OS !== "web") {
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        }
+        router.push({
+          pathname: "/game",
+          params: {
+            gameId: info.gameId,
+            playerRole: info.playerRole,
+            opponentName: info.opponentName,
+          },
+        });
+      },
+      onError: (message) => {
+        console.warn("WebSocket error:", message);
+      },
+    });
+
+    return () => {
+      ws.setCallbacks({});
+    };
+  }, []);
 
   const isSearching = ws.matchStatus === "searching" || ws.matchStatus === "matched";
 
