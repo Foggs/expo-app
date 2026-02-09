@@ -54,6 +54,7 @@ export default function GameScreen() {
 
   const canvasRef = useRef<DrawingCanvasRef>(null);
   const navigatedRef = useRef(false);
+  const mountedRef = useRef(true);
 
   const [strokes, setStrokes] = useState<Stroke[]>([]);
   const [opponentStrokes, setOpponentStrokes] = useState<Stroke[]>([]);
@@ -209,9 +210,15 @@ export default function GameScreen() {
   const startOpponentTimer = useCallback(() => {
     clearOpponentTimer();
     opponentTimeRef.current = 120;
-    setShowGetReady(false);
-    setGetReadyCountdown(10);
+    if (mountedRef.current) {
+      setShowGetReady(false);
+      setGetReadyCountdown(10);
+    }
     opponentTimerRef.current = setInterval(() => {
+      if (!mountedRef.current) {
+        clearOpponentTimer();
+        return;
+      }
       opponentTimeRef.current -= 1;
       if (opponentTimeRef.current <= 10 && opponentTimeRef.current > 0) {
         setGetReadyCountdown(opponentTimeRef.current);
@@ -258,7 +265,11 @@ export default function GameScreen() {
   }, [isMyTurn]);
 
   useEffect(() => {
-    return () => clearOpponentTimer();
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      clearOpponentTimer();
+    };
   }, [clearOpponentTimer]);
 
   useEffect(() => {
