@@ -104,12 +104,15 @@ Preferred communication style: Simple, everyday language.
 
 ### Security
 - **Helmet**: Enabled with full CSP (script-src self + unpkg.com, connect-src ws:/wss:, img-src data:/blob:, frame/object blocked)
-- **Rate Limiting**: 200 req/15min on /api, 30 req/min on /api/games, 300 msg/min on WebSocket; trust proxy enabled for accurate client IP detection behind Replit proxy
-- **Input Validation**: Zod schemas on all WebSocket messages, SVG path regex sanitization, hex color validation
+- **Rate Limiting**: 200 req/15min on /api, 30 req/min on /api/games, 20 req/min on /api/gallery, 300 msg/min on WebSocket; trust proxy enabled for accurate client IP detection behind Replit proxy
+- **Body Size Limits**: 2MB JSON body limit globally, content-length check on gallery POST
+- **Input Validation**: Zod schemas on all WebSocket messages and gallery submissions (stroke path max 50KB, max 500 strokes per save), SVG path regex sanitization, hex color validation
+- **Gallery Ownership**: Session token stored with gallery drawings; DELETE requires matching `x-session-token` header. Tokens generated per-device via expo-secure-store (native) or localStorage (web). GET responses strip sessionToken from public data.
 - **CORS**: Dynamic origin validation for Replit domains and localhost
 - **WebSocket Origin**: Proper URL hostname parsing (not substring matching) to prevent bypass via malicious subdomains (e.g., replit.dev.evil.com is rejected)
 - **Game Abandonment**: DB game status updated to "abandoned" when player disconnects mid-game, preventing stale active games
 - **Matchmaking Timeout**: joinedAt timestamp set on queue join (not connection), so timeout accurately reflects queue wait time
+- **Memory Leak Prevention**: mountedRef guards on game.tsx opponent timer and WebSocketContext reconnect timer; server-side game room cleanup timer removes completed/abandoned rooms after 2 minutes
 
 ### SEO & Landing Page
 - **Landing Page**: `server/templates/landing-page.html` with Open Graph tags, Twitter cards (summary_large_image), JSON-LD structured data (MobileApplication schema with game metadata)
