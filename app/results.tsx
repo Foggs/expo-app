@@ -4,6 +4,7 @@ import { router, useLocalSearchParams } from "expo-router";
 import * as Haptics from "expo-haptics";
 import React, { useState, useEffect } from "react";
 import {
+  ActivityIndicator,
   Platform,
   Pressable,
   ScrollView,
@@ -11,6 +12,7 @@ import {
   Text,
   View,
   useColorScheme,
+  Alert,
 } from "react-native";
 import Animated, {
   useAnimatedStyle,
@@ -27,6 +29,7 @@ import {
   clearRoundDrawings,
   RoundDrawing,
 } from "@/lib/gameStore";
+import { apiRequest } from "@/lib/query-client";
 
 function DrawingThumbnail({
   strokes,
@@ -76,6 +79,8 @@ export default function ResultsScreen() {
   const colors = isDark ? Colors.dark : Colors.light;
 
   const [drawings, setDrawings] = useState<RoundDrawing[]>([]);
+  const [isSaving, setIsSaving] = useState(false);
+  const [isSaved, setIsSaved] = useState(false);
 
   const cardScale = useSharedValue(0.8);
   const cardOpacity = useSharedValue(0);
@@ -111,6 +116,49 @@ export default function ResultsScreen() {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     }
     router.replace("/");
+  };
+
+  const handleSaveToGallery = async () => {
+    if (isSaving || isSaved) return;
+    setIsSaving(true);
+
+    if (Platform.OS !== "web") {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    }
+
+    try {
+      const allStrokes = drawings.flatMap((d) => d.strokes);
+      if (allStrokes.length === 0) {
+        if (Platform.OS === "web") {
+          alert("No drawings to save.");
+        } else {
+          Alert.alert("No Drawings", "There are no drawings to save.");
+        }
+        setIsSaving(false);
+        return;
+      }
+
+      const lastDrawing = drawings.reduce((a, b) => (a.round >= b.round ? a : b), drawings[0]);
+      await apiRequest("POST", "/api/gallery", {
+        playerName: "You",
+        opponentName: opponentName ?? "Opponent",
+        strokes: lastDrawing.strokes,
+        roundCount: Math.max(...drawings.map((d) => d.round)),
+      });
+
+      setIsSaved(true);
+      if (Platform.OS !== "web") {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      }
+    } catch {
+      if (Platform.OS === "web") {
+        alert("Failed to save drawing. Please try again.");
+      } else {
+        Alert.alert("Error", "Failed to save drawing. Please try again.");
+      }
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const roundNumbers = [...new Set(drawings.map((d) => d.round))].sort(
@@ -361,6 +409,29 @@ export default function ResultsScreen() {
 
         <View style={styles.actions}>
           <Pressable
+            onPress={handleSaveToGallery}
+            disabled={isSaving || isSaved || drawings.length === 0}
+            accessibilityRole="button"
+            accessibilityLabel={isSaved ? "Drawing saved to gallery" : "Save drawing to gallery"}
+          >
+            <LinearGradient
+              colors={isSaved ? ["#27ae60", "#2ecc71"] : [colors.accentSecondary, colors.accent]}
+              style={[styles.primaryButton, (isSaving || isSaved || drawings.length === 0) && styles.buttonDisabledStyle]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+            >
+              {isSaving ? (
+                <ActivityIndicator size="small" color="#fff" />
+              ) : (
+                <Ionicons name={isSaved ? "checkmark-circle" : "save"} size={22} color="#fff" />
+              )}
+              <Text style={styles.primaryButtonText}>
+                {isSaved ? "Saved" : "Save to Gallery"}
+              </Text>
+            </LinearGradient>
+          </Pressable>
+
+          <Pressable
             onPress={handlePlayAgain}
             accessibilityRole="button"
             accessibilityLabel="Play another match"
@@ -530,6 +601,9 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontSize: 17,
     fontFamily: "Inter_600SemiBold",
+  },
+  buttonDisabledStyle: {
+    opacity: 0.7,
   },
   secondaryButton: {
     flexDirection: "row",

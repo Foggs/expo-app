@@ -232,6 +232,23 @@ export default function HomeScreen() {
           </View>
         </View>
 
+        <Pressable
+          onPress={() => {
+            if (Platform.OS !== "web") {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+            }
+            router.push("/gallery");
+          }}
+          style={[styles.galleryButton, { backgroundColor: colors.card }]}
+          accessibilityRole="button"
+          accessibilityLabel="View saved drawings gallery"
+        >
+          <Ionicons name="images" size={20} color={colors.tint} />
+          <Text style={[styles.galleryButtonText, { color: colors.text }]}>
+            Gallery
+          </Text>
+        </Pressable>
+
         <View style={styles.footer}>
           <Animated.View style={[styles.pulseRing, pulseStyle]}>
             <LinearGradient
@@ -369,6 +386,21 @@ const styles = StyleSheet.create({
   },
   infoText: {
     fontSize: 17,
+    fontFamily: "Inter_500Medium",
+  },
+  galleryButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    alignSelf: "center",
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    borderRadius: 20,
+    marginBottom: 8,
+  },
+  galleryButtonText: {
+    fontSize: 15,
     fontFamily: "Inter_500Medium",
   },
   footer: {

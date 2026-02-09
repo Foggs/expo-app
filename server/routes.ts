@@ -2,7 +2,7 @@ import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import { z } from "zod";
 import { storage } from "./storage";
-import { createGameSchema, submitTurnSchema } from "@shared/schema";
+import { createGameSchema, submitTurnSchema, insertGalleryDrawingSchema } from "@shared/schema";
 
 function asyncHandler(fn: (req: Request, res: Response, next: NextFunction) => Promise<void>) {
   return (req: Request, res: Response, next: NextFunction) => {
@@ -157,6 +157,58 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const gameTurns = await storage.getTurnsByGame(gameId);
       res.json(gameTurns);
+    }),
+  );
+
+  app.post(
+    "/api/gallery",
+    asyncHandler(async (req: Request, res: Response) => {
+      const parsed = insertGalleryDrawingSchema.safeParse(req.body);
+      if (!parsed.success) {
+        res.status(400).json({
+          message: "Invalid drawing data",
+          errors: parsed.error.flatten().fieldErrors,
+        });
+        return;
+      }
+
+      const drawing = await storage.saveToGallery({
+        playerName: parsed.data.playerName,
+        opponentName: parsed.data.opponentName,
+        strokes: parsed.data.strokes,
+        roundCount: parsed.data.roundCount,
+      });
+      res.status(201).json(drawing);
+    }),
+  );
+
+  app.get(
+    "/api/gallery",
+    asyncHandler(async (req: Request, res: Response) => {
+      const limit = Math.min(
+        Math.max(parseInt(req.query.limit as string) || 50, 1),
+        100
+      );
+      const drawings = await storage.getGalleryDrawings(limit);
+      res.json(drawings);
+    }),
+  );
+
+  app.delete(
+    "/api/gallery/:id",
+    asyncHandler(async (req: Request, res: Response) => {
+      const id = req.params.id;
+      if (!id || typeof id !== "string") {
+        res.status(400).json({ message: "Invalid drawing ID" });
+        return;
+      }
+
+      const deleted = await storage.deleteGalleryDrawing(id);
+      if (!deleted) {
+        res.status(404).json({ message: "Drawing not found" });
+        return;
+      }
+      res.json({ message: "Drawing deleted" });
     }),
   );
 

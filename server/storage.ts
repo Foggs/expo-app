@@ -4,10 +4,12 @@ import {
   users,
   games,
   turns,
+  galleryDrawings,
   type User,
   type InsertUser,
   type Game,
   type Turn,
+  type GalleryDrawing,
 } from "@shared/schema";
 
 export interface IStorage {
@@ -29,6 +31,15 @@ export interface IStorage {
   }): Promise<Turn>;
   getTurnsByGame(gameId: string): Promise<Turn[]>;
   getTurnsByGameAndRound(gameId: string, round: number): Promise<Turn[]>;
+
+  saveToGallery(data: {
+    playerName?: string;
+    opponentName?: string;
+    strokes: unknown;
+    roundCount?: number;
+  }): Promise<GalleryDrawing>;
+  getGalleryDrawings(limit?: number): Promise<GalleryDrawing[]>;
+  deleteGalleryDrawing(id: string): Promise<boolean>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -124,6 +135,40 @@ export class DatabaseStorage implements IStorage {
       .select()
       .from(turns)
       .where(and(eq(turns.gameId, gameId), eq(turns.round, round)));
+  }
+
+  async saveToGallery(data: {
+    playerName?: string;
+    opponentName?: string;
+    strokes: unknown;
+    roundCount?: number;
+  }): Promise<GalleryDrawing> {
+    const [drawing] = await db
+      .insert(galleryDrawings)
+      .values({
+        playerName: data.playerName || "Anonymous",
+        opponentName: data.opponentName || "Unknown",
+        strokes: data.strokes,
+        roundCount: data.roundCount || 3,
+      })
+      .returning();
+    return drawing;
+  }
+
+  async getGalleryDrawings(limit = 50): Promise<GalleryDrawing[]> {
+    return db
+      .select()
+      .from(galleryDrawings)
+      .orderBy(desc(galleryDrawings.createdAt))
+      .limit(limit);
+  }
+
+  async deleteGalleryDrawing(id: string): Promise<boolean> {
+    const result = await db
+      .delete(galleryDrawings)
+      .where(eq(galleryDrawings.id, id))
+      .returning();
+    return result.length > 0;
   }
 }
 

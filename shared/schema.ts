@@ -42,6 +42,31 @@ export const turns = pgTable("turns", {
   submittedAt: timestamp("submitted_at").defaultNow().notNull(),
 });
 
+export const galleryDrawings = pgTable("gallery_drawings", {
+  id: varchar("id")
+    .primaryKey()
+    .default(sql`gen_random_uuid()`),
+  playerName: text("player_name").notNull().default("Anonymous"),
+  opponentName: text("opponent_name").notNull().default("Unknown"),
+  strokes: jsonb("strokes").notNull().default([]),
+  roundCount: integer("round_count").notNull().default(3),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export type GalleryDrawing = typeof galleryDrawings.$inferSelect;
+
+export const insertGalleryDrawingSchema = z.object({
+  playerName: z.string().max(50).optional(),
+  opponentName: z.string().max(50).optional(),
+  strokes: z.array(z.object({
+    id: z.string(),
+    path: z.string(),
+    color: z.string(),
+    strokeWidth: z.number(),
+  })).max(2000),
+  roundCount: z.number().min(1).max(10).optional(),
+});
+
 export const insertUserSchema = createInsertSchema(users).pick({
   username: true,
   password: true,
