@@ -109,12 +109,12 @@ export default function GameScreen() {
     addRoundDrawing({
       round: currentRound,
       playerRole,
-      strokes: [...strokes],
+      strokes: [...backgroundStrokes, ...strokes],
     });
     setBackgroundStrokes((prev) => [...prev, ...strokes]);
     setStrokes([]);
     timer.pause();
-  }, [strokes, isSubmitting, isMyTurn, ws.submitTurn, localSubmitTurn]);
+  }, [strokes, backgroundStrokes, isSubmitting, isMyTurn, ws.submitTurn, localSubmitTurn]);
 
   const timer = useGameTimer({
     onTimeUp: handleSubmitTurn,
@@ -201,7 +201,7 @@ export default function GameScreen() {
         addRoundDrawing({
           round: currentRound,
           playerRole: playerRole === "player1" ? "player2" : "player1",
-          strokes: [...opponentStrokes],
+          strokes: [...backgroundStrokes, ...opponentStrokes],
         });
         setBackgroundStrokes((prev) => [...prev, ...opponentStrokes]);
       }
