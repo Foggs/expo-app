@@ -165,6 +165,7 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
   const pingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const intentionalCloseRef = useRef(false);
   const shouldReconnectRef = useRef(false);
+  const mountedRef = useRef(true);
   const callbacksRef = useRef<WebSocketCallbacks>({});
   const matchStatusRef = useRef<MatchStatus>("idle");
 
@@ -305,6 +306,7 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
       wsRef.current = ws;
 
       ws.onopen = () => {
+        if (!mountedRef.current) return;
         setConnectionStatus("connected");
         reconnectAttemptRef.current = 0;
 
@@ -320,9 +322,12 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
       };
 
       ws.onclose = () => {
-        setConnectionStatus("disconnected");
         clearTimers();
         wsRef.current = null;
+
+        if (!mountedRef.current) return;
+
+        setConnectionStatus("disconnected");
 
         if (
           !intentionalCloseRef.current &&
@@ -415,7 +420,9 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
+    mountedRef.current = true;
     return () => {
+      mountedRef.current = false;
       intentionalCloseRef.current = true;
       shouldReconnectRef.current = false;
       clearTimers();
