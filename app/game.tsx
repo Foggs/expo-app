@@ -56,6 +56,7 @@ export default function GameScreen() {
 
   const [strokes, setStrokes] = useState<Stroke[]>([]);
   const [opponentStrokes, setOpponentStrokes] = useState<Stroke[]>([]);
+  const [backgroundStrokes, setBackgroundStrokes] = useState<Stroke[]>([]);
   const [strokeColor, setStrokeColor] = useState(DEFAULT_COLOR);
   const [strokeWidth, setStrokeWidth] = useState(DEFAULT_BRUSH_SIZE);
   const [isEraser, setIsEraser] = useState(false);
@@ -110,6 +111,7 @@ export default function GameScreen() {
       playerRole,
       strokes: [...strokes],
     });
+    setBackgroundStrokes((prev) => [...prev, ...strokes]);
     setStrokes([]);
     timer.pause();
   }, [strokes, isSubmitting, isMyTurn, ws.submitTurn, localSubmitTurn]);
@@ -201,10 +203,10 @@ export default function GameScreen() {
           playerRole: playerRole === "player1" ? "player2" : "player1",
           strokes: [...opponentStrokes],
         });
+        setBackgroundStrokes((prev) => [...prev, ...opponentStrokes]);
       }
       setStrokes([]);
       setOpponentStrokes([]);
-      canvasRef.current?.clear();
       timerRestartRef.current?.();
     } else if (isMyTurn && wasMyTurn === null) {
       timerRestartRef.current?.();
@@ -273,6 +275,7 @@ export default function GameScreen() {
 
     const doLeave = () => {
       resetGame();
+      setBackgroundStrokes([]);
       ws.disconnect();
       router.replace("/");
     };
@@ -451,6 +454,7 @@ export default function GameScreen() {
           strokes={isMyTurn ? strokes : opponentStrokes}
           onStrokesChange={handleStrokesChange}
           disabled={!isMyTurn || isSubmitting}
+          backgroundStrokes={backgroundStrokes}
         />
         {!isMyTurn && (
           <View style={styles.canvasOverlay}>
