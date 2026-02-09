@@ -1,8 +1,11 @@
 import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import { z } from "zod";
+import rateLimit from "express-rate-limit";
 import { storage } from "./storage";
 import { createGameSchema, submitTurnSchema, insertGalleryDrawingSchema } from "@shared/schema";
+
+const GALLERY_MAX_BODY_SIZE = 2 * 1024 * 1024; // 2MB
 
 function asyncHandler(fn: (req: Request, res: Response, next: NextFunction) => Promise<void>) {
   return (req: Request, res: Response, next: NextFunction) => {
@@ -160,9 +163,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }),
   );
 
+  const galleryRateLimit = rateLimit({
+    windowMs: 60 * 1000,
+    max: 20,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { message: "Too many gallery requests, please slow down" },
+  });
+
   app.post(
     "/api/gallery",
+    galleryRateLimit,
     asyncHandler(async (req: Request, res: Response) => {
+      const contentLength = parseInt(req.headers["content-length"] || "0", 10);
+      if (contentLength > GALLERY_MAX_BODY_SIZE) {
+        res.status(413).json({ message: "Request body too large" });
+        return;
+      }
+
       const parsed = insertGalleryDrawingSchema.safeParse(req.body);
       if (!parsed.success) {
         res.status(400).json({
@@ -177,29 +195,58 @@ export async function registerRoutes(app: Express): Promise<Server> {
         opponentName: parsed.data.opponentName,
         strokes: parsed.data.strokes,
         roundCount: parsed.data.roundCount,
+        sessionToken: parsed.data.sessionToken,
       });
-      res.status(201).json(drawing);
+      res.status(201).json({
+        id: drawing.id,
+        playerName: drawing.playerName,
+        opponentName: drawing.opponentName,
+        strokes: drawing.strokes,
+        roundCount: drawing.roundCount,
+        createdAt: drawing.createdAt,
+      });
     }),
   );
 
   app.get(
     "/api/gallery",
+    galleryRateLimit,
     asyncHandler(async (req: Request, res: Response) => {
       const limit = Math.min(
         Math.max(parseInt(req.query.limit as string) || 50, 1),
         100
       );
       const drawings = await storage.getGalleryDrawings(limit);
-      res.json(drawings);
+      res.json(
+        drawings.map(({ sessionToken, ...rest }) => rest)
+      );
     }),
   );
 
   app.delete(
     "/api/gallery/:id",
+    galleryRateLimit,
     asyncHandler(async (req: Request, res: Response) => {
       const id = req.params.id;
       if (!id || typeof id !== "string") {
         res.status(400).json({ message: "Invalid drawing ID" });
+        return;
+      }
+
+      const sessionToken = req.headers["x-session-token"] as string | undefined;
+      if (!sessionToken) {
+        res.status(401).json({ message: "Session token required" });
+        return;
+      }
+
+      const drawing = await storage.getGalleryDrawing(id);
+      if (!drawing) {
+        res.status(404).json({ message: "Drawing not found" });
+        return;
+      }
+
+      if (drawing.sessionToken && drawing.sessionToken !== sessionToken) {
+        res.status(403).json({ message: "Not authorized to delete this drawing" });
         return;
       }
 

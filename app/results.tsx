@@ -2,7 +2,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { router, useLocalSearchParams } from "expo-router";
 import * as Haptics from "expo-haptics";
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   ActivityIndicator,
   Platform,
@@ -30,6 +30,7 @@ import {
   RoundDrawing,
 } from "@/lib/gameStore";
 import { apiRequest } from "@/lib/query-client";
+import { getSessionToken } from "@/lib/sessionToken";
 
 function DrawingThumbnail({
   strokes,
@@ -139,11 +140,13 @@ export default function ResultsScreen() {
       }
 
       const lastDrawing = drawings.reduce((a, b) => (a.round >= b.round ? a : b), drawings[0]);
+      const token = await getSessionToken();
       await apiRequest("POST", "/api/gallery", {
         playerName: "You",
         opponentName: opponentName ?? "Opponent",
         strokes: lastDrawing.strokes,
         roundCount: Math.max(...drawings.map((d) => d.round)),
+        sessionToken: token,
       });
 
       setIsSaved(true);

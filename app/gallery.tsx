@@ -19,6 +19,7 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import Colors from "@/constants/colors";
 import { apiRequest } from "@/lib/query-client";
 import { queryClient } from "@/lib/query-client";
+import { getSessionToken } from "@/lib/sessionToken";
 
 interface GalleryStroke {
   id: string;
@@ -85,7 +86,10 @@ export default function GalleryScreen() {
 
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
-      await apiRequest("DELETE", `/api/gallery/${id}`);
+      const token = await getSessionToken();
+      await apiRequest("DELETE", `/api/gallery/${id}`, undefined, {
+        "x-session-token": token,
+      });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/gallery"] });

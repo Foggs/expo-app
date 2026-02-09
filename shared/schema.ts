@@ -50,6 +50,7 @@ export const galleryDrawings = pgTable("gallery_drawings", {
   opponentName: text("opponent_name").notNull().default("Unknown"),
   strokes: jsonb("strokes").notNull().default([]),
   roundCount: integer("round_count").notNull().default(3),
+  sessionToken: text("session_token"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
@@ -59,12 +60,13 @@ export const insertGalleryDrawingSchema = z.object({
   playerName: z.string().max(50).optional(),
   opponentName: z.string().max(50).optional(),
   strokes: z.array(z.object({
-    id: z.string(),
-    path: z.string(),
-    color: z.string(),
-    strokeWidth: z.number(),
-  })).max(2000),
+    id: z.string().max(100),
+    path: z.string().max(50000),
+    color: z.string().max(20),
+    strokeWidth: z.number().min(1).max(50),
+  })).max(500),
   roundCount: z.number().min(1).max(10).optional(),
+  sessionToken: z.string().max(100).optional(),
 });
 
 export const insertUserSchema = createInsertSchema(users).pick({

@@ -37,8 +37,10 @@ export interface IStorage {
     opponentName?: string;
     strokes: unknown;
     roundCount?: number;
+    sessionToken?: string;
   }): Promise<GalleryDrawing>;
   getGalleryDrawings(limit?: number): Promise<GalleryDrawing[]>;
+  getGalleryDrawing(id: string): Promise<GalleryDrawing | undefined>;
   deleteGalleryDrawing(id: string): Promise<boolean>;
 }
 
@@ -142,6 +144,7 @@ export class DatabaseStorage implements IStorage {
     opponentName?: string;
     strokes: unknown;
     roundCount?: number;
+    sessionToken?: string;
   }): Promise<GalleryDrawing> {
     const [drawing] = await db
       .insert(galleryDrawings)
@@ -150,6 +153,7 @@ export class DatabaseStorage implements IStorage {
         opponentName: data.opponentName || "Unknown",
         strokes: data.strokes,
         roundCount: data.roundCount || 3,
+        sessionToken: data.sessionToken || null,
       })
       .returning();
     return drawing;
@@ -161,6 +165,14 @@ export class DatabaseStorage implements IStorage {
       .from(galleryDrawings)
       .orderBy(desc(galleryDrawings.createdAt))
       .limit(limit);
+  }
+
+  async getGalleryDrawing(id: string): Promise<GalleryDrawing | undefined> {
+    const [drawing] = await db
+      .select()
+      .from(galleryDrawings)
+      .where(eq(galleryDrawings.id, id));
+    return drawing;
   }
 
   async deleteGalleryDrawing(id: string): Promise<boolean> {
