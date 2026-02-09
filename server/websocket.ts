@@ -10,6 +10,8 @@ const HEARTBEAT_TIMEOUT = 10_000;
 const MAX_MESSAGES_PER_MINUTE = 300;
 const MATCHMAKING_TIMEOUT = 120_000; // 2 minutes
 const RATE_LIMIT_WINDOW = 60_000;
+const ROOM_CLEANUP_INTERVAL = 60_000;
+const ROOM_CLEANUP_DELAY = 120_000; // 2 minutes after completion
 
 interface PlayerConnection {
   ws: WebSocket;
@@ -31,6 +33,7 @@ interface GameRoom {
   currentPlayer: "player1" | "player2";
   totalRounds: number;
   status: string;
+  completedAt: number | null;
 }
 
 const connections = new Map<string, PlayerConnection>();
@@ -38,6 +41,7 @@ const matchmakingQueue: string[] = [];
 const gameRooms = new Map<string, GameRoom>();
 let heartbeatTimer: ReturnType<typeof setInterval> | null = null;
 let matchmakingTimer: ReturnType<typeof setInterval> | null = null;
+let roomCleanupTimer: ReturnType<typeof setInterval> | null = null;
 
 function generateId(): string {
   return Date.now().toString(36) + Math.random().toString(36).substr(2, 9);
@@ -130,6 +134,7 @@ function cleanupConnection(connId: string): void {
 
       if (room.status !== "completed") {
         room.status = "abandoned";
+        room.completedAt = Date.now();
         storage.updateGame(conn.gameId, { status: "abandoned" }).catch((err) => {
           console.error(`Failed to mark game ${conn.gameId} as abandoned:`, err);
         });
@@ -176,6 +181,7 @@ async function attemptMatchmaking(): Promise<void> {
         currentPlayer: "player1",
         totalRounds: 3,
         status: "active",
+        completedAt: null,
       };
 
       gameRooms.set(gameId, room);
@@ -280,6 +286,7 @@ async function handleSubmitTurn(conn: PlayerConnection, strokes: unknown[]): Pro
     if (room.currentPlayer === "player2") {
       if (room.currentRound >= room.totalRounds) {
         room.status = "completed";
+        room.completedAt = Date.now();
         room.currentPlayer = "player1";
 
         await storage.updateGame(conn.gameId, {
@@ -516,6 +523,27 @@ export function setupWebSocket(server: Server): void {
     }
   }, 10_000);
 
+  roomCleanupTimer = setInterval(() => {
+    const now = Date.now();
+    for (const [gameId, room] of gameRooms) {
+      if (
+        room.completedAt &&
+        (room.status === "completed" || room.status === "abandoned") &&
+        now - room.completedAt > ROOM_CLEANUP_DELAY
+      ) {
+        if (room.player1) {
+          room.player1.gameId = null;
+          room.player1.playerRole = null;
+        }
+        if (room.player2) {
+          room.player2.gameId = null;
+          room.player2.playerRole = null;
+        }
+        gameRooms.delete(gameId);
+      }
+    }
+  }, ROOM_CLEANUP_INTERVAL);
+
   wss.on("connection", (ws: WebSocket, req: IncomingMessage) => {
     const connId = generateId();
     const conn: PlayerConnection = {
@@ -559,6 +587,7 @@ export function setupWebSocket(server: Server): void {
   wss.on("close", () => {
     if (heartbeatTimer) clearInterval(heartbeatTimer);
     if (matchmakingTimer) clearInterval(matchmakingTimer);
+    if (roomCleanupTimer) clearInterval(roomCleanupTimer);
   });
 
   console.log("WebSocket server ready on /ws");
