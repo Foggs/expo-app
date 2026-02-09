@@ -1,6 +1,6 @@
 import { useState, useCallback, useMemo } from "react";
 import { Stroke } from "@/components/DrawingCanvas";
-import type { GameStateFromServer } from "@/hooks/useWebSocket";
+import type { GameStateFromServer } from "@/contexts/WebSocketContext";
 
 const TOTAL_ROUNDS = 3;
 const PLAYERS_PER_GAME = 2;

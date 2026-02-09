@@ -83,7 +83,11 @@ Preferred communication style: Simple, everyday language.
 - **Matchmaking**: Queue-based with automatic pairing, 2-minute timeout protection, queue position tracking
 - **Game Rooms**: Server-authoritative state transitions, turn validation, opponent disconnect detection
 - **Live Drawing Sync**: Real-time stroke broadcasting via `draw_stroke`/`draw_clear` messages; opponent sees strokes as they're drawn with 50ms throttling
-- **Client Hook**: `hooks/useWebSocket.ts` - connection lifecycle management, exponential backoff reconnection [1s, 2s, 4s, 8s, 16s], WSS/WS protocol auto-detection, sendStroke/sendClear methods for live drawing
+- **Client Connection**: `contexts/WebSocketContext.tsx` - Single shared WebSocket via React context (WebSocketProvider), persists across screen navigations from matchmaking through gameplay. Screens register/unregister event callbacks via `setCallbacks()`. Includes:
+  - Client-side Zod validation of all incoming server messages (wsServerMessageSchema discriminated union)
+  - Send guards: `sendStroke`/`submitTurn`/`sendClear` blocked unless `matchStatus === "playing"`, `joinQueue` blocked unless `matchStatus === "idle"`
+  - Exponential backoff reconnection [1s, 2s, 4s, 8s, 16s], WSS/WS protocol auto-detection
+  - `useGameWebSocket()` hook for accessing context from any screen
 - **Message Types**: Defined in `shared/schema.ts` with Zod validation for both client and server messages
   - Client: join_queue, leave_queue, draw_stroke, draw_clear, submit_turn, ping
   - Server: queue_joined, queue_left, match_found, game_state, turn_submitted, round_complete, game_complete, opponent_stroke, opponent_clear, opponent_disconnected, error, pong
