@@ -122,7 +122,7 @@ interface WebSocketContextValue {
       color: string;
       width: number;
     }>
-  ) => void;
+  ) => boolean;
   sendStroke: (stroke: StrokeData) => void;
   sendClear: () => void;
   setCallbacks: (callbacks: WebSocketCallbacks) => void;
