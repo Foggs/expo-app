@@ -182,10 +182,12 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  const sendRaw = useCallback((msg: Record<string, unknown>) => {
+  const sendRaw = useCallback((msg: Record<string, unknown>): boolean => {
     if (wsRef.current?.readyState === WebSocket.OPEN) {
       wsRef.current.send(JSON.stringify(msg));
+      return true;
     }
+    return false;
   }, []);
 
   const handleMessage = useCallback((data: string) => {
@@ -395,9 +397,9 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
         color: string;
         width: number;
       }>
-    ) => {
-      if (matchStatusRef.current !== "playing") return;
-      sendRaw({ type: "submit_turn", strokes });
+    ): boolean => {
+      if (matchStatusRef.current !== "playing") return false;
+      return sendRaw({ type: "submit_turn", strokes });
     },
     [sendRaw]
   );

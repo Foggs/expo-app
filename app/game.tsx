@@ -69,6 +69,8 @@ export default function GameScreen() {
   const [getReadyCountdown, setGetReadyCountdown] = useState(10);
   const opponentTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const opponentTimeRef = useRef(60);
+  const submitRetryRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pendingSubmitRef = useRef<Array<{ points: Array<{ x: number; y: number }>; color: string; width: number }> | null>(null);
 
   const timerPulse = useSharedValue(1);
   const getReadyScale = useSharedValue(1);
@@ -89,6 +91,38 @@ export default function GameScreen() {
   } = useGameState(playerRole, ws.gameState);
 
   const timerRestartRef = useRef<(() => void) | null>(null);
+
+  const clearSubmitRetry = useCallback(() => {
+    if (submitRetryRef.current) {
+      clearTimeout(submitRetryRef.current);
+      submitRetryRef.current = null;
+    }
+    pendingSubmitRef.current = null;
+  }, []);
+
+  const retrySubmit = useCallback(() => {
+    if (!mountedRef.current || navigatedRef.current) {
+      clearSubmitRetry();
+      return;
+    }
+    const pending = pendingSubmitRef.current;
+    if (!pending) return;
+
+    const sent = ws.submitTurn(pending);
+    if (sent) {
+      submitRetryRef.current = setTimeout(() => {
+        if (mountedRef.current && pendingSubmitRef.current) {
+          retrySubmit();
+        }
+      }, 3000);
+    } else {
+      submitRetryRef.current = setTimeout(() => {
+        if (mountedRef.current && pendingSubmitRef.current) {
+          retrySubmit();
+        }
+      }, 1000);
+    }
+  }, [ws.submitTurn, clearSubmitRetry]);
 
   const handleSubmitTurn = useCallback(() => {
     if (isSubmitting || !isMyTurn) return;
@@ -112,7 +146,9 @@ export default function GameScreen() {
       width: s.strokeWidth,
     }));
 
-    ws.submitTurn(wsStrokes);
+    pendingSubmitRef.current = wsStrokes;
+    const sent = ws.submitTurn(wsStrokes);
+
     addRoundDrawing({
       round: currentRound,
       playerRole,
@@ -121,7 +157,21 @@ export default function GameScreen() {
     setBackgroundStrokes((prev) => [...prev, ...strokes]);
     setStrokes([]);
     timer.pause();
-  }, [strokes, backgroundStrokes, isSubmitting, isMyTurn, ws.submitTurn, localSubmitTurn]);
+
+    if (sent) {
+      submitRetryRef.current = setTimeout(() => {
+        if (mountedRef.current && pendingSubmitRef.current) {
+          retrySubmit();
+        }
+      }, 5000);
+    } else {
+      submitRetryRef.current = setTimeout(() => {
+        if (mountedRef.current && pendingSubmitRef.current) {
+          retrySubmit();
+        }
+      }, 1000);
+    }
+  }, [strokes, backgroundStrokes, isSubmitting, isMyTurn, ws.submitTurn, localSubmitTurn, retrySubmit, clearSubmitRetry]);
 
   const timer = useGameTimer({
     onTimeUp: handleSubmitTurn,
@@ -144,12 +194,14 @@ export default function GameScreen() {
         }
       },
       onGameState: () => {
+        clearSubmitRetry();
         setIsSubmitting(false);
       },
       onGameComplete: () => {
         if (!navigatedRef.current) {
           navigatedRef.current = true;
           clearOpponentTimer();
+          clearSubmitRetry();
           setShowGetReady(false);
           router.push({ pathname: "/results", params: { opponentName } });
         }
@@ -173,6 +225,7 @@ export default function GameScreen() {
         navigatedRef.current = true;
         timer.pause();
         clearOpponentTimer();
+        clearSubmitRetry();
         setShowGetReady(false);
         if (Platform.OS === "web") {
           alert("Your opponent has disconnected. Returning to home.");
@@ -190,8 +243,12 @@ export default function GameScreen() {
           );
         }
       },
-      onError: (message) => {
-        console.warn("Game WebSocket error:", message);
+      onError: (message, code) => {
+        console.warn("Game WebSocket error:", message, code);
+        if (code === "NOT_YOUR_TURN" || code === "GAME_COMPLETED") {
+          clearSubmitRetry();
+          setIsSubmitting(false);
+        }
       },
     });
 
@@ -269,8 +326,9 @@ export default function GameScreen() {
     return () => {
       mountedRef.current = false;
       clearOpponentTimer();
+      clearSubmitRetry();
     };
-  }, [clearOpponentTimer]);
+  }, [clearOpponentTimer, clearSubmitRetry]);
 
   useEffect(() => {
     if (timer.timerColor === "critical") {
@@ -356,6 +414,7 @@ export default function GameScreen() {
 
     const doLeave = () => {
       clearOpponentTimer();
+      clearSubmitRetry();
       setShowGetReady(false);
       resetGame();
       setBackgroundStrokes([]);
