@@ -85,7 +85,8 @@ Preferred communication style: Simple, everyday language.
 - **Live Drawing Sync**: Real-time stroke broadcasting via `draw_stroke`/`draw_clear` messages; opponent sees strokes as they're drawn with 50ms throttling. `onStrokeComplete` callback guarantees final complete stroke is always sent on touch-up, bypassing throttle to prevent dropped strokes.
 - **Client Connection**: `contexts/WebSocketContext.tsx` - Single shared WebSocket via React context (WebSocketProvider), persists across screen navigations from matchmaking through gameplay. Screens register/unregister event callbacks via `setCallbacks()`. Includes:
   - Client-side Zod validation of all incoming server messages (wsServerMessageSchema discriminated union)
-  - Send guards: `sendStroke`/`submitTurn`/`sendClear` blocked unless `matchStatus === "playing"`, `joinQueue` blocked unless `matchStatus === "idle"`
+  - Send guards: `sendStroke`/`submitTurn`/`sendClear` blocked unless `matchStatus === "playing"`, `joinQueue` blocked unless `matchStatus === "idle"`. `sendRaw` returns boolean indicating send success; `submitTurn` propagates this.
+  - **Submit Retry**: `handleSubmitTurn` stores pending strokes in `pendingSubmitRef`. If `sendRaw` fails (WS not open), retries every 1s. If send succeeds but no `game_state` response within 5s, retries every 3s. Cleared on `game_state`, `game_complete`, `NOT_YOUR_TURN` error, opponent disconnect, navigation, or unmount.
   - Exponential backoff reconnection [1s, 2s, 4s, 8s, 16s], WSS/WS protocol auto-detection
   - `useGameWebSocket()` hook for accessing context from any screen
 - **Message Types**: Defined in `shared/schema.ts` with Zod validation for both client and server messages
