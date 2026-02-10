@@ -82,7 +82,7 @@ Preferred communication style: Simple, everyday language.
 - **Security**: Origin validation (matches CORS rules), Zod message validation, rate limiting (300 msg/min per connection for live drawing), heartbeat ping/pong (30s interval, 10s timeout), 512KB max message size, SVG path sanitization regex, color hex validation
 - **Matchmaking**: Queue-based with automatic pairing, 2-minute timeout protection, queue position tracking
 - **Game Rooms**: Server-authoritative state transitions, turn validation, opponent disconnect detection
-- **Live Drawing Sync**: Real-time stroke broadcasting via `draw_stroke`/`draw_clear` messages; opponent sees strokes as they're drawn with 50ms throttling
+- **Live Drawing Sync**: Real-time stroke broadcasting via `draw_stroke`/`draw_clear` messages; opponent sees strokes as they're drawn with 50ms throttling. `onStrokeComplete` callback guarantees final complete stroke is always sent on touch-up, bypassing throttle to prevent dropped strokes.
 - **Client Connection**: `contexts/WebSocketContext.tsx` - Single shared WebSocket via React context (WebSocketProvider), persists across screen navigations from matchmaking through gameplay. Screens register/unregister event callbacks via `setCallbacks()`. Includes:
   - Client-side Zod validation of all incoming server messages (wsServerMessageSchema discriminated union)
   - Send guards: `sendStroke`/`submitTurn`/`sendClear` blocked unless `matchStatus === "playing"`, `joinQueue` blocked unless `matchStatus === "idle"`
