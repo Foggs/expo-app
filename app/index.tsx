@@ -204,7 +204,7 @@ export default function HomeScreen() {
               </Text>
             </View>
 
-            <View style={styles.infoRow} accessible={true} accessibilityLabel="2 Minutes per Turn">
+            <View style={styles.infoRow} accessible={true} accessibilityLabel="1 Minute per Turn">
               <View
                 style={[styles.iconContainer, { backgroundColor: colors.card }]}
               >
