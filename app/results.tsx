@@ -31,6 +31,7 @@ import {
 } from "@/lib/gameStore";
 import { apiRequest } from "@/lib/query-client";
 import { getSessionToken } from "@/lib/sessionToken";
+import { calculateStrokeBounds } from "@/lib/strokeBounds";
 
 function DrawingThumbnail({
   strokes,
@@ -42,6 +43,7 @@ function DrawingThumbnail({
   const colorScheme = useColorScheme();
   const isDark = colorScheme === "dark";
   const colors = isDark ? Colors.dark : Colors.light;
+  const viewBox = calculateStrokeBounds(strokes);
 
   return (
     <View
@@ -55,13 +57,13 @@ function DrawingThumbnail({
         overflow: "hidden",
       }}
     >
-      <Svg width={size} height={size} viewBox="0 0 400 400">
+      <Svg width={size} height={size} viewBox={viewBox} preserveAspectRatio="xMidYMid meet">
         {strokes.map((stroke) => (
           <Path
             key={stroke.id}
             d={stroke.path}
             stroke={stroke.color}
-            strokeWidth={stroke.strokeWidth * (400 / size)}
+            strokeWidth={stroke.strokeWidth}
             strokeLinecap="round"
             strokeLinejoin="round"
             fill="none"

@@ -20,6 +20,7 @@ import Colors from "@/constants/colors";
 import { apiRequest } from "@/lib/query-client";
 import { queryClient } from "@/lib/query-client";
 import { getSessionToken } from "@/lib/sessionToken";
+import { calculateStrokeBounds } from "@/lib/strokeBounds";
 
 interface GalleryStroke {
   id: string;
@@ -41,6 +42,7 @@ function GalleryThumbnail({ strokes, size = 160 }: { strokes: GalleryStroke[]; s
   const colorScheme = useColorScheme();
   const isDark = colorScheme === "dark";
   const colors = isDark ? Colors.dark : Colors.light;
+  const viewBox = calculateStrokeBounds(strokes as any);
 
   return (
     <View
@@ -54,13 +56,13 @@ function GalleryThumbnail({ strokes, size = 160 }: { strokes: GalleryStroke[]; s
         overflow: "hidden",
       }}
     >
-      <Svg width={size} height={size} viewBox="0 0 400 400">
+      <Svg width={size} height={size} viewBox={viewBox} preserveAspectRatio="xMidYMid meet">
         {strokes.map((stroke) => (
           <Path
             key={stroke.id}
             d={stroke.path}
             stroke={stroke.color}
-            strokeWidth={stroke.strokeWidth * (400 / size)}
+            strokeWidth={stroke.strokeWidth}
             strokeLinecap="round"
             strokeLinejoin="round"
             fill="none"
