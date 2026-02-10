@@ -186,9 +186,6 @@ export default function HomeScreen() {
             SketchDuel
           </Text>
 
-          <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
-            Draw. Compete. Create Together.
-          </Text>
         </View>
 
         <View style={styles.centerContent}>
@@ -359,11 +356,6 @@ const styles = StyleSheet.create({
     fontSize: 42,
     fontFamily: "Inter_700Bold",
     letterSpacing: -1,
-  },
-  subtitle: {
-    fontSize: 16,
-    fontFamily: "Inter_400Regular",
-    textAlign: "center",
   },
   centerContent: {
     flex: 1,
