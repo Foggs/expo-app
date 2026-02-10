@@ -95,7 +95,7 @@ Preferred communication style: Simple, everyday language.
 ### Game Flow
 - Home screen: Connect WebSocket -> Join matchmaking queue -> Wait for opponent
 - Match found: Navigate to /game with gameId, playerRole, opponentName params
-- Gameplay: 3 rounds, 2 players alternating turns, 2 minutes per turn
+- Gameplay: 3 rounds, 2 players alternating turns, 1 minute per turn
 - Timer runs only during player's own turn, pauses during opponent's turn
 - Live drawing: Player's strokes broadcast to opponent in real-time; opponent sees strokes appear on canvas
 - Canvas clears when turn switches to player, strokes submitted via WebSocket

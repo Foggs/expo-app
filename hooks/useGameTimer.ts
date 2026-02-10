@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 
-const TURN_DURATION_SECONDS = 120; // 2 minutes
+const TURN_DURATION_SECONDS = 60; // 1 minute
 
 interface UseGameTimerOptions {
   onTimeUp?: () => void;

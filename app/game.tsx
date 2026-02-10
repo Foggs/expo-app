@@ -68,7 +68,7 @@ export default function GameScreen() {
   const [showGetReady, setShowGetReady] = useState(false);
   const [getReadyCountdown, setGetReadyCountdown] = useState(10);
   const opponentTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const opponentTimeRef = useRef(120);
+  const opponentTimeRef = useRef(60);
 
   const timerPulse = useSharedValue(1);
   const getReadyScale = useSharedValue(1);
@@ -209,7 +209,7 @@ export default function GameScreen() {
 
   const startOpponentTimer = useCallback(() => {
     clearOpponentTimer();
-    opponentTimeRef.current = 120;
+    opponentTimeRef.current = 60;
     if (mountedRef.current) {
       setShowGetReady(false);
       setGetReadyCountdown(10);
