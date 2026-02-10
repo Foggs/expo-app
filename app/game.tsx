@@ -335,6 +335,16 @@ export default function GameScreen() {
     }
   }, [ws.sendStroke]);
 
+  const handleStrokeComplete = useCallback((stroke: Stroke) => {
+    lastStrokeSendRef.current = Date.now();
+    ws.sendStroke({
+      id: stroke.id,
+      path: stroke.path,
+      color: stroke.color,
+      strokeWidth: stroke.strokeWidth,
+    });
+  }, [ws.sendStroke]);
+
   const topPadding = Platform.OS === "web" ? 67 : insets.top;
   const bottomPadding = Platform.OS === "web" ? 34 : insets.bottom;
 
@@ -526,6 +536,7 @@ export default function GameScreen() {
           strokeWidth={strokeWidth}
           strokes={isMyTurn ? strokes : opponentStrokes}
           onStrokesChange={handleStrokesChange}
+          onStrokeComplete={handleStrokeComplete}
           disabled={!isMyTurn || isSubmitting}
           backgroundStrokes={backgroundStrokes}
         />

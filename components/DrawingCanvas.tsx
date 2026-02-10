@@ -30,6 +30,7 @@ interface DrawingCanvasProps {
   strokeWidth: number;
   strokes: Stroke[];
   onStrokesChange: (strokes: Stroke[]) => void;
+  onStrokeComplete?: (stroke: Stroke) => void;
   disabled?: boolean;
   backgroundStrokes?: Stroke[];
 }
@@ -39,7 +40,7 @@ function generateId(): string {
 }
 
 const DrawingCanvas = forwardRef<DrawingCanvasRef, DrawingCanvasProps>(
-  ({ strokeColor, strokeWidth, strokes, onStrokesChange, disabled = false, backgroundStrokes = [] }, ref) => {
+  ({ strokeColor, strokeWidth, strokes, onStrokesChange, onStrokeComplete, disabled = false, backgroundStrokes = [] }, ref) => {
     const colorScheme = useColorScheme();
     const isDark = colorScheme === "dark";
     const colors = isDark ? Colors.dark : Colors.light;
@@ -52,12 +53,14 @@ const DrawingCanvas = forwardRef<DrawingCanvasRef, DrawingCanvasProps>(
     const strokeWidthRef = useRef(strokeWidth);
     const strokesRef = useRef(strokes);
     const onStrokesChangeRef = useRef(onStrokesChange);
+    const onStrokeCompleteRef = useRef(onStrokeComplete);
     const disabledRef = useRef(disabled);
 
     strokeColorRef.current = strokeColor;
     strokeWidthRef.current = strokeWidth;
     strokesRef.current = strokes;
     onStrokesChangeRef.current = onStrokesChange;
+    onStrokeCompleteRef.current = onStrokeComplete;
     disabledRef.current = disabled;
 
     const handleLayout = useCallback((event: LayoutChangeEvent) => {
@@ -110,10 +113,26 @@ const DrawingCanvas = forwardRef<DrawingCanvasRef, DrawingCanvasProps>(
           onStrokesChangeRef.current(updatedStrokes);
         },
         onPanResponderRelease: () => {
+          if (currentStrokeIdRef.current) {
+            const completedStroke = strokesRef.current.find(
+              (s) => s.id === currentStrokeIdRef.current
+            );
+            if (completedStroke) {
+              onStrokeCompleteRef.current?.(completedStroke);
+            }
+          }
           currentPathRef.current = "";
           currentStrokeIdRef.current = "";
         },
         onPanResponderTerminate: () => {
+          if (currentStrokeIdRef.current) {
+            const completedStroke = strokesRef.current.find(
+              (s) => s.id === currentStrokeIdRef.current
+            );
+            if (completedStroke) {
+              onStrokeCompleteRef.current?.(completedStroke);
+            }
+          }
           currentPathRef.current = "";
           currentStrokeIdRef.current = "";
         },
