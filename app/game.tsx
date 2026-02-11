@@ -76,6 +76,7 @@ export default function GameScreen() {
   const getReadyScale = useSharedValue(1);
   const prevIsMyTurnRef = useRef<boolean | null>(null);
   const lastStrokeSendRef = useRef<number>(0);
+  const opponentDrawingRoundRef = useRef<number>(1);
 
   const ws = useGameWebSocket();
 
@@ -303,7 +304,7 @@ export default function GameScreen() {
       }
       if (opponentStrokes.length > 0) {
         addRoundDrawing({
-          round: currentRound,
+          round: opponentDrawingRoundRef.current,
           playerRole: playerRole === "player1" ? "player2" : "player1",
           strokes: [...backgroundStrokes, ...opponentStrokes],
         });
@@ -318,6 +319,7 @@ export default function GameScreen() {
 
     if (!isMyTurn) {
       timer.pause();
+      opponentDrawingRoundRef.current = currentRound;
       if (wasMyTurn === null || wasMyTurn !== isMyTurn) {
         startOpponentTimer();
       }
