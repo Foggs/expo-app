@@ -90,8 +90,8 @@ Preferred communication style: Simple, everyday language.
   - Exponential backoff reconnection [1s, 2s, 4s, 8s, 16s], WSS/WS protocol auto-detection
   - `useGameWebSocket()` hook for accessing context from any screen
 - **Message Types**: Defined in `shared/schema.ts` with Zod validation for both client and server messages
-  - Client: join_queue, leave_queue, draw_stroke, draw_clear, submit_turn, ping
-  - Server: queue_joined, queue_left, match_found, game_state, turn_submitted, round_complete, game_complete, opponent_stroke, opponent_clear, opponent_disconnected, error, pong
+  - Client: join_queue, leave_queue, draw_stroke, draw_clear, draw_undo, submit_turn, ping
+  - Server: queue_joined, queue_left, match_found, game_state, turn_submitted, round_complete, game_complete, opponent_stroke, opponent_clear, opponent_undo, opponent_disconnected, error, pong
 
 ### Game Flow
 - Home screen: Connect WebSocket -> Join matchmaking queue -> Wait for opponent
@@ -149,6 +149,7 @@ Preferred communication style: Simple, everyday language.
   - `addRoundDrawing()`: Saves player/opponent strokes per round during gameplay (includes backgroundStrokes for cumulative snapshots)
   - `getRoundDrawings()`: Retrieves all stored drawings for results display
   - `clearRoundDrawings()`: Resets on game start and results unmount
+- **Round Tracking**: `opponentDrawingRoundRef` tracks which round the opponent is drawing in (set when turn switches to opponent). Uses this ref instead of `currentRound` when saving opponent drawings to avoid race condition where server already advanced the round number. `onGameComplete` also saves any unsaved opponent strokes using this ref.
 - Shows "No drawings recorded" when no strokes are available
 
 ### Gallery Feature
