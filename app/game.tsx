@@ -77,6 +77,8 @@ export default function GameScreen() {
   const prevIsMyTurnRef = useRef<boolean | null>(null);
   const lastStrokeSendRef = useRef<number>(0);
   const opponentDrawingRoundRef = useRef<number>(1);
+  const opponentStrokesRef = useRef<Stroke[]>([]);
+  const backgroundStrokesRef = useRef<Stroke[]>([]);
 
   const ws = useGameWebSocket();
 
@@ -204,6 +206,13 @@ export default function GameScreen() {
           clearOpponentTimer();
           clearSubmitRetry();
           setShowGetReady(false);
+          if (opponentStrokesRef.current.length > 0) {
+            addRoundDrawing({
+              round: opponentDrawingRoundRef.current,
+              playerRole: playerRole === "player1" ? "player2" : "player1",
+              strokes: [...backgroundStrokesRef.current, ...opponentStrokesRef.current],
+            });
+          }
           router.push({ pathname: "/results", params: { opponentName } });
         }
       },
@@ -325,6 +334,14 @@ export default function GameScreen() {
       }
     }
   }, [isMyTurn]);
+
+  useEffect(() => {
+    opponentStrokesRef.current = opponentStrokes;
+  }, [opponentStrokes]);
+
+  useEffect(() => {
+    backgroundStrokesRef.current = backgroundStrokes;
+  }, [backgroundStrokes]);
 
   useEffect(() => {
     mountedRef.current = true;
