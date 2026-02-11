@@ -53,6 +53,7 @@ export interface WebSocketCallbacks {
   onGameComplete?: (gameId: string) => void;
   onOpponentStroke?: (stroke: StrokeData) => void;
   onOpponentClear?: () => void;
+  onOpponentUndo?: () => void;
   onOpponentDisconnected?: () => void;
   onError?: (message: string, code?: string) => void;
 }
@@ -97,6 +98,7 @@ const wsServerMessageSchema = z.discriminatedUnion("type", [
     }),
   }),
   z.object({ type: z.literal("opponent_clear") }),
+  z.object({ type: z.literal("opponent_undo") }),
   z.object({ type: z.literal("opponent_disconnected") }),
   z.object({
     type: z.literal("error"),
@@ -125,6 +127,7 @@ interface WebSocketContextValue {
   ) => boolean;
   sendStroke: (stroke: StrokeData) => void;
   sendClear: () => void;
+  sendUndo: () => void;
   setCallbacks: (callbacks: WebSocketCallbacks) => void;
 }
 
@@ -274,6 +277,10 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
         cb.onOpponentClear?.();
         break;
 
+      case "opponent_undo":
+        cb.onOpponentUndo?.();
+        break;
+
       case "opponent_disconnected":
         setMatchStatus("opponent_disconnected");
         cb.onOpponentDisconnected?.();
@@ -417,6 +424,11 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
     sendRaw({ type: "draw_clear" });
   }, [sendRaw]);
 
+  const sendUndo = useCallback(() => {
+    if (matchStatusRef.current !== "playing") return;
+    sendRaw({ type: "draw_undo" });
+  }, [sendRaw]);
+
   const setCallbacks = useCallback((callbacks: WebSocketCallbacks) => {
     callbacksRef.current = callbacks;
   }, []);
@@ -450,6 +462,7 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
       submitTurn,
       sendStroke,
       sendClear,
+      sendUndo,
       setCallbacks,
     }),
     [
@@ -466,6 +479,7 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
       submitTurn,
       sendStroke,
       sendClear,
+      sendUndo,
       setCallbacks,
     ]
   );

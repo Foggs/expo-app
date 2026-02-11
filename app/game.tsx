@@ -220,6 +220,9 @@ export default function GameScreen() {
       onOpponentClear: () => {
         setOpponentStrokes([]);
       },
+      onOpponentUndo: () => {
+        setOpponentStrokes((prev) => prev.slice(0, -1));
+      },
       onOpponentDisconnected: () => {
         if (navigatedRef.current) return;
         navigatedRef.current = true;
@@ -456,7 +459,8 @@ export default function GameScreen() {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     }
     canvasRef.current?.undo();
-  }, []);
+    ws.sendUndo();
+  }, [ws.sendUndo]);
 
   const handleClear = useCallback(() => {
     if (Platform.OS !== "web") {

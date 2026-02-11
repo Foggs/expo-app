@@ -446,6 +446,23 @@ function handleMessage(conn: PlayerConnection, data: Buffer | ArrayBuffer | Buff
       break;
     }
 
+    case "draw_undo": {
+      if (!conn.gameId || !conn.playerRole) {
+        sendMessage(conn, { type: "error", message: "Not in a game", code: "NOT_IN_GAME" });
+        break;
+      }
+      const undoRoom = gameRooms.get(conn.gameId);
+      if (!undoRoom || undoRoom.currentPlayer !== conn.playerRole) {
+        break;
+      }
+      const undoOpponentRole = conn.playerRole === "player1" ? "player2" : "player1";
+      const undoOpponentConn = undoRoom[undoOpponentRole];
+      if (undoOpponentConn) {
+        sendMessage(undoOpponentConn, { type: "opponent_undo" });
+      }
+      break;
+    }
+
     case "draw_clear": {
       if (!conn.gameId || !conn.playerRole) {
         sendMessage(conn, { type: "error", message: "Not in a game", code: "NOT_IN_GAME" });

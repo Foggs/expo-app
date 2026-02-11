@@ -120,6 +120,9 @@ export const wsClientMessageSchema = z.discriminatedUnion("type", [
     type: z.literal("draw_clear"),
   }),
   z.object({
+    type: z.literal("draw_undo"),
+  }),
+  z.object({
     type: z.literal("submit_turn"),
     strokes: z.array(strokeSchema).max(500),
   }),
@@ -141,6 +144,7 @@ export type WsServerMessage =
   | { type: "opponent_disconnected" }
   | { type: "opponent_stroke"; stroke: { id: string; path: string; color: string; strokeWidth: number } }
   | { type: "opponent_clear" }
+  | { type: "opponent_undo" }
   | { type: "error"; message: string; code?: string }
   | { type: "pong" };
 
