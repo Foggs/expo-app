@@ -228,8 +228,10 @@ async function attemptMatchmaking(): Promise<void> {
       console.log(`Match created: ${p1.playerName} vs ${p2.playerName} (game ${gameId})`);
     } catch (err) {
       console.error("Failed to create match:", err);
-      matchmakingQueue.unshift(p1Id);
+      // Requeue both players and stop this pass to avoid tight failure loops.
       matchmakingQueue.unshift(p2Id);
+      matchmakingQueue.unshift(p1Id);
+      break;
     }
   }
 }

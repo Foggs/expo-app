@@ -1,0 +1,16 @@
+
+> expo-app@1.0.0 server:dev
+> NODE_ENV=development tsx server/index.ts
+
+Serving static Expo files with dynamic manifest routing
+Expo routing: Checking expo-platform header on / and /manifest
+WebSocket server ready on /ws
+express server serving on port 5050
+GET /api/health 200 in 16ms :: {"status":"ok","timestamp":"2026-02-12T16:15:20.…
+WebSocket connected: MightySketcher21 (mljnu8qtiyuekv5p2)
+MightySketcher21 joined queue (position 1)
+WebSocket connected: BoldArtist4 (mljnua1w4fq15o09q)
+BoldArtist4 joined queue (position 2)
+Match created: MightySketcher21 vs BoldArtist4 (game 34721ae3-2a16-40d2-9290-ed8716bb89a0)
+WebSocket disconnected: MightySketcher21 (mljnu8qtiyuekv5p2)
+WebSocket disconnected: BoldArtist4 (mljnua1w4fq15o09q)

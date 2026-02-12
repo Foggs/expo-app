@@ -38,8 +38,11 @@ const PING_INTERVAL = 25_000;
 function getWsUrl(): string {
   if (Platform.OS === "web" && typeof window !== "undefined") {
     const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-    const host = window.location.hostname;
-    const port = "5000";
+    const host =
+      window.location.hostname === "localhost"
+        ? "127.0.0.1"
+        : window.location.hostname;
+    const port = process.env.EXPO_PUBLIC_SERVER_PORT || "5050";
     return `${protocol}//${host}:${port}/ws`;
   }
 

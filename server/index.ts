@@ -291,7 +291,7 @@ function setupSecurity(app: express.Application) {
 
   setupErrorHandler(app);
 
-  const port = parseInt(process.env.PORT || "5000", 10);
+  const port = parseInt(process.env.PORT || "5050", 10);
   server.listen(
     {
       port,
