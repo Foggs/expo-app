@@ -363,11 +363,14 @@ const styles = StyleSheet.create({
   },
   gameInfo: {
     gap: 20,
+    alignItems: "center",
   },
   infoRow: {
     flexDirection: "row",
     alignItems: "center",
+    justifyContent: "flex-start",
     gap: 16,
+    width: 220,
   },
   iconContainer: {
     width: 52,
