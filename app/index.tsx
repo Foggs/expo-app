@@ -208,7 +208,7 @@ export default function HomeScreen() {
                 <Ionicons name="timer" size={24} color={colors.accent} />
               </View>
               <Text style={[styles.infoText, { color: colors.textSecondary }]}>
-                2 Minutes per Turn
+                1 Minute per Turn
               </Text>
             </View>
 

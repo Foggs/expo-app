@@ -465,6 +465,20 @@ export default function ResultsScreen() {
               Home
             </Text>
           </Pressable>
+
+          <Pressable
+            onPress={() => router.push("/gallery")}
+            style={[styles.secondaryButton, { borderColor: colors.border, marginTop: 4 }]}
+            accessibilityRole="button"
+            accessibilityLabel="View gallery"
+          >
+            <Ionicons name="images" size={22} color={colors.text} />
+            <Text
+              style={[styles.secondaryButtonText, { color: colors.text }]}
+            >
+              Gallery
+            </Text>
+          </Pressable>
         </View>
       </ScrollView>
     </View>
