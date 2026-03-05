@@ -169,7 +169,16 @@ export type WsServerMessage =
   | { type: "opponent_undo" }
   | { type: "room_created"; roomCode: string }
   | { type: "room_joined"; roomCode: string }
-  | { type: "room_error"; message: string }
+  | {
+      type: "room_error";
+      message: string;
+      code?:
+        | "ALREADY_IN_GAME"
+        | "ROOM_NOT_FOUND"
+        | "ROOM_FULL"
+        | "ROOM_EXPIRED"
+        | "STATE_BLOCKED";
+    }
   | { type: "error"; message: string; code?: string }
   | { type: "pong" };
 

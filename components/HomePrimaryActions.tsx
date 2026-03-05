@@ -7,8 +7,6 @@ import type { ThemeColors } from "@/hooks/useThemeColors";
 
 interface HomePrimaryActionsProps {
   colors: ThemeColors;
-  isSearching: boolean;
-  isFriendFlowActive: boolean;
   pulseStyle: any;
   buttonAnimatedStyle: any;
   onOpenGallery: () => void;
@@ -20,8 +18,6 @@ interface HomePrimaryActionsProps {
 
 export default function HomePrimaryActions({
   colors,
-  isSearching,
-  isFriendFlowActive,
   pulseStyle,
   buttonAnimatedStyle,
   onOpenGallery,
@@ -44,11 +40,9 @@ export default function HomePrimaryActions({
 
       <Pressable
         onPress={onOpenFriends}
-        disabled={isSearching || isFriendFlowActive}
         style={[
           styles.friendButton,
           { borderColor: colors.tint, backgroundColor: colors.card },
-          (isSearching || isFriendFlowActive) && styles.buttonDisabled,
         ]}
         accessibilityRole="button"
         accessibilityLabel="Start a friends match"
@@ -73,14 +67,13 @@ export default function HomePrimaryActions({
             onPress={onFindMatch}
             onPressIn={onPressIn}
             onPressOut={onPressOut}
-            disabled={isSearching || isFriendFlowActive}
             accessibilityRole="button"
             accessibilityLabel="Find a match to play"
             accessibilityHint="Searches for another player to start a drawing game"
           >
             <LinearGradient
               colors={[colors.tint, colors.accent]}
-              style={[styles.findMatchButton, (isSearching || isFriendFlowActive) && styles.buttonDisabled]}
+              style={styles.findMatchButton}
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 1 }}
             >
@@ -150,9 +143,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 48,
     borderRadius: 28,
     minWidth: 200,
-  },
-  buttonDisabled: {
-    opacity: 0.6,
   },
   buttonText: {
     color: "#fff",

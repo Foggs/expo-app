@@ -135,7 +135,19 @@ const wsServerMessageSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("opponent_disconnected") }),
   z.object({ type: z.literal("room_created"), roomCode: z.string() }),
   z.object({ type: z.literal("room_joined"), roomCode: z.string() }),
-  z.object({ type: z.literal("room_error"), message: z.string() }),
+  z.object({
+    type: z.literal("room_error"),
+    message: z.string(),
+    code: z
+      .enum([
+        "ALREADY_IN_GAME",
+        "ROOM_NOT_FOUND",
+        "ROOM_FULL",
+        "ROOM_EXPIRED",
+        "STATE_BLOCKED",
+      ])
+      .optional(),
+  }),
   z.object({
     type: z.literal("flow_error"),
     code: z.string(),
@@ -205,14 +217,6 @@ function flowStateToErrorState(stateId: MatchFlowStateId, model: MatchFlowModel)
     default:
       return null;
   }
-}
-
-function canResetToStartNewSession(stateId: MatchFlowStateId): boolean {
-  return (
-    stateId === "completed" ||
-    stateId === "opponent_disconnected" ||
-    stateId === "error_fatal"
-  );
 }
 
 interface WebSocketContextValue {
@@ -437,7 +441,7 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
         setFriendRoomStatus("idle");
         setFriendRoomCode(null);
         setFriendRoomError(msg.message);
-        cb.onError?.(msg.message, "ROOM_ERROR");
+        cb.onError?.(msg.message, msg.code ?? "ROOM_ERROR");
         break;
 
       case "flow_error": {
@@ -676,24 +680,70 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
     machineRef.current?.dispatch(event);
   }, []);
 
-  const runFriendRoomAction = useCallback(
-    (
-      action: Record<string, unknown>,
-      nextStatus: FriendRoomStatus,
-      nextRoomCode: string | null,
-    ): boolean => {
-      if (flowSnapshot.stateId !== "idle") {
-        if (!canResetToStartNewSession(flowSnapshot.stateId)) {
-          return false;
-        }
-        machineRef.current?.dispatch({ type: "DISCONNECT_REQUESTED" });
-        closeSocket();
-        setMatchInfo(null);
-        setGameState(null);
+  const clearLocalSessionState = useCallback(
+    (options?: { clearFriendError?: boolean }) => {
+      setMatchInfo(null);
+      setGameState(null);
+      setFriendRoomStatus("idle");
+      setFriendRoomCode(null);
+      if (options?.clearFriendError ?? true) {
+        setFriendRoomError(null);
+      }
+    },
+    [],
+  );
+
+  const stopCurrentMode = useCallback(
+    (options?: { clearFriendError?: boolean }) => {
+      pendingRoomActionRef.current = null;
+      const shouldLeaveQueue =
+        flowSnapshot.stateId === "queueing" || flowSnapshot.stateId === "matched";
+      if (shouldLeaveQueue) {
+        sendRaw({ type: "leave_queue" });
       }
 
+      const shouldLeaveRoom =
+        activeMatchTypeRef.current === "friend" ||
+        friendRoomCodeRef.current !== null ||
+        friendRoomStatus !== "idle";
+      if (shouldLeaveRoom) {
+        sendRaw({ type: "leave_room" });
+      }
+
+      activeMatchTypeRef.current = null;
+      machineRef.current?.dispatch({ type: "DISCONNECT_REQUESTED" });
+      closeSocket();
+      clearLocalSessionState(options);
+    },
+    [flowSnapshot.stateId, friendRoomStatus, sendRaw, closeSocket, clearLocalSessionState],
+  );
+
+  type SwitchTarget = "queue" | "friend_create" | "friend_join";
+
+  const switchToMode = useCallback(
+    (target: SwitchTarget, roomCode?: string): boolean => {
+      if (flowSnapshot.stateId === "playing") {
+        setFriendRoomError("Finish the current game before starting a new one.");
+        return false;
+      }
+
+      stopCurrentMode({ clearFriendError: false });
+
+      if (target === "queue") {
+        setFriendRoomError(null);
+        machineRef.current?.dispatch({ type: "FIND_MATCH_CLICKED" });
+        return true;
+      }
+
+      const nextStatus: FriendRoomStatus =
+        target === "friend_create" ? "creating" : "joining";
+      const action: Record<string, unknown> =
+        target === "friend_create"
+          ? { type: "create_room" }
+          : { type: "join_room", roomCode };
+
       setFriendRoomStatus(nextStatus);
-      setFriendRoomCode(nextRoomCode);
+      setFriendRoomCode(target === "friend_join" ? roomCode ?? null : null);
       setFriendRoomError(null);
       pendingRoomActionRef.current = action;
 
@@ -710,70 +760,35 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
         return false;
       }
 
-      if (wsRef.current?.readyState !== WebSocket.CONNECTING) {
-        openSocket();
-      }
+      openSocket();
       return true;
     },
-    [flowSnapshot.stateId, closeSocket, openSocket, sendRaw],
+    [flowSnapshot.stateId, stopCurrentMode, sendRaw, openSocket],
   );
 
   const connect = useCallback(() => {
-    if (friendRoomStatus !== "idle") return;
-    if (flowSnapshot.stateId !== "idle") {
-      if (!canResetToStartNewSession(flowSnapshot.stateId)) return;
-      machineRef.current?.dispatch({ type: "DISCONNECT_REQUESTED" });
-      closeSocket();
-      setMatchInfo(null);
-      setGameState(null);
-    }
-    if (wsRef.current?.readyState === WebSocket.OPEN) {
-      machineRef.current?.dispatch({ type: "FIND_MATCH_CLICKED" });
-      machineRef.current?.dispatch({ type: "WS_OPENED" });
-      return;
-    }
-    machineRef.current?.dispatch({ type: "FIND_MATCH_CLICKED" });
-  }, [friendRoomStatus, flowSnapshot.stateId, closeSocket]);
+    switchToMode("queue");
+  }, [switchToMode]);
 
   const disconnect = useCallback(() => {
-    if (activeMatchTypeRef.current === "friend") {
-      sendRaw({ type: "leave_room" });
-    }
-    pendingRoomActionRef.current = null;
-    activeMatchTypeRef.current = null;
-    machineRef.current?.dispatch({ type: "DISCONNECT_REQUESTED" });
-    closeSocket();
-    setMatchInfo(null);
-    setGameState(null);
-    setFriendRoomStatus("idle");
-    setFriendRoomCode(null);
-    setFriendRoomError(null);
-  }, [closeSocket, sendRaw]);
+    stopCurrentMode();
+  }, [stopCurrentMode]);
 
   const resetState = useCallback(() => {
-    pendingRoomActionRef.current = null;
-    activeMatchTypeRef.current = null;
-    machineRef.current?.dispatch({ type: "DISCONNECT_REQUESTED" });
-    setMatchInfo(null);
-    setGameState(null);
-    setFriendRoomStatus("idle");
-    setFriendRoomCode(null);
-    setFriendRoomError(null);
-  }, []);
+    stopCurrentMode();
+  }, [stopCurrentMode]);
 
   const joinQueue = useCallback(() => {
-    if (flowSnapshot.stateId === "idle" && friendRoomStatus === "idle") {
-      machineRef.current?.dispatch({ type: "FIND_MATCH_CLICKED" });
-    }
-  }, [flowSnapshot.stateId, friendRoomStatus]);
+    switchToMode("queue");
+  }, [switchToMode]);
 
   const leaveQueue = useCallback(() => {
     machineRef.current?.dispatch({ type: "CANCEL_SEARCH" });
   }, []);
 
   const createFriendRoom = useCallback((): boolean => {
-    return runFriendRoomAction({ type: "create_room" }, "creating", null);
-  }, [runFriendRoomAction]);
+    return switchToMode("friend_create");
+  }, [switchToMode]);
 
   const joinFriendRoom = useCallback(
     (roomInput: string): boolean => {
@@ -784,22 +799,14 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
         );
         return false;
       }
-      return runFriendRoomAction({ type: "join_room", roomCode }, "joining", roomCode);
+      return switchToMode("friend_join", roomCode);
     },
-    [runFriendRoomAction],
+    [switchToMode],
   );
 
   const leaveFriendRoom = useCallback(() => {
-    pendingRoomActionRef.current = null;
-    activeMatchTypeRef.current = null;
-    setFriendRoomStatus("idle");
-    setFriendRoomCode(null);
-    setFriendRoomError(null);
-    sendRaw({ type: "leave_room" });
-    if (flowSnapshot.stateId === "idle") {
-      closeSocket();
-    }
-  }, [closeSocket, flowSnapshot.stateId, sendRaw]);
+    stopCurrentMode();
+  }, [stopCurrentMode]);
 
   const clearFriendRoomError = useCallback(() => {
     setFriendRoomError(null);
@@ -845,7 +852,7 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
     (action: "findMatch" | "cancelSearch" | "submitTurn" | "draw"): boolean => {
       switch (action) {
         case "findMatch":
-          return flowSnapshot.stateId === "idle" && friendRoomStatus === "idle";
+          return flowSnapshot.stateId !== "playing";
         case "cancelSearch":
           return flowSnapshot.stateId === "queueing" || flowSnapshot.stateId === "matched";
         case "submitTurn":
@@ -853,7 +860,7 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
           return flowSnapshot.stateId === "playing";
       }
     },
-    [flowSnapshot.stateId, friendRoomStatus],
+    [flowSnapshot.stateId],
   );
 
   const value = useMemo(

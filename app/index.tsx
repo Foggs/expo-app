@@ -38,10 +38,7 @@ export default function HomeScreen() {
     matchStatus,
     flowState,
     retryDelayMs,
-    connectionStatus,
-    joinQueue,
     connect,
-    leaveQueue,
     disconnect,
     lastError,
     queuePosition,
@@ -149,60 +146,45 @@ export default function HomeScreen() {
     buttonScale.value = withSpring(1);
   };
 
-  const wantToJoinRef = useRef(false);
-
   const handleFindMatch = useCallback(() => {
-    if (isFriendFlowActive || isFriendsModalOpen) {
-      return;
-    }
     impactMedium();
     navigatedRef.current = false;
-    wantToJoinRef.current = true;
-
-    if (connectionStatus === "connected") {
-      joinQueue();
-    } else {
-      connect();
-    }
-  }, [isFriendFlowActive, isFriendsModalOpen, connectionStatus, joinQueue, connect]);
-
-  useEffect(() => {
-    if (
-      connectionStatus === "connected" &&
-      wantToJoinRef.current &&
-      matchStatus === "idle"
-    ) {
-      wantToJoinRef.current = false;
-      joinQueue();
-    }
-  }, [connectionStatus, matchStatus, joinQueue]);
+    setIsFriendsModalOpen(false);
+    setFriendRoomInput("");
+    clearFriendRoomError();
+    connect();
+  }, [clearFriendRoomError, connect]);
 
   const handleCancelSearch = useCallback(() => {
     impactLight();
-    wantToJoinRef.current = false;
-    leaveQueue();
-    if (connectionStatus !== "disconnected") {
-      disconnect();
-    }
-  }, [leaveQueue, connectionStatus, disconnect]);
+    disconnect();
+  }, [disconnect]);
 
   const handleOpenFriends = useCallback(() => {
-    if (isSearching || isErrorState) return;
     impactLight();
+    if (isSearching || isErrorState) {
+      disconnect();
+    }
     clearFriendRoomError();
     setIsFriendsModalOpen(true);
-  }, [isSearching, isErrorState, clearFriendRoomError]);
+  }, [isSearching, isErrorState, disconnect, clearFriendRoomError]);
 
   const handleCreateFriendRoom = useCallback(() => {
     impactMedium();
-    createFriendRoom();
     setIsFriendsModalOpen(true);
+    const started = createFriendRoom();
+    if (!started) {
+      return;
+    }
   }, [createFriendRoom]);
 
   const handleJoinFriendRoom = useCallback(() => {
     impactMedium();
-    joinFriendRoom(friendRoomInput);
     setIsFriendsModalOpen(true);
+    const started = joinFriendRoom(friendRoomInput);
+    if (!started) {
+      return;
+    }
   }, [friendRoomInput, joinFriendRoom]);
 
   const handleCloseFriendsModal = useCallback(() => {
@@ -250,8 +232,6 @@ export default function HomeScreen() {
 
         <HomePrimaryActions
           colors={colors}
-          isSearching={isSearching}
-          isFriendFlowActive={showFriendsModal}
           pulseStyle={pulseStyle}
           buttonAnimatedStyle={buttonAnimatedStyle}
           onOpenGallery={() => {

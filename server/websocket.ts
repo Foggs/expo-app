@@ -200,7 +200,11 @@ function leaveFriendRoom(conn: PlayerConnection, notifyOtherPlayer = true): void
       if (guestConn) {
         clearFriendRoomCode(guestConn, roomCode);
         if (notifyOtherPlayer && guestConn.ws.readyState === WebSocket.OPEN) {
-          sendMessage(guestConn, { type: "room_error", message: "Host left the room." });
+          sendMessage(guestConn, {
+            type: "room_error",
+            message: "Host left the room.",
+            code: "STATE_BLOCKED",
+          });
         }
       }
     }
@@ -214,7 +218,11 @@ function leaveFriendRoom(conn: PlayerConnection, notifyOtherPlayer = true): void
 
     const hostConn = getOpenConnection(room.hostId);
     if (notifyOtherPlayer && hostConn) {
-      sendMessage(hostConn, { type: "room_error", message: "Friend left the room." });
+      sendMessage(hostConn, {
+        type: "room_error",
+        message: "Friend left the room.",
+        code: "STATE_BLOCKED",
+      });
     }
     return;
   }
@@ -367,7 +375,11 @@ async function attemptMatchmaking(): Promise<void> {
 
 function handleCreateRoom(conn: PlayerConnection): void {
   if (conn.gameId) {
-    sendMessage(conn, { type: "room_error", message: "Already in a game." });
+    sendMessage(conn, {
+      type: "room_error",
+      message: "Already in a game.",
+      code: "ALREADY_IN_GAME",
+    });
     return;
   }
 
@@ -376,7 +388,11 @@ function handleCreateRoom(conn: PlayerConnection): void {
 
   const roomCode = generateUniqueRoomCode();
   if (!roomCode) {
-    sendMessage(conn, { type: "room_error", message: "Could not create room. Please try again." });
+    sendMessage(conn, {
+      type: "room_error",
+      message: "Could not create room. Please try again.",
+      code: "STATE_BLOCKED",
+    });
     return;
   }
 
@@ -397,12 +413,20 @@ function handleCreateRoom(conn: PlayerConnection): void {
 
 async function handleJoinRoom(conn: PlayerConnection, roomCode: string): Promise<void> {
   if (conn.gameId) {
-    sendMessage(conn, { type: "room_error", message: "Already in a game." });
+    sendMessage(conn, {
+      type: "room_error",
+      message: "Already in a game.",
+      code: "ALREADY_IN_GAME",
+    });
     return;
   }
 
   if (!isValidRoomCode(roomCode)) {
-    sendMessage(conn, { type: "room_error", message: "Invalid room code." });
+    sendMessage(conn, {
+      type: "room_error",
+      message: "Invalid room code.",
+      code: "STATE_BLOCKED",
+    });
     return;
   }
 
@@ -411,30 +435,50 @@ async function handleJoinRoom(conn: PlayerConnection, roomCode: string): Promise
 
   const room = friendRooms.get(roomCode);
   if (!room) {
-    sendMessage(conn, { type: "room_error", message: "Room not found." });
+    sendMessage(conn, {
+      type: "room_error",
+      message: "Room not found.",
+      code: "ROOM_NOT_FOUND",
+    });
     return;
   }
 
   if (room.hostId === conn.id) {
-    sendMessage(conn, { type: "room_error", message: "You cannot join your own room." });
+    sendMessage(conn, {
+      type: "room_error",
+      message: "You cannot join your own room.",
+      code: "STATE_BLOCKED",
+    });
     return;
   }
 
   if (Date.now() > room.expiresAt) {
     removeFriendRoom(roomCode);
-    sendMessage(conn, { type: "room_error", message: "Room has expired." });
+    sendMessage(conn, {
+      type: "room_error",
+      message: "Room has expired.",
+      code: "ROOM_EXPIRED",
+    });
     return;
   }
 
   const hostConn = getOpenConnection(room.hostId);
   if (!hostConn) {
     removeFriendRoom(roomCode);
-    sendMessage(conn, { type: "room_error", message: "Host is no longer available." });
+    sendMessage(conn, {
+      type: "room_error",
+      message: "Host is no longer available.",
+      code: "ROOM_NOT_FOUND",
+    });
     return;
   }
 
   if (room.guestId && room.guestId !== conn.id) {
-    sendMessage(conn, { type: "room_error", message: "Room is full." });
+    sendMessage(conn, {
+      type: "room_error",
+      message: "Room is full.",
+      code: "ROOM_FULL",
+    });
     return;
   }
 
@@ -454,8 +498,16 @@ async function handleJoinRoom(conn: PlayerConnection, roomCode: string): Promise
     conn.friendRoomCode = null;
     room.expiresAt = Date.now() + FRIEND_ROOM_TTL;
     console.error(`Failed to start friend room ${roomCode}:`, err);
-    sendMessage(conn, { type: "room_error", message: "Failed to start room match." });
-    sendMessage(hostConn, { type: "room_error", message: "Failed to start room match." });
+    sendMessage(conn, {
+      type: "room_error",
+      message: "Failed to start room match.",
+      code: "STATE_BLOCKED",
+    });
+    sendMessage(hostConn, {
+      type: "room_error",
+      message: "Failed to start room match.",
+      code: "STATE_BLOCKED",
+    });
   }
 }
 
@@ -515,22 +567,37 @@ async function handleSubmitTurn(conn: PlayerConnection, strokes: unknown[]): Pro
 
     if (room.currentPlayer === "player2") {
       if (room.currentRound >= room.totalRounds) {
+        const completedGameId = conn.gameId;
+        if (!completedGameId) {
+          sendMessage(conn, { type: "error", message: "Game room not found", code: "ROOM_NOT_FOUND" });
+          return;
+        }
         room.status = "completed";
         room.completedAt = Date.now();
         room.currentPlayer = "player1";
 
-        await storage.updateGame(conn.gameId, {
+        await storage.updateGame(completedGameId, {
           status: "completed",
           completedAt: new Date(),
           currentRound: room.currentRound,
           currentPlayer: "player1",
         });
 
-        const completeMsg: WsServerMessage = { type: "game_complete", gameId: conn.gameId };
+        const completeMsg: WsServerMessage = { type: "game_complete", gameId: completedGameId };
         if (room.player1) sendMessage(room.player1, completeMsg);
         if (room.player2) sendMessage(room.player2, completeMsg);
 
-        console.log(`Game ${conn.gameId} completed`);
+        if (room.player1) {
+          room.player1.gameId = null;
+          room.player1.playerRole = null;
+        }
+        if (room.player2) {
+          room.player2.gameId = null;
+          room.player2.playerRole = null;
+        }
+        gameRooms.delete(completedGameId);
+
+        console.log(`Game ${completedGameId} completed`);
       } else {
         const nextRound = room.currentRound + 1;
         room.currentRound = nextRound;
@@ -634,7 +701,11 @@ function handleMessage(conn: PlayerConnection, data: Buffer | ArrayBuffer | Buff
         return;
       }
       if (conn.friendRoomCode) {
-        sendMessage(conn, { type: "room_error", message: "Leave your friend room before queueing." });
+        sendMessage(conn, {
+          type: "room_error",
+          message: "Leave your friend room before queueing.",
+          code: "STATE_BLOCKED",
+        });
         return;
       }
       if (matchmakingQueue.includes(conn.id)) {
@@ -819,7 +890,11 @@ export function setupWebSocket(server: Server): void {
         if (guestConn) {
           clearFriendRoomCode(guestConn, roomCode);
           if (guestAlive) {
-            sendMessage(guestConn, { type: "room_error", message: "Room expired or was closed by host." });
+            sendMessage(guestConn, {
+              type: "room_error",
+              message: "Room expired or was closed by host.",
+              code: "ROOM_EXPIRED",
+            });
           }
         }
         friendRooms.delete(roomCode);
@@ -833,7 +908,11 @@ export function setupWebSocket(server: Server): void {
         room.guestId = null;
         room.expiresAt = now + FRIEND_ROOM_TTL;
         if (hostConn && hostConn.ws.readyState === WebSocket.OPEN) {
-          sendMessage(hostConn, { type: "room_error", message: "Friend disconnected from room." });
+          sendMessage(hostConn, {
+            type: "room_error",
+            message: "Friend disconnected from room.",
+            code: "STATE_BLOCKED",
+          });
         }
       }
     }
