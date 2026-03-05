@@ -1,0 +1,172 @@
+State Pattern Migration Plan for SketchDuel (Client Gameplay + WebSocket)
+Summary
+Refactor client flow into explicit GoF-style state objects in two machines, while preserving current behavior and WebSocket protocol:
+
+MatchFlowMachine for connect/matchmaking/session lifecycle.
+TurnFlowMachine for in-game turn lifecycle (draw, submit, wait, complete/disconnect).
+This is incremental, behavior-parity first, with compatibility adapters so existing screens keep working during migration.
+
+Current State Analysis
+State is currently split across string statuses + many booleans/refs in game.tsx and WebSocketContext.tsx.
+Transition logic is distributed across callbacks/effects, making invalid transitions hard to guard and test.
+A duplicate/unused websocket hook exists at useWebSocket.ts and should be removed after migration.
+Server already enforces turn authority; client refactor must keep message contract unchanged.
+Target Architecture
+A) Core State Infrastructure
+Add a pure state core under lib/state/:
+
+StateContext<TModel, TEvent, TEffect>
+IState<TModel, TEvent, TEffect> with id, enter, exit, handle
+TransitionResult (nextState, modelPatch, effects)
+deterministic dispatch(event) runner + guarded no-op on invalid transitions
+B) MatchFlowMachine (in WebSocket context layer)
+States:
+
+idle
+connecting
+queueing
+matched
+playing
+completed
+opponent_disconnected
+Events:
+
+FIND_MATCH_CLICKED
+WS_OPENED
+WS_CLOSED
+QUEUE_JOINED
+QUEUE_LEFT
+MATCH_FOUND
+GAME_STATE_RECEIVED
+GAME_COMPLETE_RECEIVED
+OPPONENT_DISCONNECTED_RECEIVED
+CANCEL_SEARCH
+MATCHMAKING_TIMEOUT
+DISCONNECT_REQUESTED
+Effects:
+
+OPEN_SOCKET
+SEND_JOIN_QUEUE
+SEND_LEAVE_QUEUE
+CLOSE_SOCKET
+SCHEDULE_RECONNECT
+CLEAR_RECONNECT
+SET_CALLBACK_PAYLOAD
+Transition rules:
+
+Only idle -> connecting on FIND_MATCH_CLICKED.
+Only connecting -> queueing on WS_OPENED with join intent.
+Only queueing -> matched on MATCH_FOUND.
+Only matched -> playing on GAME_STATE_RECEIVED.
+playing -> completed on GAME_COMPLETE_RECEIVED.
+playing -> opponent_disconnected on OPPONENT_DISCONNECTED_RECEIVED.
+queueing/matched -> idle on CANCEL_SEARCH.
+Reconnect only when not completed.
+C) TurnFlowMachine (game screen domain)
+States:
+
+waiting_for_turn
+drawing_turn
+submitting_turn
+awaiting_server_ack
+game_complete
+opponent_disconnected
+Events:
+
+SERVER_TURN_CHANGED
+USER_SUBMIT
+TIMER_EXPIRED
+SUBMIT_SEND_OK
+SUBMIT_SEND_FAILED
+SERVER_GAME_STATE_ACK
+SERVER_NOT_YOUR_TURN
+SERVER_GAME_COMPLETED
+SERVER_OPPONENT_DISCONNECTED
+Effects:
+
+START_PLAYER_TIMER
+PAUSE_PLAYER_TIMER
+START_OPPONENT_COUNTDOWN
+STOP_OPPONENT_COUNTDOWN
+QUEUE_SUBMIT_RETRY
+CLEAR_SUBMIT_RETRY
+CLEAR_TRANSIENT_STROKES
+COMMIT_ROUND_DRAWING
+NAVIGATE_RESULTS
+NAVIGATE_HOME
+Transition rules:
+
+waiting_for_turn -> drawing_turn when server says current player is me.
+drawing_turn -> submitting_turn on submit or timer expiry.
+submitting_turn -> awaiting_server_ack after first send attempt.
+awaiting_server_ack -> drawing_turn/waiting_for_turn based on authoritative server currentPlayer.
+Any active state -> game_complete on complete.
+Any active state -> opponent_disconnected on disconnect.
+Public API / Interface Changes
+In WebSocketContext.tsx, add:
+flowState: MatchFlowStateId
+dispatchFlow(event: MatchFlowEvent): void
+can(action: "findMatch" | "cancelSearch" | "submitTurn" | "draw"): boolean
+Keep existing methods (connect, joinQueue, leaveQueue, submitTurn, etc.) as compatibility wrappers in phase 1; they delegate to dispatchFlow.
+Narrow GameStateFromServer.status from string to union "active" | "completed" | "abandoned" | "waiting" in WebSocketContext.tsx and shared/schema.ts.
+Replace useGameState responsibilities with useTurnFlow hook; keep useGameState as thin adapter until final cleanup.
+Remove unused hooks/useWebSocket.ts after callers are confirmed absent.
+Incremental Rollout Plan
+Phase 0: Baseline and invariants.
+
+Add transition map docs and log invalid transitions (dev only).
+
+Lock behavior expectations from current flow (manual checklist below).
+
+Phase 1: Introduce pure state modules.
+
+Add core.ts, lib/state/matchFlow/*, lib/state/turnFlow/*.
+
+Add pure model/event/effect types and reducers with no UI coupling.
+
+Phase 2: Integrate MatchFlowMachine into WebSocket context.
+
+Route all websocket callbacks to flow events.
+
+Keep old exported context API by mapping from machine state.
+
+Ensure reconnect and queue logic uses machine effects only.
+
+Phase 3: Integrate TurnFlowMachine in game screen.
+
+Create useTurnFlow.ts to own submit retry, timer start/pause, get-ready countdown.
+
+Replace scattered refs/flags (isSubmitting, submit retry refs, turn-switch side-effects) with machine-driven effects.
+
+Phase 4: Cleanup and hardening.
+
+Delete dead hook useWebSocket.ts.
+
+Collapse duplicated status checks to selector helpers.
+
+Tighten TypeScript unions and remove status: string.
+
+Tests and Scenarios
+Automated (core transition tests)
+Match flow happy path: idle -> connecting -> queueing -> matched -> playing -> completed.
+Cancel search path from queueing and matched returns to idle and emits close/leave effects.
+Reconnect behavior: reconnect scheduled on unexpected close before completed; never after completed.
+Turn flow submit path: drawing_turn -> submitting_turn -> awaiting_server_ack -> waiting_for_turn/drawing_turn by server player.
+Timer expiry emits same transition as manual submit.
+Invalid event in each state is no-op and does not mutate model.
+Opponent disconnect transitions to terminal disconnect state from any active gameplay state.
+Manual acceptance checks
+Home screen matchmaking UX unchanged.
+Queue cancel still works and disconnects socket.
+Turn timer starts only on player turn, pauses otherwise.
+Auto-submit on timeout still occurs.
+Game completion still navigates to results once.
+Opponent disconnect still exits to home with alert.
+Gallery/results persistence still unchanged.
+Assumptions and Defaults
+Scope is client gameplay + websocket lifecycle only; server protocol remains unchanged.
+Pattern is strict GoF state objects (not reducer-only).
+Rollout is incremental with compatibility wrappers.
+Primary goal is behavior parity, not UX redesign.
+Test depth is core transition tests only (plus manual regression checklist).
+No new runtime state library dependency is introduced; implementation stays in TypeScript modules.
