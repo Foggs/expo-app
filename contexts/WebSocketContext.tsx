@@ -406,6 +406,7 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
   }, [clearTimers]);
 
   const resetState = useCallback(() => {
+    matchStatusRef.current = "idle";
     setMatchStatus("idle");
     setMatchInfo(null);
     setGameState(null);
