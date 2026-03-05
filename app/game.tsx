@@ -54,6 +54,7 @@ export default function GameScreen() {
 
   const canvasRef = useRef<DrawingCanvasRef>(null);
   const navigatedRef = useRef(false);
+  const gameStartedRef = useRef(false);
   const mountedRef = useRef(true);
 
   const [strokes, setStrokes] = useState<Stroke[]>([]);
@@ -207,6 +208,7 @@ export default function GameScreen() {
         }
       },
       onGameState: () => {
+        gameStartedRef.current = true;
         clearSubmitRetry();
         setIsSubmitting(false);
       },
@@ -363,7 +365,7 @@ export default function GameScreen() {
       mountedRef.current = false;
       clearOpponentTimer();
       clearSubmitRetry();
-      if (!navigatedRef.current) {
+      if (!navigatedRef.current && gameStartedRef.current) {
         ws.disconnect();
       }
     };
