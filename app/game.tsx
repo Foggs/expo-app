@@ -349,8 +349,11 @@ export default function GameScreen() {
       mountedRef.current = false;
       clearOpponentTimer();
       clearSubmitRetry();
+      if (!navigatedRef.current) {
+        ws.disconnect();
+      }
     };
-  }, [clearOpponentTimer, clearSubmitRetry]);
+  }, [clearOpponentTimer, clearSubmitRetry, ws.disconnect]);
 
   useEffect(() => {
     if (timer.timerColor === "critical") {
