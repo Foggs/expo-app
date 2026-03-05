@@ -71,6 +71,8 @@ export default function GameScreen() {
   const opponentTimeRef = useRef(60);
   const submitRetryRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pendingSubmitRef = useRef<Array<{ points: Array<{ x: number; y: number }>; color: string; width: number }> | null>(null);
+  const submitRetryCountRef = useRef(0);
+  const MAX_SUBMIT_RETRIES = 5;
 
   const timerPulse = useSharedValue(1);
   const getReadyScale = useSharedValue(1);
@@ -101,6 +103,7 @@ export default function GameScreen() {
       submitRetryRef.current = null;
     }
     pendingSubmitRef.current = null;
+    submitRetryCountRef.current = 0;
   }, []);
 
   const retrySubmit = useCallback(() => {
@@ -110,6 +113,13 @@ export default function GameScreen() {
     }
     const pending = pendingSubmitRef.current;
     if (!pending) return;
+
+    submitRetryCountRef.current += 1;
+    if (submitRetryCountRef.current > MAX_SUBMIT_RETRIES) {
+      clearSubmitRetry();
+      setIsSubmitting(false);
+      return;
+    }
 
     const sent = ws.submitTurn(pending);
     if (sent) {
