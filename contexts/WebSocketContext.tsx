@@ -261,9 +261,9 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
   const [gameState, setGameState] = useState<GameStateFromServer | null>(null);
 
   const wsRef = useRef<WebSocket | null>(null);
-  const pingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const backoffTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null); // TIMER-KEY: playing/queueing (active connection)
+  const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null); // TIMER-KEY: error_recoverable
+  const backoffTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null); // TIMER-KEY: error_backoff
   const mountedRef = useRef(true);
   const callbacksRef = useRef<WebSocketCallbacks>({});
   const machineRef = useRef<ReturnType<typeof createMachine<MatchFlowModel, MatchFlowEvent, MatchFlowEffect>> | null>(null);
@@ -426,7 +426,7 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
       ws.onopen = () => {
         if (!mountedRef.current) return;
         clearPingTimer();
-        pingTimerRef.current = setInterval(() => {
+        pingTimerRef.current = setInterval(() => { // TIMER-KEY: playing/queueing
           sendRaw({ type: "ping" });
         }, PING_INTERVAL);
         machineRef.current?.dispatch({ type: "WS_OPENED" });
@@ -485,16 +485,16 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
           break;
         case "SCHEDULE_RECONNECT":
           clearReconnectTimer();
-          reconnectTimerRef.current = setTimeout(() => {
+          reconnectTimerRef.current = setTimeout(() => { // TIMER-KEY: error_recoverable
             dispatch({ type: "RETRY_TIMER_EXPIRED" });
           }, effect.delayMs);
           break;
         case "CLEAR_RECONNECT":
-          clearReconnectTimer();
+          clearReconnectTimer(); // TIMER-KEY: error_recoverable (clear)
           break;
         case "SCHEDULE_BACKOFF_TIMER":
           clearBackoffTimer();
-          backoffTimerRef.current = setTimeout(() => {
+          backoffTimerRef.current = setTimeout(() => { // TIMER-KEY: error_backoff
             dispatch({ type: "RETRY_TIMER_EXPIRED" });
           }, effect.delayMs);
           break;

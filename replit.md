@@ -13,9 +13,9 @@ Preferred communication style: Simple, everyday language.
 ### Frontend Architecture
 - **Framework**: Expo SDK 54 with React Native 0.81
 - **Navigation**: Expo Router with file-based routing (app directory contains index, game, results, and gallery screens)
-- **State Management**: React Query (@tanstack/react-query) for server state, React hooks for local state
+- **State Management**: React Query (@tanstack/react-query) for server state, GoF State Pattern machines for game flow (MatchFlowMachine, TurnFlowMachine), React hooks for local state
 - **UI Components**: React Native core components with custom styling, Reanimated for animations
-- **Design Pattern**: Component-based architecture with shared constants for theming (Colors)
+- **Design Pattern**: Component-based architecture with shared constants for theming (Colors), GoF State Pattern for game lifecycle
 
 ### Backend Architecture
 - **Framework**: Express 5 running on Node.js
@@ -75,7 +75,15 @@ Preferred communication style: Simple, everyday language.
 ### Game Timer & State
 - **useGameTimer Hook**: 2-minute countdown per turn, auto-submit on expiry
 - **Timer States**: Active (teal), Warning (yellow, <30s), Critical (red, <10s)
-- **useGameState Hook**: Server-driven state management, accepts playerRole and serverGameState from WebSocket
+- **useTurnFlow Hook** (`hooks/useTurnFlow.ts`): Wraps TurnFlowMachine, manages turn lifecycle, submit retries, opponent countdown, and error states. Replaces the former `useGameState` hook (deleted).
+
+### State Machines (`lib/state/`)
+- **Core** (`lib/state/core.ts`): Generic `createMachine` factory with FIFO dispatch queue, `IState` interface, `TransitionResult` type. No React imports — pure TypeScript.
+- **Error Classification** (`lib/state/errors.ts`): `FlowError` type, `classifyError()` function mapping error codes to 5 classes: recoverable, backoff, fatal, validation, security. `toFlowError()` adapter for server error messages.
+- **MatchFlowMachine** (`lib/state/matchFlow/`): 11 states — `idle`, `connecting`, `queueing`, `matched`, `playing`, `completed`, `opponent_disconnected`, `reconnecting`, `error_recoverable`, `error_backoff`, `error_fatal`. Integrated into `WebSocketContext.tsx`. Retry cap: 8 attempts → `error_fatal`. Backoff: exponential with jitter, max 30s.
+- **TurnFlowMachine** (`lib/state/turnFlow/`): 9 states — `waiting_for_turn`, `drawing_turn`, `submitting_turn`, `awaiting_server_ack`, `game_complete`, `opponent_disconnected`, `submit_retrying`, `submit_failed`, `sync_error_fatal`. Integrated via `useTurnFlow` hook. Submit retry cap: 5 → `submit_failed`.
+- **Timer Disposal**: All `setTimeout`/`setInterval` calls annotated with `// TIMER-KEY: <stateName>` comments. Timers are cleared on state exit.
+- **Dev Logging**: `logInvalidTransition()` in `lib/state/devLog.ts` logs unhandled events in dev mode only.
 
 ### WebSocket Architecture
 - **Server**: `server/websocket.ts` - ws library attached to Express HTTP server on port 5000, path /ws
@@ -86,8 +94,8 @@ Preferred communication style: Simple, everyday language.
 - **Client Connection**: `contexts/WebSocketContext.tsx` - Single shared WebSocket via React context (WebSocketProvider), persists across screen navigations from matchmaking through gameplay. Screens register/unregister event callbacks via `setCallbacks()`. Includes:
   - Client-side Zod validation of all incoming server messages (wsServerMessageSchema discriminated union)
   - Send guards: `sendStroke`/`submitTurn`/`sendClear` blocked unless `matchStatus === "playing"`, `joinQueue` blocked unless `matchStatus === "idle"`. `sendRaw` returns boolean indicating send success; `submitTurn` propagates this.
-  - **Submit Retry**: `handleSubmitTurn` stores pending strokes in `pendingSubmitRef`. If `sendRaw` fails (WS not open), retries every 1s. If send succeeds but no `game_state` response within 5s, retries every 3s. Cleared on `game_state`, `game_complete`, `NOT_YOUR_TURN` error, opponent disconnect, navigation, or unmount.
-  - Exponential backoff reconnection [1s, 2s, 4s, 8s, 16s], WSS/WS protocol auto-detection
+  - **Submit Retry**: Managed by TurnFlowMachine — `submit_retrying` state with 5-retry budget, `submit_failed` state with user-facing Retry/Exit modal.
+  - **Reconnection**: Managed by MatchFlowMachine — `error_recoverable` → `reconnecting` → `error_backoff` (exponential with jitter, max 30s) → `error_fatal` after 8 attempts. WSS/WS protocol auto-detection.
   - `useGameWebSocket()` hook for accessing context from any screen
 - **Message Types**: Defined in `shared/schema.ts` with Zod validation for both client and server messages
   - Client: join_queue, leave_queue, draw_stroke, draw_clear, draw_undo, submit_turn, ping
@@ -113,7 +121,7 @@ Preferred communication style: Simple, everyday language.
 - **WebSocket Origin**: Proper URL hostname parsing (not substring matching) to prevent bypass via malicious subdomains (e.g., replit.dev.evil.com is rejected)
 - **Game Abandonment**: DB game status updated to "abandoned" when player disconnects mid-game, preventing stale active games
 - **Matchmaking Timeout**: joinedAt timestamp set on queue join (not connection), so timeout accurately reflects queue wait time
-- **Memory Leak Prevention**: mountedRef guards on game.tsx opponent timer and WebSocketContext reconnect timer; server-side game room cleanup timer removes completed/abandoned rooms after 2 minutes
+- **Memory Leak Prevention**: mountedRef guards on game.tsx opponent timer and WebSocketContext reconnect timer; all machine timers annotated with TIMER-KEY comments and cleared on state exit; server-side game room cleanup timer removes completed/abandoned rooms after 2 minutes
 
 ### SEO & Landing Page
 - **Landing Page**: `server/templates/landing-page.html` with Open Graph tags, Twitter cards (summary_large_image), JSON-LD structured data (MobileApplication schema with game metadata)

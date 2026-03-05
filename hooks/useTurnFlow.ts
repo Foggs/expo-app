@@ -75,9 +75,9 @@ export function useTurnFlow(options: UseTurnFlowOptions): UseTurnFlowReturn {
 
   const machineRef = useRef<ReturnType<typeof createMachine<TurnFlowModel, TurnFlowEvent, TurnFlowEffect>> | null>(null);
   const mountedRef = useRef(true);
-  const opponentTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const opponentTimerRef = useRef<ReturnType<typeof setInterval> | null>(null); // TIMER-KEY: waiting_for_turn
   const opponentTimeRef = useRef(OPPONENT_TURN_DURATION);
-  const submitRetryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const submitRetryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null); // TIMER-KEY: submit_retrying
 
   const callbackRefs = useRef(options);
   callbackRefs.current = options;
@@ -96,7 +96,7 @@ export function useTurnFlow(options: UseTurnFlowOptions): UseTurnFlowReturn {
       setShowGetReady(false);
       setGetReadyCountdown(GET_READY_THRESHOLD);
     }
-    opponentTimerRef.current = setInterval(() => {
+    opponentTimerRef.current = setInterval(() => { // TIMER-KEY: waiting_for_turn
       if (!mountedRef.current) {
         clearOpponentTimer();
         return;
@@ -137,7 +137,7 @@ export function useTurnFlow(options: UseTurnFlowOptions): UseTurnFlowReturn {
           break;
         case "QUEUE_SUBMIT_RETRY":
           clearSubmitRetryTimer();
-          submitRetryTimerRef.current = setTimeout(() => {
+          submitRetryTimerRef.current = setTimeout(() => { // TIMER-KEY: submit_retrying
             if (!mountedRef.current) return;
             const sent = callbackRefs.current.onSubmitStrokes?.(
               effect.submissionId,
