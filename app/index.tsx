@@ -365,24 +365,30 @@ export default function HomeScreen() {
             </Text>
           </Pressable>
 
-          <Pressable
-            onPress={() => {
-              if (Platform.OS !== "web") {
-                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-              }
-              setFriendMode("choose");
-              setRoomError(null);
-            }}
-            style={[styles.galleryButton, { backgroundColor: colors.card }]}
-            accessibilityRole="button"
-            accessibilityLabel="Play with a friend using a room code"
-            disabled={isSearching || isHosting}
-          >
-            <Ionicons name="people" size={20} color={colors.accent} />
-            <Text style={[styles.galleryButtonText, { color: colors.text }]}>
-              Play with Friend
-            </Text>
-          </Pressable>
+          <Animated.View style={buttonAnimatedStyle}>
+            <Pressable
+              onPress={() => {
+                if (Platform.OS !== "web") {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                }
+                setFriendMode("choose");
+                setRoomError(null);
+              }}
+              disabled={isSearching || isHosting}
+              accessibilityRole="button"
+              accessibilityLabel="Play with a friend using a room code"
+            >
+              <LinearGradient
+                colors={[colors.tint, colors.accentSecondary]}
+                style={[styles.findMatchButton, (isSearching || isHosting) && styles.buttonDisabled]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+              >
+                <Ionicons name="people" size={24} color="#fff" />
+                <Text style={styles.buttonText}>Play with Friend</Text>
+              </LinearGradient>
+            </Pressable>
+          </Animated.View>
         </View>
 
         <View style={styles.footer}>
@@ -712,10 +718,9 @@ const styles = StyleSheet.create({
     fontFamily: "Inter_500Medium",
   },
   bottomButtons: {
-    flexDirection: "row",
-    justifyContent: "center",
-    gap: 12,
-    marginBottom: 8,
+    alignItems: "center",
+    gap: 16,
+    marginBottom: 24,
   },
   galleryButton: {
     flexDirection: "row",
