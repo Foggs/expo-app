@@ -29,10 +29,22 @@ export default function HomeScreen() {
   const searchPulse = useSharedValue(0.6);
   const navigatedRef = useRef(false);
 
-  const ws = useGameWebSocket();
+  const {
+    setCallbacks,
+    matchStatus,
+    flowState,
+    retryDelayMs,
+    connectionStatus,
+    joinQueue,
+    connect,
+    leaveQueue,
+    disconnect,
+    lastError,
+    queuePosition,
+  } = useGameWebSocket();
 
   useEffect(() => {
-    ws.setCallbacks({
+    setCallbacks({
       onMatchFound: (info) => {
         if (navigatedRef.current) return;
         navigatedRef.current = true;
@@ -52,22 +64,22 @@ export default function HomeScreen() {
     });
 
     return () => {
-      ws.setCallbacks({});
+      setCallbacks({});
     };
-  }, []);
+  }, [setCallbacks]);
 
-  const isSearching = ws.matchStatus === "queueing" || ws.matchStatus === "matched";
+  const isSearching = matchStatus === "queueing" || matchStatus === "matched";
   const isErrorState =
-    ws.flowState === "error_recoverable" ||
-    ws.flowState === "error_backoff" ||
-    ws.flowState === "error_fatal";
+    flowState === "error_recoverable" ||
+    flowState === "error_backoff" ||
+    flowState === "error_fatal";
   const showSearchModal = isSearching || isErrorState;
 
   const [backoffCountdown, setBackoffCountdown] = useState(0);
 
   useEffect(() => {
-    if (ws.flowState === "error_backoff" && ws.retryDelayMs > 0) {
-      setBackoffCountdown(Math.ceil(ws.retryDelayMs / 1000));
+    if (flowState === "error_backoff" && retryDelayMs > 0) {
+      setBackoffCountdown(Math.ceil(retryDelayMs / 1000));
       const interval = setInterval(() => {
         setBackoffCountdown((prev) => {
           if (prev <= 1) {
@@ -81,7 +93,7 @@ export default function HomeScreen() {
     }
 
     setBackoffCountdown(0);
-  }, [ws.flowState, ws.retryDelayMs]);
+  }, [flowState, retryDelayMs]);
 
   useEffect(() => {
     pulseOpacity.value = withRepeat(
@@ -89,7 +101,7 @@ export default function HomeScreen() {
       -1,
       true
     );
-  }, []);
+  }, [pulseOpacity]);
 
   useEffect(() => {
     if (isSearching) {
@@ -99,7 +111,7 @@ export default function HomeScreen() {
         true
       );
     }
-  }, [isSearching]);
+  }, [isSearching, searchPulse]);
 
   const pulseStyle = useAnimatedStyle(() => ({
     opacity: pulseOpacity.value,
@@ -128,32 +140,32 @@ export default function HomeScreen() {
     navigatedRef.current = false;
     wantToJoinRef.current = true;
 
-    if (ws.connectionStatus === "connected") {
-      ws.joinQueue();
+    if (connectionStatus === "connected") {
+      joinQueue();
     } else {
-      ws.connect();
+      connect();
     }
-  }, [ws]);
+  }, [connectionStatus, joinQueue, connect]);
 
   useEffect(() => {
     if (
-      ws.connectionStatus === "connected" &&
+      connectionStatus === "connected" &&
       wantToJoinRef.current &&
-      ws.matchStatus === "idle"
+      matchStatus === "idle"
     ) {
       wantToJoinRef.current = false;
-      ws.joinQueue();
+      joinQueue();
     }
-  }, [ws.connectionStatus, ws.matchStatus, ws.joinQueue]);
+  }, [connectionStatus, matchStatus, joinQueue]);
 
   const handleCancelSearch = useCallback(() => {
     impactLight();
     wantToJoinRef.current = false;
-    ws.leaveQueue();
-    if (ws.connectionStatus !== "disconnected") {
-      ws.disconnect();
+    leaveQueue();
+    if (connectionStatus !== "disconnected") {
+      disconnect();
     }
-  }, [ws]);
+  }, [leaveQueue, connectionStatus, disconnect]);
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}> 
@@ -194,14 +206,14 @@ export default function HomeScreen() {
       <MatchmakingModal
         visible={showSearchModal}
         colors={colors}
-        flowState={ws.flowState}
-        lastErrorMessage={ws.lastError?.message}
+        flowState={flowState}
+        lastErrorMessage={lastError?.message}
         backoffCountdown={backoffCountdown}
-        queuePosition={ws.queuePosition}
+        queuePosition={queuePosition}
         searchPulseStyle={searchPulseStyle}
         onCancel={handleCancelSearch}
         onRetry={() => {
-          ws.disconnect();
+          disconnect();
           setTimeout(() => handleFindMatch(), 100);
         }}
       />

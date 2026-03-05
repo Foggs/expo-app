@@ -6,10 +6,10 @@ import {
   useColorScheme,
   Modal,
   Text,
+  Platform,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
-import { Platform } from "react-native";
 import Colors from "@/constants/colors";
 
 const DRAWING_COLORS = [
