@@ -234,10 +234,12 @@ function abandonGame(conn: PlayerConnection, notifyOtherPlayer = true): void {
 
   const otherRole = playerRole === "player1" ? "player2" : "player1";
   const otherConn = room[otherRole];
+  const shouldNotifyOpponent =
+    notifyOtherPlayer && room.status !== "completed";
 
   room[playerRole] = null;
 
-  if (notifyOtherPlayer && otherConn) {
+  if (shouldNotifyOpponent && otherConn) {
     sendMessage(otherConn, { type: "opponent_disconnected" });
   }
 

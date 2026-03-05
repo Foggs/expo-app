@@ -207,6 +207,14 @@ function flowStateToErrorState(stateId: MatchFlowStateId, model: MatchFlowModel)
   }
 }
 
+function canResetToStartNewSession(stateId: MatchFlowStateId): boolean {
+  return (
+    stateId === "completed" ||
+    stateId === "opponent_disconnected" ||
+    stateId === "error_fatal"
+  );
+}
+
 interface WebSocketContextValue {
   connectionStatus: ConnectionStatus;
   matchStatus: MatchStatus;
@@ -674,7 +682,15 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
       nextStatus: FriendRoomStatus,
       nextRoomCode: string | null,
     ): boolean => {
-      if (flowSnapshot.stateId !== "idle") return false;
+      if (flowSnapshot.stateId !== "idle") {
+        if (!canResetToStartNewSession(flowSnapshot.stateId)) {
+          return false;
+        }
+        machineRef.current?.dispatch({ type: "DISCONNECT_REQUESTED" });
+        closeSocket();
+        setMatchInfo(null);
+        setGameState(null);
+      }
 
       setFriendRoomStatus(nextStatus);
       setFriendRoomCode(nextRoomCode);
@@ -699,18 +715,25 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
       }
       return true;
     },
-    [flowSnapshot.stateId, openSocket, sendRaw],
+    [flowSnapshot.stateId, closeSocket, openSocket, sendRaw],
   );
 
   const connect = useCallback(() => {
     if (friendRoomStatus !== "idle") return;
+    if (flowSnapshot.stateId !== "idle") {
+      if (!canResetToStartNewSession(flowSnapshot.stateId)) return;
+      machineRef.current?.dispatch({ type: "DISCONNECT_REQUESTED" });
+      closeSocket();
+      setMatchInfo(null);
+      setGameState(null);
+    }
     if (wsRef.current?.readyState === WebSocket.OPEN) {
       machineRef.current?.dispatch({ type: "FIND_MATCH_CLICKED" });
       machineRef.current?.dispatch({ type: "WS_OPENED" });
       return;
     }
     machineRef.current?.dispatch({ type: "FIND_MATCH_CLICKED" });
-  }, [friendRoomStatus]);
+  }, [friendRoomStatus, flowSnapshot.stateId, closeSocket]);
 
   const disconnect = useCallback(() => {
     if (activeMatchTypeRef.current === "friend") {
