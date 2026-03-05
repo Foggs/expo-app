@@ -241,8 +241,6 @@ function cleanupConnection(connId: string): void {
 
       if (otherConn) {
         sendMessage(otherConn, { type: "opponent_disconnected" });
-        otherConn.gameId = null;
-        otherConn.playerRole = null;
       }
 
       if (room.status !== "completed") {
@@ -289,15 +287,6 @@ async function attemptMatchmaking(): Promise<void> {
       matchmakingQueue.unshift(p1Id);
       matchmakingQueue.unshift(p2Id);
     }
-  }
-}
-
-function clearStaleGameId(conn: PlayerConnection): void {
-  if (!conn.gameId) return;
-  const staleRoom = gameRooms.get(conn.gameId);
-  if (!staleRoom || staleRoom.status === "completed" || staleRoom.status === "abandoned") {
-    conn.gameId = null;
-    conn.playerRole = null;
   }
 }
 
@@ -349,8 +338,6 @@ async function handleSubmitTurn(conn: PlayerConnection, strokes: unknown[]): Pro
       round: room.currentRound,
       strokes,
     });
-
-    console.log(`[DEBUG] Turn submitted by ${conn.playerName} (${conn.playerRole}) in round ${room.currentRound}, game ${conn.gameId}`);
 
     if (room.currentPlayer === "player2") {
       if (room.currentRound >= room.totalRounds) {
@@ -414,7 +401,6 @@ async function handleSubmitTurn(conn: PlayerConnection, strokes: unknown[]): Pro
         totalRounds: room.totalRounds,
         status: "active",
       };
-      console.log(`[DEBUG] Sending game_state currentPlayer=player2 to both players. P1 ws open: ${room.player1?.ws.readyState === WebSocket.OPEN}, P2 ws open: ${room.player2?.ws.readyState === WebSocket.OPEN}`);
       if (room.player1) sendMessage(room.player1, stateMsg);
       if (room.player2) sendMessage(room.player2, stateMsg);
     }
@@ -469,7 +455,6 @@ async function handleMessage(conn: PlayerConnection, data: Buffer | ArrayBuffer 
       break;
 
     case "join_queue":
-      clearStaleGameId(conn);
       if (conn.gameId) {
         sendMessage(conn, { type: "error", message: "Already in a game", code: "ALREADY_IN_GAME" });
         return;
@@ -491,7 +476,6 @@ async function handleMessage(conn: PlayerConnection, data: Buffer | ArrayBuffer 
       break;
 
     case "create_room": {
-      clearStaleGameId(conn);
       if (conn.gameId) {
         sendMessage(conn, { type: "room_error", message: "Already in a game" });
         break;
@@ -515,7 +499,6 @@ async function handleMessage(conn: PlayerConnection, data: Buffer | ArrayBuffer 
     }
 
     case "join_room": {
-      clearStaleGameId(conn);
       if (conn.gameId) {
         sendMessage(conn, { type: "room_error", message: "Already in a game" });
         break;

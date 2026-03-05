@@ -318,8 +318,6 @@ export default function GameScreen() {
     const wasMyTurn = prevIsMyTurnRef.current;
     prevIsMyTurnRef.current = isMyTurn;
 
-    console.log(`[DEBUG] isMyTurn effect: isMyTurn=${isMyTurn}, wasMyTurn=${wasMyTurn}, playerRole=${playerRole}, currentPlayer=${currentPlayer}, gameState.currentPlayer=${ws.gameState?.currentPlayer}, disabled=${!isMyTurn || isSubmitting}`);
-
     if (isMyTurn && wasMyTurn !== null && wasMyTurn !== isMyTurn) {
       clearOpponentTimer();
       setShowGetReady(false);
@@ -418,7 +416,6 @@ export default function GameScreen() {
   }));
 
   const handleStrokesChange = useCallback((newStrokes: Stroke[]) => {
-    console.log(`[DEBUG] handleStrokesChange called, strokes count: ${newStrokes.length}`);
     setStrokes(newStrokes);
     if (newStrokes.length > 0) {
       const latestStroke = newStrokes[newStrokes.length - 1];
@@ -631,7 +628,7 @@ export default function GameScreen() {
         )}
       </View>
 
-      <View style={styles.canvasContainer} accessibilityLabel={isMyTurn ? "Drawing canvas. Touch and drag to draw." : "Opponent's drawing canvas. View only."}>
+      <View style={styles.canvasContainer} accessible={true} accessibilityLabel={isMyTurn ? "Drawing canvas. Touch and drag to draw." : "Opponent's drawing canvas. View only."}>
         <DrawingCanvas
           ref={canvasRef}
           strokeColor={activeColor}

@@ -1,12 +1,13 @@
-import React, { useRef, useCallback, useImperativeHandle, forwardRef, useMemo } from "react";
+import React, { useRef, useCallback, useImperativeHandle, forwardRef } from "react";
 import {
   View,
   StyleSheet,
+  PanResponder,
+  GestureResponderEvent,
+  PanResponderGestureState,
   useColorScheme,
   LayoutChangeEvent,
-  Platform,
 } from "react-native";
-import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import Svg, { Path } from "react-native-svg";
 import Colors from "@/constants/colors";
 
@@ -67,16 +68,26 @@ const DrawingCanvas = forwardRef<DrawingCanvasRef, DrawingCanvasProps>(
       canvasSizeRef.current = { width, height };
     }, []);
 
-    const panGesture = useMemo(() => {
-      const gesture = Gesture.Pan()
-        .minDistance(0)
-        .onBegin((event) => {
+    const getPoint = useCallback(
+      (event: GestureResponderEvent) => {
+        const { locationX, locationY } = event.nativeEvent;
+        return {
+          x: Math.max(0, locationX),
+          y: Math.max(0, locationY),
+        };
+      },
+      []
+    );
+
+    const panResponder = useRef(
+      PanResponder.create({
+        onStartShouldSetPanResponder: () => !disabledRef.current,
+        onMoveShouldSetPanResponder: () => !disabledRef.current,
+        onPanResponderGrant: (event: GestureResponderEvent) => {
           if (disabledRef.current) return;
-          console.log(`[DEBUG] Pan onBegin: disabled=${disabledRef.current}`);
-          const x = Math.max(0, event.x);
-          const y = Math.max(0, event.y);
+          const point = getPoint(event);
           currentStrokeIdRef.current = generateId();
-          currentPathRef.current = `M${x.toFixed(2)},${y.toFixed(2)}`;
+          currentPathRef.current = `M${point.x.toFixed(2)},${point.y.toFixed(2)}`;
 
           const newStroke: Stroke = {
             id: currentStrokeIdRef.current,
@@ -85,12 +96,14 @@ const DrawingCanvas = forwardRef<DrawingCanvasRef, DrawingCanvasProps>(
             strokeWidth: strokeWidthRef.current,
           };
           onStrokesChangeRef.current([...strokesRef.current, newStroke]);
-        })
-        .onUpdate((event) => {
+        },
+        onPanResponderMove: (
+          event: GestureResponderEvent,
+          _gestureState: PanResponderGestureState
+        ) => {
           if (disabledRef.current || !currentStrokeIdRef.current) return;
-          const x = Math.max(0, event.x);
-          const y = Math.max(0, event.y);
-          currentPathRef.current += ` L${x.toFixed(2)},${y.toFixed(2)}`;
+          const point = getPoint(event);
+          currentPathRef.current += ` L${point.x.toFixed(2)},${point.y.toFixed(2)}`;
 
           const updatedStrokes = strokesRef.current.map((stroke) =>
             stroke.id === currentStrokeIdRef.current
@@ -98,8 +111,8 @@ const DrawingCanvas = forwardRef<DrawingCanvasRef, DrawingCanvasProps>(
               : stroke
           );
           onStrokesChangeRef.current(updatedStrokes);
-        })
-        .onEnd(() => {
+        },
+        onPanResponderRelease: () => {
           if (currentStrokeIdRef.current) {
             const completedStroke = strokesRef.current.find(
               (s) => s.id === currentStrokeIdRef.current
@@ -110,8 +123,8 @@ const DrawingCanvas = forwardRef<DrawingCanvasRef, DrawingCanvasProps>(
           }
           currentPathRef.current = "";
           currentStrokeIdRef.current = "";
-        })
-        .onFinalize(() => {
+        },
+        onPanResponderTerminate: () => {
           if (currentStrokeIdRef.current) {
             const completedStroke = strokesRef.current.find(
               (s) => s.id === currentStrokeIdRef.current
@@ -122,14 +135,9 @@ const DrawingCanvas = forwardRef<DrawingCanvasRef, DrawingCanvasProps>(
           }
           currentPathRef.current = "";
           currentStrokeIdRef.current = "";
-        });
-
-      if (Platform.OS !== "web") {
-        gesture.shouldCancelWhenOutside(false);
-      }
-
-      return gesture;
-    }, []);
+        },
+      })
+    ).current;
 
     useImperativeHandle(ref, () => ({
       undo: () => {
@@ -147,43 +155,42 @@ const DrawingCanvas = forwardRef<DrawingCanvasRef, DrawingCanvasProps>(
     }));
 
     return (
-      <GestureDetector gesture={panGesture}>
-        <View
-          style={[
-            styles.container,
-            {
-              backgroundColor: "#FFFFFF",
-              borderColor: colors.border,
-            },
-          ]}
-          onLayout={handleLayout}
-        >
-          <Svg width="100%" height="100%" style={StyleSheet.absoluteFill} pointerEvents="none">
-            {backgroundStrokes.map((stroke) => (
-              <Path
-                key={`bg-${stroke.id}`}
-                d={stroke.path}
-                stroke={stroke.color}
-                strokeWidth={stroke.strokeWidth}
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                fill="none"
-              />
-            ))}
-            {strokes.map((stroke) => (
-              <Path
-                key={stroke.id}
-                d={stroke.path}
-                stroke={stroke.color}
-                strokeWidth={stroke.strokeWidth}
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                fill="none"
-              />
-            ))}
-          </Svg>
-        </View>
-      </GestureDetector>
+      <View
+        style={[
+          styles.container,
+          {
+            backgroundColor: "#FFFFFF",
+            borderColor: colors.border,
+          },
+        ]}
+        onLayout={handleLayout}
+        {...panResponder.panHandlers}
+      >
+        <Svg width="100%" height="100%" style={[StyleSheet.absoluteFill, { pointerEvents: "none" }]}>
+          {backgroundStrokes.map((stroke) => (
+            <Path
+              key={`bg-${stroke.id}`}
+              d={stroke.path}
+              stroke={stroke.color}
+              strokeWidth={stroke.strokeWidth}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              fill="none"
+            />
+          ))}
+          {strokes.map((stroke) => (
+            <Path
+              key={stroke.id}
+              d={stroke.path}
+              stroke={stroke.color}
+              strokeWidth={stroke.strokeWidth}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              fill="none"
+            />
+          ))}
+        </Svg>
+      </View>
     );
   }
 );
