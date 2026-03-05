@@ -21,6 +21,11 @@ import {
 } from "react";
 import { Platform } from "react-native";
 import { z } from "zod";
+import {
+  ROOM_CODE_LENGTH,
+  isValidRoomCode,
+  normalizeRoomCode,
+} from "@shared/friendRoom";
 import { createMachine } from "@/lib/state";
 import type { FlowError, ErrorClass } from "@/lib/state";
 import { classifyError, toFlowError } from "@/lib/state";
@@ -43,11 +48,14 @@ export type MatchStatus =
   | "playing"
   | "opponent_disconnected"
   | "completed";
+export type MatchType = "queue" | "friend";
+export type FriendRoomStatus = "idle" | "creating" | "joining" | "waiting_for_friend";
 
 export interface MatchInfo {
   gameId: string;
   playerRole: "player1" | "player2";
   opponentName: string;
+  matchType: MatchType;
 }
 
 export interface GameStateFromServer {
@@ -91,6 +99,7 @@ const wsServerMessageSchema = z.discriminatedUnion("type", [
     gameId: z.string(),
     playerRole: z.enum(["player1", "player2"]),
     opponentName: z.string(),
+    matchType: z.enum(["queue", "friend"]),
   }),
   z.object({
     type: z.literal("game_state"),
@@ -205,6 +214,9 @@ interface WebSocketContextValue {
   matchInfo: MatchInfo | null;
   gameState: GameStateFromServer | null;
   queuePosition: number;
+  friendRoomStatus: FriendRoomStatus;
+  friendRoomCode: string | null;
+  friendRoomError: string | null;
   lastError: FlowError | null;
   errorState: ErrorClass | null;
   canRetry: boolean;
@@ -214,6 +226,10 @@ interface WebSocketContextValue {
   resetState: () => void;
   joinQueue: () => void;
   leaveQueue: () => void;
+  createFriendRoom: () => boolean;
+  joinFriendRoom: (roomCode: string) => boolean;
+  leaveFriendRoom: () => void;
+  clearFriendRoomError: () => void;
   submitTurn: (
     strokes: Array<{
       points: Array<{ x: number; y: number }>;
@@ -259,11 +275,18 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
 
   const [matchInfo, setMatchInfo] = useState<MatchInfo | null>(null);
   const [gameState, setGameState] = useState<GameStateFromServer | null>(null);
+  const [friendRoomStatus, setFriendRoomStatus] =
+    useState<FriendRoomStatus>("idle");
+  const [friendRoomCode, setFriendRoomCode] = useState<string | null>(null);
+  const [friendRoomError, setFriendRoomError] = useState<string | null>(null);
 
   const wsRef = useRef<WebSocket | null>(null);
   const pingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null); // TIMER-KEY: playing/queueing (active connection)
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null); // TIMER-KEY: error_recoverable
   const backoffTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null); // TIMER-KEY: error_backoff
+  const pendingRoomActionRef = useRef<Record<string, unknown> | null>(null);
+  const activeMatchTypeRef = useRef<MatchType | null>(null);
+  const friendRoomCodeRef = useRef<string | null>(null);
   const mountedRef = useRef(true);
   const callbacksRef = useRef<WebSocketCallbacks>({});
   const machineRef = useRef<ReturnType<typeof createMachine<MatchFlowModel, MatchFlowEvent, MatchFlowEffect>> | null>(null);
@@ -327,11 +350,17 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
         break;
 
       case "match_found":
+        activeMatchTypeRef.current = msg.matchType;
+        pendingRoomActionRef.current = null;
+        setFriendRoomStatus("idle");
+        setFriendRoomCode(null);
+        setFriendRoomError(null);
         machine?.dispatch({
           type: "MATCH_FOUND",
           gameId: msg.gameId,
           playerRole: msg.playerRole,
           opponentName: msg.opponentName,
+          matchType: msg.matchType,
         });
         break;
 
@@ -379,6 +408,28 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
 
       case "opponent_disconnected":
         machine?.dispatch({ type: "OPPONENT_DISCONNECTED_RECEIVED" });
+        break;
+
+      case "room_created":
+        pendingRoomActionRef.current = null;
+        setFriendRoomStatus("waiting_for_friend");
+        setFriendRoomCode(msg.roomCode);
+        setFriendRoomError(null);
+        break;
+
+      case "room_joined":
+        pendingRoomActionRef.current = null;
+        setFriendRoomStatus("waiting_for_friend");
+        setFriendRoomCode(msg.roomCode);
+        setFriendRoomError(null);
+        break;
+
+      case "room_error":
+        pendingRoomActionRef.current = null;
+        setFriendRoomStatus("idle");
+        setFriendRoomCode(null);
+        setFriendRoomError(msg.message);
+        cb.onError?.(msg.message, "ROOM_ERROR");
         break;
 
       case "flow_error": {
@@ -430,6 +481,16 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
           sendRaw({ type: "ping" });
         }, PING_INTERVAL);
         machineRef.current?.dispatch({ type: "WS_OPENED" });
+        if (pendingRoomActionRef.current) {
+          try {
+            ws.send(JSON.stringify(pendingRoomActionRef.current));
+            pendingRoomActionRef.current = null;
+          } catch {
+            setFriendRoomStatus("idle");
+            setFriendRoomCode(null);
+            setFriendRoomError("Failed to send friend room request.");
+          }
+        }
       };
 
       ws.onmessage = (event: MessageEvent) => {
@@ -442,11 +503,20 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
         clearPingTimer();
         wsRef.current = null;
         if (!mountedRef.current) return;
+        if (friendRoomCodeRef.current && machineRef.current?.currentStateId === "idle") {
+          pendingRoomActionRef.current = null;
+          setFriendRoomStatus("idle");
+          setFriendRoomCode(null);
+          setFriendRoomError("Connection lost while in friend room.");
+        }
         machineRef.current?.dispatch({ type: "WS_CLOSED", code: event.code });
       };
 
       ws.onerror = () => {
         if (!mountedRef.current) return;
+        if (friendRoomCodeRef.current && machineRef.current?.currentStateId === "idle") {
+          setFriendRoomError("Friend room connection failed.");
+        }
         callbacksRef.current.onError?.(
           "WebSocket connection error",
           "WS_ERROR",
@@ -568,9 +638,15 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
   }, [effectRunner]);
 
   useEffect(() => {
+    friendRoomCodeRef.current = friendRoomCode;
+  }, [friendRoomCode]);
+
+  useEffect(() => {
     mountedRef.current = true;
     return () => {
       mountedRef.current = false;
+      pendingRoomActionRef.current = null;
+      activeMatchTypeRef.current = null;
       clearPingTimer();
       clearReconnectTimer();
       clearBackoffTimer();
@@ -592,31 +668,118 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
     machineRef.current?.dispatch(event);
   }, []);
 
+  const runFriendRoomAction = useCallback(
+    (
+      action: Record<string, unknown>,
+      nextStatus: FriendRoomStatus,
+      nextRoomCode: string | null,
+    ): boolean => {
+      if (flowSnapshot.stateId !== "idle") return false;
+
+      setFriendRoomStatus(nextStatus);
+      setFriendRoomCode(nextRoomCode);
+      setFriendRoomError(null);
+      pendingRoomActionRef.current = action;
+
+      if (wsRef.current?.readyState === WebSocket.OPEN) {
+        const sent = sendRaw(action);
+        if (sent) {
+          pendingRoomActionRef.current = null;
+          return true;
+        }
+        pendingRoomActionRef.current = null;
+        setFriendRoomStatus("idle");
+        setFriendRoomCode(null);
+        setFriendRoomError("Unable to send friend room request.");
+        return false;
+      }
+
+      if (wsRef.current?.readyState !== WebSocket.CONNECTING) {
+        openSocket();
+      }
+      return true;
+    },
+    [flowSnapshot.stateId, openSocket, sendRaw],
+  );
+
   const connect = useCallback(() => {
+    if (friendRoomStatus !== "idle") return;
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
+      machineRef.current?.dispatch({ type: "FIND_MATCH_CLICKED" });
+      machineRef.current?.dispatch({ type: "WS_OPENED" });
+      return;
+    }
     machineRef.current?.dispatch({ type: "FIND_MATCH_CLICKED" });
-  }, []);
+  }, [friendRoomStatus]);
 
   const disconnect = useCallback(() => {
+    if (activeMatchTypeRef.current === "friend") {
+      sendRaw({ type: "leave_room" });
+    }
+    pendingRoomActionRef.current = null;
+    activeMatchTypeRef.current = null;
     machineRef.current?.dispatch({ type: "DISCONNECT_REQUESTED" });
     closeSocket();
     setMatchInfo(null);
     setGameState(null);
-  }, [closeSocket]);
+    setFriendRoomStatus("idle");
+    setFriendRoomCode(null);
+    setFriendRoomError(null);
+  }, [closeSocket, sendRaw]);
 
   const resetState = useCallback(() => {
+    pendingRoomActionRef.current = null;
+    activeMatchTypeRef.current = null;
     machineRef.current?.dispatch({ type: "DISCONNECT_REQUESTED" });
     setMatchInfo(null);
     setGameState(null);
+    setFriendRoomStatus("idle");
+    setFriendRoomCode(null);
+    setFriendRoomError(null);
   }, []);
 
   const joinQueue = useCallback(() => {
-    if (flowSnapshot.stateId === "idle") {
+    if (flowSnapshot.stateId === "idle" && friendRoomStatus === "idle") {
       machineRef.current?.dispatch({ type: "FIND_MATCH_CLICKED" });
     }
-  }, [flowSnapshot.stateId]);
+  }, [flowSnapshot.stateId, friendRoomStatus]);
 
   const leaveQueue = useCallback(() => {
     machineRef.current?.dispatch({ type: "CANCEL_SEARCH" });
+  }, []);
+
+  const createFriendRoom = useCallback((): boolean => {
+    return runFriendRoomAction({ type: "create_room" }, "creating", null);
+  }, [runFriendRoomAction]);
+
+  const joinFriendRoom = useCallback(
+    (roomInput: string): boolean => {
+      const roomCode = normalizeRoomCode(roomInput);
+      if (!isValidRoomCode(roomCode)) {
+        setFriendRoomError(
+          `Enter a valid ${ROOM_CODE_LENGTH}-character room code.`,
+        );
+        return false;
+      }
+      return runFriendRoomAction({ type: "join_room", roomCode }, "joining", roomCode);
+    },
+    [runFriendRoomAction],
+  );
+
+  const leaveFriendRoom = useCallback(() => {
+    pendingRoomActionRef.current = null;
+    activeMatchTypeRef.current = null;
+    setFriendRoomStatus("idle");
+    setFriendRoomCode(null);
+    setFriendRoomError(null);
+    sendRaw({ type: "leave_room" });
+    if (flowSnapshot.stateId === "idle") {
+      closeSocket();
+    }
+  }, [closeSocket, flowSnapshot.stateId, sendRaw]);
+
+  const clearFriendRoomError = useCallback(() => {
+    setFriendRoomError(null);
   }, []);
 
   const submitTurn = useCallback(
@@ -659,7 +822,7 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
     (action: "findMatch" | "cancelSearch" | "submitTurn" | "draw"): boolean => {
       switch (action) {
         case "findMatch":
-          return flowSnapshot.stateId === "idle";
+          return flowSnapshot.stateId === "idle" && friendRoomStatus === "idle";
         case "cancelSearch":
           return flowSnapshot.stateId === "queueing" || flowSnapshot.stateId === "matched";
         case "submitTurn":
@@ -667,7 +830,7 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
           return flowSnapshot.stateId === "playing";
       }
     },
-    [flowSnapshot.stateId],
+    [flowSnapshot.stateId, friendRoomStatus],
   );
 
   const value = useMemo(
@@ -678,6 +841,9 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
       matchInfo,
       gameState,
       queuePosition: flowSnapshot.model.queuePosition,
+      friendRoomStatus,
+      friendRoomCode,
+      friendRoomError,
       lastError,
       errorState,
       canRetry,
@@ -687,6 +853,10 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
       resetState,
       joinQueue,
       leaveQueue,
+      createFriendRoom,
+      joinFriendRoom,
+      leaveFriendRoom,
+      clearFriendRoomError,
       submitTurn,
       sendStroke,
       sendClear,
@@ -701,6 +871,9 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
       flowSnapshot,
       matchInfo,
       gameState,
+      friendRoomStatus,
+      friendRoomCode,
+      friendRoomError,
       lastError,
       errorState,
       canRetry,
@@ -709,6 +882,10 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
       resetState,
       joinQueue,
       leaveQueue,
+      createFriendRoom,
+      joinFriendRoom,
+      leaveFriendRoom,
+      clearFriendRoomError,
       submitTurn,
       sendStroke,
       sendClear,

@@ -8,9 +8,11 @@ import type { ThemeColors } from "@/hooks/useThemeColors";
 interface HomePrimaryActionsProps {
   colors: ThemeColors;
   isSearching: boolean;
+  isFriendFlowActive: boolean;
   pulseStyle: any;
   buttonAnimatedStyle: any;
   onOpenGallery: () => void;
+  onOpenFriends: () => void;
   onFindMatch: () => void;
   onPressIn: () => void;
   onPressOut: () => void;
@@ -19,9 +21,11 @@ interface HomePrimaryActionsProps {
 export default function HomePrimaryActions({
   colors,
   isSearching,
+  isFriendFlowActive,
   pulseStyle,
   buttonAnimatedStyle,
   onOpenGallery,
+  onOpenFriends,
   onFindMatch,
   onPressIn,
   onPressOut,
@@ -36,6 +40,22 @@ export default function HomePrimaryActions({
       >
         <Ionicons name="images" size={20} color={colors.tint} />
         <Text style={[styles.galleryButtonText, { color: colors.text }]}>Gallery</Text>
+      </Pressable>
+
+      <Pressable
+        onPress={onOpenFriends}
+        disabled={isSearching || isFriendFlowActive}
+        style={[
+          styles.friendButton,
+          { borderColor: colors.tint, backgroundColor: colors.card },
+          (isSearching || isFriendFlowActive) && styles.buttonDisabled,
+        ]}
+        accessibilityRole="button"
+        accessibilityLabel="Start a friends match"
+        accessibilityHint="Create or join a private room with a friend"
+      >
+        <Ionicons name="people" size={20} color={colors.tint} />
+        <Text style={[styles.friendButtonText, { color: colors.text }]}>Friends Match</Text>
       </Pressable>
 
       <View style={styles.footer}>
@@ -53,14 +73,14 @@ export default function HomePrimaryActions({
             onPress={onFindMatch}
             onPressIn={onPressIn}
             onPressOut={onPressOut}
-            disabled={isSearching}
+            disabled={isSearching || isFriendFlowActive}
             accessibilityRole="button"
             accessibilityLabel="Find a match to play"
             accessibilityHint="Searches for another player to start a drawing game"
           >
             <LinearGradient
               colors={[colors.tint, colors.accent]}
-              style={[styles.findMatchButton, isSearching && styles.buttonDisabled]}
+              style={[styles.findMatchButton, (isSearching || isFriendFlowActive) && styles.buttonDisabled]}
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 1 }}
             >
@@ -87,6 +107,22 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   galleryButtonText: {
+    fontSize: 15,
+    fontFamily: "Inter_500Medium",
+  },
+  friendButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    alignSelf: "center",
+    borderWidth: 1,
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    borderRadius: 20,
+    marginBottom: 8,
+  },
+  friendButtonText: {
     fontSize: 15,
     fontFamily: "Inter_500Medium",
   },

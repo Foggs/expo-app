@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 import { pgTable, text, varchar, integer, jsonb, timestamp, boolean } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
+import { isValidRoomCode, normalizeRoomCode } from "./friendRoom";
 
 export const users = pgTable("users", {
   id: varchar("id")
@@ -112,7 +113,12 @@ export const wsClientMessageSchema = z.discriminatedUnion("type", [
   }),
   z.object({
     type: z.literal("join_room"),
-    roomCode: z.string().min(4).max(4),
+    roomCode: z
+      .string()
+      .transform((value) => normalizeRoomCode(value))
+      .refine((value) => isValidRoomCode(value), {
+        message: "Invalid room code",
+      }),
   }),
   z.object({
     type: z.literal("leave_room"),
@@ -146,7 +152,13 @@ export type WsClientMessage = z.infer<typeof wsClientMessageSchema>;
 export type WsServerMessage =
   | { type: "queue_joined"; position: number }
   | { type: "queue_left" }
-  | { type: "match_found"; gameId: string; playerRole: "player1" | "player2"; opponentName: string }
+  | {
+      type: "match_found";
+      gameId: string;
+      playerRole: "player1" | "player2";
+      opponentName: string;
+      matchType: "queue" | "friend";
+    }
   | { type: "game_state"; gameId: string; currentRound: number; currentPlayer: "player1" | "player2"; totalRounds: number; status: string }
   | { type: "turn_submitted"; playerRole: "player1" | "player2"; round: number; strokes: unknown[] }
   | { type: "round_complete"; round: number; nextRound: number }

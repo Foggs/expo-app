@@ -2,6 +2,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { router } from "expo-router";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { StyleSheet, View } from "react-native";
+import { ROOM_CODE_LENGTH } from "@shared/friendRoom";
 import {
   useAnimatedStyle,
   useSharedValue,
@@ -11,6 +12,7 @@ import {
   withTiming,
 } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import FriendsMatchModal from "@/components/FriendsMatchModal";
 import HomeHero from "@/components/HomeHero";
 import HomePrimaryActions from "@/components/HomePrimaryActions";
 import MatchmakingModal from "@/components/MatchmakingModal";
@@ -28,6 +30,8 @@ export default function HomeScreen() {
   const pulseOpacity = useSharedValue(0.4);
   const searchPulse = useSharedValue(0.6);
   const navigatedRef = useRef(false);
+  const [isFriendsModalOpen, setIsFriendsModalOpen] = useState(false);
+  const [friendRoomInput, setFriendRoomInput] = useState("");
 
   const {
     setCallbacks,
@@ -41,13 +45,26 @@ export default function HomeScreen() {
     disconnect,
     lastError,
     queuePosition,
+    friendRoomStatus,
+    friendRoomCode,
+    friendRoomError,
+    createFriendRoom,
+    joinFriendRoom,
+    leaveFriendRoom,
+    clearFriendRoomError,
   } = useGameWebSocket();
+
+  const isSearching = matchStatus === "queueing" || matchStatus === "matched";
+  const isFriendFlowActive = friendRoomStatus !== "idle";
+  const showFriendsModal = isFriendsModalOpen || isFriendFlowActive;
 
   useEffect(() => {
     setCallbacks({
       onMatchFound: (info) => {
         if (navigatedRef.current) return;
         navigatedRef.current = true;
+        setIsFriendsModalOpen(false);
+        setFriendRoomInput("");
         notifySuccess();
         router.push({
           pathname: "/game",
@@ -68,7 +85,6 @@ export default function HomeScreen() {
     };
   }, [setCallbacks]);
 
-  const isSearching = matchStatus === "queueing" || matchStatus === "matched";
   const isErrorState =
     flowState === "error_recoverable" ||
     flowState === "error_backoff" ||
@@ -136,6 +152,9 @@ export default function HomeScreen() {
   const wantToJoinRef = useRef(false);
 
   const handleFindMatch = useCallback(() => {
+    if (isFriendFlowActive || isFriendsModalOpen) {
+      return;
+    }
     impactMedium();
     navigatedRef.current = false;
     wantToJoinRef.current = true;
@@ -145,7 +164,7 @@ export default function HomeScreen() {
     } else {
       connect();
     }
-  }, [connectionStatus, joinQueue, connect]);
+  }, [isFriendFlowActive, isFriendsModalOpen, connectionStatus, joinQueue, connect]);
 
   useEffect(() => {
     if (
@@ -166,6 +185,47 @@ export default function HomeScreen() {
       disconnect();
     }
   }, [leaveQueue, connectionStatus, disconnect]);
+
+  const handleOpenFriends = useCallback(() => {
+    if (isSearching || isErrorState) return;
+    impactLight();
+    clearFriendRoomError();
+    setIsFriendsModalOpen(true);
+  }, [isSearching, isErrorState, clearFriendRoomError]);
+
+  const handleCreateFriendRoom = useCallback(() => {
+    impactMedium();
+    createFriendRoom();
+    setIsFriendsModalOpen(true);
+  }, [createFriendRoom]);
+
+  const handleJoinFriendRoom = useCallback(() => {
+    impactMedium();
+    joinFriendRoom(friendRoomInput);
+    setIsFriendsModalOpen(true);
+  }, [friendRoomInput, joinFriendRoom]);
+
+  const handleCloseFriendsModal = useCallback(() => {
+    impactLight();
+    leaveFriendRoom();
+    clearFriendRoomError();
+    setIsFriendsModalOpen(false);
+    setFriendRoomInput("");
+  }, [leaveFriendRoom, clearFriendRoomError]);
+
+  const handleFriendRoomInput = useCallback(
+    (value: string) => {
+      const next = value
+        .toUpperCase()
+        .replace(/[^A-Z0-9]/g, "")
+        .slice(0, ROOM_CODE_LENGTH);
+      if (friendRoomError) {
+        clearFriendRoomError();
+      }
+      setFriendRoomInput(next);
+    },
+    [friendRoomError, clearFriendRoomError],
+  );
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}> 
@@ -191,12 +251,14 @@ export default function HomeScreen() {
         <HomePrimaryActions
           colors={colors}
           isSearching={isSearching}
+          isFriendFlowActive={showFriendsModal}
           pulseStyle={pulseStyle}
           buttonAnimatedStyle={buttonAnimatedStyle}
           onOpenGallery={() => {
             impactLight();
             router.push("/gallery");
           }}
+          onOpenFriends={handleOpenFriends}
           onFindMatch={handleFindMatch}
           onPressIn={handlePressIn}
           onPressOut={handlePressOut}
@@ -216,6 +278,19 @@ export default function HomeScreen() {
           disconnect();
           setTimeout(() => handleFindMatch(), 100);
         }}
+      />
+
+      <FriendsMatchModal
+        visible={showFriendsModal}
+        colors={colors}
+        status={friendRoomStatus}
+        roomCode={friendRoomCode}
+        roomError={friendRoomError}
+        roomInput={friendRoomInput}
+        onRoomInputChange={handleFriendRoomInput}
+        onCreateRoom={handleCreateFriendRoom}
+        onJoinRoom={handleJoinFriendRoom}
+        onClose={handleCloseFriendsModal}
       />
     </View>
   );

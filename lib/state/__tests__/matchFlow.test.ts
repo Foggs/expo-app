@@ -19,6 +19,7 @@ describe("MatchFlow", () => {
         gameId: "game-1",
         playerRole: "player1",
         opponentName: "Alice",
+        matchType: "queue",
       });
       expect(m.currentStateId).toBe("matched");
       expect(m.model.gameId).toBe("game-1");
@@ -37,6 +38,23 @@ describe("MatchFlow", () => {
 
       collectEffects(m, { type: "GAME_COMPLETE_RECEIVED", gameId: "game-1" });
       expect(m.currentStateId).toBe("completed");
+    });
+  });
+
+  describe("Direct friend match path", () => {
+    it("idle can transition directly to matched on MATCH_FOUND", () => {
+      const m = createMatchMachine();
+      const result = collectEffects(m, {
+        type: "MATCH_FOUND",
+        gameId: "friend-1",
+        playerRole: "player2",
+        opponentName: "Riley",
+        matchType: "friend",
+      });
+
+      expect(m.currentStateId).toBe("matched");
+      expect(m.model.matchType).toBe("friend");
+      expect(result.effects.some((e) => e.type === "SET_CALLBACK_PAYLOAD")).toBe(true);
     });
   });
 
@@ -66,6 +84,7 @@ describe("MatchFlow", () => {
         gameId: "g1",
         playerRole: "player1",
         opponentName: "Bob",
+        matchType: "queue",
       });
       collectEffects(m, {
         type: "GAME_STATE_RECEIVED",
@@ -92,6 +111,7 @@ describe("MatchFlow", () => {
         gameId: "g2",
         playerRole: "player1",
         opponentName: "Alice",
+        matchType: "queue",
       });
       collectEffects(m2, {
         type: "GAME_STATE_RECEIVED",

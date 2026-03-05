@@ -38,6 +38,7 @@ function handleDisconnectFromAny(
         gameId: null,
         playerRole: null,
         opponentName: null,
+        matchType: null,
         queuePosition: 0,
         reconnectAttempt: 0,
         lastError: null,
@@ -53,12 +54,37 @@ export const idleState: MState = {
   id: "idle",
   enter: () => [],
   exit: () => [],
-  handle: (_model, event): MResult => {
+  handle: (model, event): MResult => {
     if (event.type === "FIND_MATCH_CLICKED") {
       return {
         nextStateId: "connecting",
-        modelPatch: { stateVersion: _model.stateVersion + 1 },
+        modelPatch: { stateVersion: model.stateVersion + 1 },
         effects: [{ type: "OPEN_SOCKET" }],
+      };
+    }
+    if (event.type === "MATCH_FOUND") {
+      return {
+        nextStateId: "matched",
+        modelPatch: {
+          gameId: event.gameId,
+          playerRole: event.playerRole,
+          opponentName: event.opponentName,
+          matchType: event.matchType,
+          queuePosition: 0,
+          stateVersion: model.stateVersion + 1,
+        },
+        effects: [
+          {
+            type: "SET_CALLBACK_PAYLOAD",
+            event: "matchFound",
+            payload: {
+              gameId: event.gameId,
+              playerRole: event.playerRole,
+              opponentName: event.opponentName,
+              matchType: event.matchType,
+            },
+          },
+        ],
       };
     }
     return null;
@@ -117,6 +143,7 @@ export const queueingState: MState = {
           gameId: event.gameId,
           playerRole: event.playerRole,
           opponentName: event.opponentName,
+          matchType: event.matchType,
           queuePosition: 0,
         },
         effects: [
@@ -127,6 +154,7 @@ export const queueingState: MState = {
               gameId: event.gameId,
               playerRole: event.playerRole,
               opponentName: event.opponentName,
+              matchType: event.matchType,
             },
           },
         ],
@@ -191,6 +219,7 @@ export const matchedState: MState = {
           gameId: null,
           playerRole: null,
           opponentName: null,
+          matchType: null,
         },
         effects: [{ type: "CLOSE_SOCKET" }],
       };
@@ -296,7 +325,7 @@ export const reconnectingState: MState = {
     if (event.type === "WS_OPENED") {
       return {
         nextStateId: "queueing",
-        modelPatch: { reconnectAttempt: 0, lastError: null, retryDelayMs: 0 },
+        modelPatch: { reconnectAttempt: 0, lastError: null, retryDelayMs: 0, matchType: null },
         effects: [{ type: "SEND_JOIN_QUEUE" }],
       };
     }
@@ -405,6 +434,7 @@ export const errorBackoffState: MState = {
           gameId: null,
           playerRole: null,
           opponentName: null,
+          matchType: null,
           queuePosition: 0,
           reconnectAttempt: 0,
           lastError: null,
@@ -456,6 +486,7 @@ export const INITIAL_MATCH_FLOW_MODEL: MatchFlowModel = {
   gameId: null,
   playerRole: null,
   opponentName: null,
+  matchType: null,
   queuePosition: 0,
   reconnectAttempt: 0,
   lastError: null,

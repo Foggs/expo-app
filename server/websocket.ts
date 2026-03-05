@@ -2,7 +2,13 @@ import { WebSocketServer, WebSocket } from "ws";
 import type { Server } from "http";
 import type { IncomingMessage } from "http";
 import { wsClientMessageSchema, type WsServerMessage, type WsClientMessage } from "@shared/schema";
+import {
+  ROOM_CODE_ALPHABET,
+  ROOM_CODE_LENGTH,
+  isValidRoomCode,
+} from "@shared/friendRoom";
 import { storage } from "./storage";
+import { randomInt } from "crypto";
 
 const MAX_MESSAGE_SIZE = 512 * 1024; // 512KB
 const HEARTBEAT_INTERVAL = 30_000;
@@ -12,6 +18,8 @@ const MATCHMAKING_TIMEOUT = 120_000; // 2 minutes
 const RATE_LIMIT_WINDOW = 60_000;
 const ROOM_CLEANUP_INTERVAL = 60_000;
 const ROOM_CLEANUP_DELAY = 120_000; // 2 minutes after completion
+const FRIEND_ROOM_TTL = 10 * 60_000; // 10 minutes
+const MAX_ROOM_CODE_ATTEMPTS = 25;
 
 interface PlayerConnection {
   ws: WebSocket;
@@ -19,6 +27,7 @@ interface PlayerConnection {
   playerName: string;
   gameId: string | null;
   playerRole: "player1" | "player2" | null;
+  friendRoomCode: string | null;
   isAlive: boolean;
   messageCount: number;
   rateLimitReset: number;
@@ -29,6 +38,7 @@ interface GameRoom {
   gameId: string;
   player1: PlayerConnection | null;
   player2: PlayerConnection | null;
+  matchType: "queue" | "friend";
   currentRound: number;
   currentPlayer: "player1" | "player2";
   totalRounds: number;
@@ -36,9 +46,18 @@ interface GameRoom {
   completedAt: number | null;
 }
 
+interface FriendRoom {
+  roomCode: string;
+  hostId: string;
+  guestId: string | null;
+  createdAt: number;
+  expiresAt: number;
+}
+
 const connections = new Map<string, PlayerConnection>();
 const matchmakingQueue: string[] = [];
 const gameRooms = new Map<string, GameRoom>();
+const friendRooms = new Map<string, FriendRoom>();
 let heartbeatTimer: ReturnType<typeof setInterval> | null = null;
 let matchmakingTimer: ReturnType<typeof setInterval> | null = null;
 let roomCleanupTimer: ReturnType<typeof setInterval> | null = null;
@@ -54,6 +73,24 @@ function generatePlayerName(): string {
   const noun = nouns[Math.floor(Math.random() * nouns.length)];
   const num = Math.floor(Math.random() * 100);
   return `${adj}${noun}${num}`;
+}
+
+function generateRoomCode(): string {
+  let code = "";
+  for (let i = 0; i < ROOM_CODE_LENGTH; i++) {
+    code += ROOM_CODE_ALPHABET[randomInt(ROOM_CODE_ALPHABET.length)];
+  }
+  return code;
+}
+
+function generateUniqueRoomCode(): string | null {
+  for (let i = 0; i < MAX_ROOM_CODE_ATTEMPTS; i++) {
+    const code = generateRoomCode();
+    if (!friendRooms.has(code)) {
+      return code;
+    }
+  }
+  return null;
 }
 
 function sendMessage(conn: PlayerConnection, message: WsServerMessage): void {
@@ -114,39 +151,185 @@ function removeFromQueue(connId: string): void {
   }
 }
 
+function getOpenConnection(connId: string | null | undefined): PlayerConnection | null {
+  if (!connId) return null;
+  const conn = connections.get(connId);
+  if (!conn || conn.ws.readyState !== WebSocket.OPEN) {
+    return null;
+  }
+  return conn;
+}
+
+function clearFriendRoomCode(conn: PlayerConnection, roomCode: string): void {
+  if (conn.friendRoomCode === roomCode) {
+    conn.friendRoomCode = null;
+  }
+}
+
+function removeFriendRoom(roomCode: string): void {
+  const room = friendRooms.get(roomCode);
+  if (!room) return;
+
+  const hostConn = connections.get(room.hostId);
+  if (hostConn) {
+    clearFriendRoomCode(hostConn, roomCode);
+  }
+
+  if (room.guestId) {
+    const guestConn = connections.get(room.guestId);
+    if (guestConn) {
+      clearFriendRoomCode(guestConn, roomCode);
+    }
+  }
+
+  friendRooms.delete(roomCode);
+}
+
+function leaveFriendRoom(conn: PlayerConnection, notifyOtherPlayer = true): void {
+  const roomCode = conn.friendRoomCode;
+  if (!roomCode) return;
+
+  conn.friendRoomCode = null;
+
+  const room = friendRooms.get(roomCode);
+  if (!room) return;
+
+  if (room.hostId === conn.id) {
+    if (room.guestId) {
+      const guestConn = connections.get(room.guestId);
+      if (guestConn) {
+        clearFriendRoomCode(guestConn, roomCode);
+        if (notifyOtherPlayer && guestConn.ws.readyState === WebSocket.OPEN) {
+          sendMessage(guestConn, { type: "room_error", message: "Host left the room." });
+        }
+      }
+    }
+    friendRooms.delete(roomCode);
+    return;
+  }
+
+  if (room.guestId === conn.id) {
+    room.guestId = null;
+    room.expiresAt = Date.now() + FRIEND_ROOM_TTL;
+
+    const hostConn = getOpenConnection(room.hostId);
+    if (notifyOtherPlayer && hostConn) {
+      sendMessage(hostConn, { type: "room_error", message: "Friend left the room." });
+    }
+    return;
+  }
+}
+
+function abandonGame(conn: PlayerConnection, notifyOtherPlayer = true): void {
+  if (!conn.gameId || !conn.playerRole) return;
+
+  const gameId = conn.gameId;
+  const playerRole = conn.playerRole;
+
+  conn.gameId = null;
+  conn.playerRole = null;
+
+  const room = gameRooms.get(gameId);
+  if (!room) return;
+
+  const otherRole = playerRole === "player1" ? "player2" : "player1";
+  const otherConn = room[otherRole];
+
+  room[playerRole] = null;
+
+  if (notifyOtherPlayer && otherConn) {
+    sendMessage(otherConn, { type: "opponent_disconnected" });
+  }
+
+  if (otherConn) {
+    otherConn.gameId = null;
+    otherConn.playerRole = null;
+    room[otherRole] = null;
+  }
+
+  if (room.status !== "completed" && room.status !== "abandoned") {
+    room.status = "abandoned";
+    room.completedAt = Date.now();
+    storage.updateGame(gameId, { status: "abandoned" }).catch((err) => {
+      console.error(`Failed to mark game ${gameId} as abandoned:`, err);
+    });
+  }
+
+  gameRooms.delete(gameId);
+}
+
 function cleanupConnection(connId: string): void {
   const conn = connections.get(connId);
   if (!conn) return;
 
   removeFromQueue(connId);
-
-  if (conn.gameId && conn.playerRole) {
-    const room = gameRooms.get(conn.gameId);
-    if (room) {
-      const otherRole = conn.playerRole === "player1" ? "player2" : "player1";
-      const otherConn = room[otherRole];
-
-      room[conn.playerRole] = null;
-
-      if (otherConn) {
-        sendMessage(otherConn, { type: "opponent_disconnected" });
-      }
-
-      if (room.status !== "completed") {
-        room.status = "abandoned";
-        room.completedAt = Date.now();
-        storage.updateGame(conn.gameId, { status: "abandoned" }).catch((err) => {
-          console.error(`Failed to mark game ${conn.gameId} as abandoned:`, err);
-        });
-      }
-
-      if (!room.player1 && !room.player2) {
-        gameRooms.delete(conn.gameId);
-      }
-    }
-  }
+  leaveFriendRoom(conn, true);
+  abandonGame(conn, true);
 
   connections.delete(connId);
+}
+
+async function startGameForPlayers(
+  player1: PlayerConnection,
+  player2: PlayerConnection,
+  matchType: "queue" | "friend",
+): Promise<string> {
+  removeFromQueue(player1.id);
+  removeFromQueue(player2.id);
+
+  const game = await storage.createGame();
+  const gameId = game.id;
+
+  const room: GameRoom = {
+    gameId,
+    player1,
+    player2,
+    matchType,
+    currentRound: 1,
+    currentPlayer: "player1",
+    totalRounds: 3,
+    status: "active",
+    completedAt: null,
+  };
+
+  gameRooms.set(gameId, room);
+
+  player1.gameId = gameId;
+  player1.playerRole = "player1";
+  player2.gameId = gameId;
+  player2.playerRole = "player2";
+
+  await storage.updateGame(gameId, { status: "active" });
+
+  sendMessage(player1, {
+    type: "match_found",
+    gameId,
+    playerRole: "player1",
+    opponentName: player2.playerName,
+    matchType,
+  });
+
+  sendMessage(player2, {
+    type: "match_found",
+    gameId,
+    playerRole: "player2",
+    opponentName: player1.playerName,
+    matchType,
+  });
+
+  const initialState: WsServerMessage = {
+    type: "game_state",
+    gameId,
+    currentRound: 1,
+    currentPlayer: "player1",
+    totalRounds: 3,
+    status: "active",
+  };
+
+  sendMessage(player1, initialState);
+  sendMessage(player2, initialState);
+
+  return gameId;
 }
 
 async function attemptMatchmaking(): Promise<void> {
@@ -154,77 +337,23 @@ async function attemptMatchmaking(): Promise<void> {
     const p1Id = matchmakingQueue.shift()!;
     const p2Id = matchmakingQueue.shift()!;
 
-    const p1 = connections.get(p1Id);
-    const p2 = connections.get(p2Id);
+    const p1 = getOpenConnection(p1Id);
+    const p2 = getOpenConnection(p2Id);
 
-    if (!p1 || p1.ws.readyState !== WebSocket.OPEN) {
-      if (p2 && p2.ws.readyState === WebSocket.OPEN) {
+    if (!p1) {
+      if (p2) {
         matchmakingQueue.unshift(p2Id);
       }
       continue;
     }
 
-    if (!p2 || p2.ws.readyState !== WebSocket.OPEN) {
+    if (!p2) {
       matchmakingQueue.unshift(p1Id);
       continue;
     }
 
     try {
-      const game = await storage.createGame();
-      const gameId = game.id;
-
-      const room: GameRoom = {
-        gameId,
-        player1: p1,
-        player2: p2,
-        currentRound: 1,
-        currentPlayer: "player1",
-        totalRounds: 3,
-        status: "active",
-        completedAt: null,
-      };
-
-      gameRooms.set(gameId, room);
-
-      p1.gameId = gameId;
-      p1.playerRole = "player1";
-      p2.gameId = gameId;
-      p2.playerRole = "player2";
-
-      await storage.updateGame(gameId, { status: "active" });
-
-      sendMessage(p1, {
-        type: "match_found",
-        gameId,
-        playerRole: "player1",
-        opponentName: p2.playerName,
-      });
-
-      sendMessage(p2, {
-        type: "match_found",
-        gameId,
-        playerRole: "player2",
-        opponentName: p1.playerName,
-      });
-
-      sendMessage(p1, {
-        type: "game_state",
-        gameId,
-        currentRound: 1,
-        currentPlayer: "player1",
-        totalRounds: 3,
-        status: "active",
-      });
-
-      sendMessage(p2, {
-        type: "game_state",
-        gameId,
-        currentRound: 1,
-        currentPlayer: "player1",
-        totalRounds: 3,
-        status: "active",
-      });
-
+      const gameId = await startGameForPlayers(p1, p2, "queue");
       console.log(`Match created: ${p1.playerName} vs ${p2.playerName} (game ${gameId})`);
     } catch (err) {
       console.error("Failed to create match:", err);
@@ -232,6 +361,105 @@ async function attemptMatchmaking(): Promise<void> {
       matchmakingQueue.unshift(p2Id);
     }
   }
+}
+
+function handleCreateRoom(conn: PlayerConnection): void {
+  if (conn.gameId) {
+    sendMessage(conn, { type: "room_error", message: "Already in a game." });
+    return;
+  }
+
+  removeFromQueue(conn.id);
+  leaveFriendRoom(conn, true);
+
+  const roomCode = generateUniqueRoomCode();
+  if (!roomCode) {
+    sendMessage(conn, { type: "room_error", message: "Could not create room. Please try again." });
+    return;
+  }
+
+  const now = Date.now();
+  const room: FriendRoom = {
+    roomCode,
+    hostId: conn.id,
+    guestId: null,
+    createdAt: now,
+    expiresAt: now + FRIEND_ROOM_TTL,
+  };
+
+  friendRooms.set(roomCode, room);
+  conn.friendRoomCode = roomCode;
+
+  sendMessage(conn, { type: "room_created", roomCode });
+}
+
+async function handleJoinRoom(conn: PlayerConnection, roomCode: string): Promise<void> {
+  if (conn.gameId) {
+    sendMessage(conn, { type: "room_error", message: "Already in a game." });
+    return;
+  }
+
+  if (!isValidRoomCode(roomCode)) {
+    sendMessage(conn, { type: "room_error", message: "Invalid room code." });
+    return;
+  }
+
+  removeFromQueue(conn.id);
+  leaveFriendRoom(conn, true);
+
+  const room = friendRooms.get(roomCode);
+  if (!room) {
+    sendMessage(conn, { type: "room_error", message: "Room not found." });
+    return;
+  }
+
+  if (room.hostId === conn.id) {
+    sendMessage(conn, { type: "room_error", message: "You cannot join your own room." });
+    return;
+  }
+
+  if (Date.now() > room.expiresAt) {
+    removeFriendRoom(roomCode);
+    sendMessage(conn, { type: "room_error", message: "Room has expired." });
+    return;
+  }
+
+  const hostConn = getOpenConnection(room.hostId);
+  if (!hostConn) {
+    removeFriendRoom(roomCode);
+    sendMessage(conn, { type: "room_error", message: "Host is no longer available." });
+    return;
+  }
+
+  if (room.guestId && room.guestId !== conn.id) {
+    sendMessage(conn, { type: "room_error", message: "Room is full." });
+    return;
+  }
+
+  room.guestId = conn.id;
+  room.expiresAt = Date.now() + FRIEND_ROOM_TTL;
+  conn.friendRoomCode = roomCode;
+
+  sendMessage(conn, { type: "room_joined", roomCode });
+  sendMessage(hostConn, { type: "room_joined", roomCode });
+
+  try {
+    const gameId = await startGameForPlayers(hostConn, conn, "friend");
+    console.log(`Friend match created in room ${roomCode} (game ${gameId})`);
+    removeFriendRoom(roomCode);
+  } catch (err) {
+    room.guestId = null;
+    conn.friendRoomCode = null;
+    room.expiresAt = Date.now() + FRIEND_ROOM_TTL;
+    console.error(`Failed to start friend room ${roomCode}:`, err);
+    sendMessage(conn, { type: "room_error", message: "Failed to start room match." });
+    sendMessage(hostConn, { type: "room_error", message: "Failed to start room match." });
+  }
+}
+
+function handleLeaveRoom(conn: PlayerConnection): void {
+  leaveFriendRoom(conn, true);
+  abandonGame(conn, true);
 }
 
 async function handleSubmitTurn(conn: PlayerConnection, strokes: unknown[]): Promise<void> {
@@ -403,6 +631,10 @@ function handleMessage(conn: PlayerConnection, data: Buffer | ArrayBuffer | Buff
         sendMessage(conn, { type: "error", message: "Already in a game", code: "ALREADY_IN_GAME" });
         return;
       }
+      if (conn.friendRoomCode) {
+        sendMessage(conn, { type: "room_error", message: "Leave your friend room before queueing." });
+        return;
+      }
       if (matchmakingQueue.includes(conn.id)) {
         sendMessage(conn, { type: "error", message: "Already in queue", code: "ALREADY_IN_QUEUE" });
         return;
@@ -417,6 +649,18 @@ function handleMessage(conn: PlayerConnection, data: Buffer | ArrayBuffer | Buff
     case "leave_queue":
       removeFromQueue(conn.id);
       sendMessage(conn, { type: "queue_left" });
+      break;
+
+    case "create_room":
+      handleCreateRoom(conn);
+      break;
+
+    case "join_room":
+      handleJoinRoom(conn, msg.roomCode);
+      break;
+
+    case "leave_room":
+      handleLeaveRoom(conn);
       break;
 
     case "draw_stroke": {
@@ -559,9 +803,41 @@ export function setupWebSocket(server: Server): void {
         gameRooms.delete(gameId);
       }
     }
+
+    for (const [roomCode, room] of friendRooms) {
+      const hostConn = connections.get(room.hostId);
+      const hostAlive = Boolean(hostConn && hostConn.ws.readyState === WebSocket.OPEN);
+      const guestConn = room.guestId ? connections.get(room.guestId) : null;
+      const guestAlive = Boolean(guestConn && guestConn.ws.readyState === WebSocket.OPEN);
+
+      if (!hostAlive || now > room.expiresAt) {
+        if (hostConn) {
+          clearFriendRoomCode(hostConn, roomCode);
+        }
+        if (guestConn) {
+          clearFriendRoomCode(guestConn, roomCode);
+          if (guestAlive) {
+            sendMessage(guestConn, { type: "room_error", message: "Room expired or was closed by host." });
+          }
+        }
+        friendRooms.delete(roomCode);
+        continue;
+      }
+
+      if (room.guestId && !guestAlive) {
+        if (guestConn) {
+          clearFriendRoomCode(guestConn, roomCode);
+        }
+        room.guestId = null;
+        room.expiresAt = now + FRIEND_ROOM_TTL;
+        if (hostConn && hostConn.ws.readyState === WebSocket.OPEN) {
+          sendMessage(hostConn, { type: "room_error", message: "Friend disconnected from room." });
+        }
+      }
+    }
   }, ROOM_CLEANUP_INTERVAL);
 
-  wss.on("connection", (ws: WebSocket, req: IncomingMessage) => {
+  wss.on("connection", (ws: WebSocket) => {
     const connId = generateId();
     const conn: PlayerConnection = {
       ws,
@@ -569,6 +845,7 @@ export function setupWebSocket(server: Server): void {
       playerName: generatePlayerName(),
       gameId: null,
       playerRole: null,
+      friendRoomCode: null,
       isAlive: true,
       messageCount: 0,
       rateLimitReset: Date.now() + RATE_LIMIT_WINDOW,

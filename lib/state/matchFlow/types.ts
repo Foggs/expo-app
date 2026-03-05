@@ -1,5 +1,7 @@
 import type { FlowError } from "../errors";
 
+export type MatchType = "queue" | "friend";
+
 export type MatchFlowStateId =
   | "idle"
   | "connecting"
@@ -18,6 +20,7 @@ export interface MatchFlowModel {
   gameId: string | null;
   playerRole: "player1" | "player2" | null;
   opponentName: string | null;
+  matchType: MatchType | null;
   queuePosition: number;
   reconnectAttempt: number;
   lastError: FlowError | null;
@@ -35,6 +38,7 @@ export type MatchFlowEvent =
       gameId: string;
       playerRole: "player1" | "player2";
       opponentName: string;
+      matchType: MatchType;
     }
   | {
       type: "GAME_STATE_RECEIVED";
