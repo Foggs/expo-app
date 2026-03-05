@@ -65,7 +65,7 @@ export default function HomeScreen() {
     };
   }, []);
 
-  const isSearching = ws.matchStatus === "searching" || ws.matchStatus === "matched";
+  const isSearching = ws.matchStatus === "queueing" || ws.matchStatus === "matched";
 
   React.useEffect(() => {
     pulseOpacity.value = withRepeat(
