@@ -100,6 +100,9 @@ const wsServerMessageSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("opponent_clear") }),
   z.object({ type: z.literal("opponent_undo") }),
   z.object({ type: z.literal("opponent_disconnected") }),
+  z.object({ type: z.literal("room_created"), roomCode: z.string() }),
+  z.object({ type: z.literal("room_joined"), roomCode: z.string() }),
+  z.object({ type: z.literal("room_error"), message: z.string() }),
   z.object({
     type: z.literal("error"),
     message: z.string(),

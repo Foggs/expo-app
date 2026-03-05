@@ -108,6 +108,16 @@ export const wsClientMessageSchema = z.discriminatedUnion("type", [
     type: z.literal("leave_queue"),
   }),
   z.object({
+    type: z.literal("create_room"),
+  }),
+  z.object({
+    type: z.literal("join_room"),
+    roomCode: z.string().min(4).max(4),
+  }),
+  z.object({
+    type: z.literal("leave_room"),
+  }),
+  z.object({
     type: z.literal("draw_stroke"),
     stroke: z.object({
       id: z.string().max(50),
@@ -145,6 +155,9 @@ export type WsServerMessage =
   | { type: "opponent_stroke"; stroke: { id: string; path: string; color: string; strokeWidth: number } }
   | { type: "opponent_clear" }
   | { type: "opponent_undo" }
+  | { type: "room_created"; roomCode: string }
+  | { type: "room_joined"; roomCode: string }
+  | { type: "room_error"; message: string }
   | { type: "error"; message: string; code?: string }
   | { type: "pong" };
 
