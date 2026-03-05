@@ -256,9 +256,13 @@ export default function GameScreen() {
           );
         }
       },
+      onRoundComplete: () => {
+        clearSubmitRetry();
+        setIsSubmitting(false);
+      },
       onError: (message, code) => {
         console.warn("Game WebSocket error:", message, code);
-        if (code === "NOT_YOUR_TURN" || code === "GAME_COMPLETED") {
+        if (code === "NOT_YOUR_TURN" || code === "GAME_COMPLETED" || code === "RATE_LIMITED") {
           clearSubmitRetry();
           setIsSubmitting(false);
         }
