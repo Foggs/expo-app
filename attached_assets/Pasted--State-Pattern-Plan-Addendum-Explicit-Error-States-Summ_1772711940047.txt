@@ -1,0 +1,73 @@
+# State Pattern Plan Addendum: Explicit Error States
+
+## Summary
+Add first-class error states to both machines so all failures are deterministic, typed, and recoverable/fatal by policy. This closes the remaining gap in the previous plan.
+
+## Error Model (shared)
+1. Add `FlowError` type with fields: `code`, `source`, `retryable`, `fatal`, `message`, `stateVersion`, `occurredAt`.
+2. Add shared event `ERROR_RAISED` carrying `FlowError`.
+3. Add error classifier that maps websocket/server/runtime errors to one of: `recoverable`, `backoff`, `fatal`, `validation`, `security`.
+4. Add invariant: every non-success path must emit either a terminal state transition or a retry schedule, never silent no-op.
+
+## MatchFlowMachine explicit error states
+1. Add states: `error_recoverable`, `error_backoff`, `error_fatal`.
+2. Transition rules:
+3. From `connecting|queueing|matched|reconnecting|playing`, `ERROR_RAISED(retryable=true,fatal=false)` -> `error_recoverable`.
+4. From `error_recoverable`, if policy says delayed retry -> `error_backoff`; else immediate retry -> `reconnecting`.
+5. From any state, `ERROR_RAISED(fatal=true)` -> `error_fatal`.
+6. From `error_backoff`, timer expiry -> `reconnecting`; user cancel -> `idle`.
+7. From `error_fatal`, only allowed exits are `DISCONNECT_REQUESTED -> idle` or app restart.
+8. Enter/exit effects:
+9. `error_recoverable`: stop live actions, keep session metadata, show reconnecting UI.
+10. `error_backoff`: schedule bounded retry timer with jitter.
+11. `error_fatal`: clear tokens/session, close socket, surface actionable message, block auto-retry.
+
+## TurnFlowMachine explicit error states
+1. Add states: `submit_retrying`, `submit_failed`, `sync_error_fatal`.
+2. Transition rules:
+3. `submitting|awaiting_ack + ERROR_RAISED(retryable=true)` -> `submit_retrying`.
+4. `submit_retrying + RETRY_BUDGET_REMAINING` -> `awaiting_ack` with same `submissionId`.
+5. `submit_retrying + RETRY_BUDGET_EXHAUSTED` -> `submit_failed`.
+6. Any active turn state + `ERROR_RAISED(fatal=true)` -> `sync_error_fatal`.
+7. `submit_failed` exits only via `USER_RETRY_SUBMIT` or `SERVER_STATE_RESYNC`.
+8. `sync_error_fatal` exits only via `NAVIGATE_HOME`.
+9. Enter/exit effects:
+10. `submit_retrying`: pause drawing input, keep local snapshot immutable, run bounded retry.
+11. `submit_failed`: stop retry timers, present retry/exit actions, preserve unsent payload.
+12. `sync_error_fatal`: stop all timers/listeners and force safe teardown.
+
+## Error code policy (decision-complete)
+1. Recoverable: transient close, timeout, temporary network loss, `SUBMIT_FAILED` without protocol violation.
+2. Backoff-required: repeated reconnect failures, rate limiting, server overload.
+3. Fatal: `SESSION_EXPIRED`, `SESSION_REPLAYED`, auth/security violation, schema mismatch, impossible stateVersion regression.
+4. Validation: malformed inbound/outbound payload -> escalate to fatal and log redacted diagnostics.
+5. Security: origin/token/replay violations -> fatal, immediate disconnect, no auto-retry.
+
+## API / schema additions
+1. Add optional server message `flow_error` with normalized fields matching `FlowError`.
+2. Keep existing `error` message for compatibility; adapter converts to `FlowError`.
+3. Add client-visible selector fields in context: `lastError`, `errorState`, `canRetry`.
+4. Keep legacy methods as wrappers; wrappers dispatch typed error events on failure.
+
+## Race/leak/security guarantees for error states
+1. Retry timers are keyed by machine state and must be disposed on every state exit.
+2. Only one active retry timer per machine instance.
+3. Error transitions are queued through the same single FIFO dispatcher as normal events.
+4. Fatal states always clear reconnect/submit timers and unsubscribe callbacks.
+5. All error telemetry redacts tokens and payload bodies.
+
+## Tests to add
+1. Match flow enters `error_recoverable` on transient ws close and returns to `reconnecting`.
+2. Match flow enters `error_backoff` after repeated failures and honors retry cap.
+3. Match flow enters `error_fatal` on `SESSION_EXPIRED` and never auto-retries.
+4. Turn flow enters `submit_retrying` on transient send fail and reuses same `submissionId`.
+5. Turn flow enters `submit_failed` after retry budget exhaustion.
+6. Turn flow enters `sync_error_fatal` on stateVersion/security fatal errors.
+7. Leak tests: no active retry timers/listeners after leaving any error state.
+8. Race tests: concurrent `ERROR_RAISED` + normal events produce deterministic state outcome.
+
+## Assumptions and defaults
+1. Retry cap defaults: submit retries `5`, reconnect retries `8` then `error_fatal`.
+2. Backoff uses exponential delay with jitter and hard max delay.
+3. Fatal security/validation errors are non-retryable in-session.
+4. UX remains behavior-parity except explicit error UI/actions.
