@@ -177,5 +177,16 @@ Preferred communication style: Simple, everyday language.
 - Get Ready countdown: Heavy impact on each tick
 - Button interactions: Light/Medium impact on native platforms only
 
+### Private Rooms (Play with Friend)
+- **Home Screen UI**: "Play with Friend" button opens a modal with "Create Room" and "Join Room" options
+- **Create Room**: Generates a 4-letter room code (A-Z, excluding I and O), shows it to the host with a Copy button, waits for friend
+- **Join Room**: Text input for entering a 4-letter code, validates and joins the room
+- **Server Logic**: `privateRooms` Map in `server/websocket.ts` tracks rooms by code, `startGameBetween()` reusable function starts games for both random and private matches
+- **Room Expiry**: Private rooms auto-expire after 5 minutes if no one joins
+- **Cleanup**: Rooms cleaned up on disconnect, leave, or expiry; other player notified
+- **WebSocket Messages**: Client sends `create_room`, `join_room` (with roomCode), `leave_room`; Server responds with `room_created` (roomCode), `room_joined` (roomCode), `room_error` (message)
+- **Context State**: `roomCode` state, `MatchStatus` values `"hosting"` and `"joining"`, methods `createRoom()`, `joinRoom()`, `leaveRoom()`
+- **Dependency**: expo-clipboard (~8.0.8) for copy-to-clipboard functionality
+
 ### Future Roadmap
-- Private game rooms (create/join with room codes)
+- Themed drawing prompts
