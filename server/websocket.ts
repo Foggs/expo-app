@@ -12,6 +12,7 @@ const MATCHMAKING_TIMEOUT = 120_000; // 2 minutes
 const RATE_LIMIT_WINDOW = 60_000;
 const ROOM_CLEANUP_INTERVAL = 60_000;
 const ROOM_CLEANUP_DELAY = 120_000; // 2 minutes after completion
+const PRIVATE_ROOM_EXPIRY = 300_000; // 5 minutes
 
 interface PlayerConnection {
   ws: WebSocket;
@@ -36,9 +37,17 @@ interface GameRoom {
   completedAt: number | null;
 }
 
+interface PrivateRoom {
+  roomCode: string;
+  hostId: string;
+  guestId: string | null;
+  createdAt: number;
+}
+
 const connections = new Map<string, PlayerConnection>();
 const matchmakingQueue: string[] = [];
 const gameRooms = new Map<string, GameRoom>();
+const privateRooms = new Map<string, PrivateRoom>();
 let heartbeatTimer: ReturnType<typeof setInterval> | null = null;
 let matchmakingTimer: ReturnType<typeof setInterval> | null = null;
 let roomCleanupTimer: ReturnType<typeof setInterval> | null = null;
@@ -114,11 +123,113 @@ function removeFromQueue(connId: string): void {
   }
 }
 
+function generateRoomCode(): string {
+  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ";
+  let code: string;
+  do {
+    code = "";
+    for (let i = 0; i < 4; i++) {
+      code += chars[Math.floor(Math.random() * chars.length)];
+    }
+  } while (privateRooms.has(code));
+  return code;
+}
+
+function removeFromPrivateRooms(connId: string): string | null {
+  for (const [code, room] of privateRooms) {
+    if (room.hostId === connId || room.guestId === connId) {
+      privateRooms.delete(code);
+      return code;
+    }
+  }
+  return null;
+}
+
+function findPrivateRoomByConnId(connId: string): PrivateRoom | null {
+  for (const room of privateRooms.values()) {
+    if (room.hostId === connId || room.guestId === connId) {
+      return room;
+    }
+  }
+  return null;
+}
+
+async function startGameBetween(p1: PlayerConnection, p2: PlayerConnection): Promise<void> {
+  const game = await storage.createGame();
+  const gameId = game.id;
+
+  const room: GameRoom = {
+    gameId,
+    player1: p1,
+    player2: p2,
+    currentRound: 1,
+    currentPlayer: "player1",
+    totalRounds: 3,
+    status: "active",
+    completedAt: null,
+  };
+
+  gameRooms.set(gameId, room);
+
+  p1.gameId = gameId;
+  p1.playerRole = "player1";
+  p2.gameId = gameId;
+  p2.playerRole = "player2";
+
+  await storage.updateGame(gameId, { status: "active" });
+
+  sendMessage(p1, {
+    type: "match_found",
+    gameId,
+    playerRole: "player1",
+    opponentName: p2.playerName,
+  });
+
+  sendMessage(p2, {
+    type: "match_found",
+    gameId,
+    playerRole: "player2",
+    opponentName: p1.playerName,
+  });
+
+  sendMessage(p1, {
+    type: "game_state",
+    gameId,
+    currentRound: 1,
+    currentPlayer: "player1",
+    totalRounds: 3,
+    status: "active",
+  });
+
+  sendMessage(p2, {
+    type: "game_state",
+    gameId,
+    currentRound: 1,
+    currentPlayer: "player1",
+    totalRounds: 3,
+    status: "active",
+  });
+
+  console.log(`Match created: ${p1.playerName} vs ${p2.playerName} (game ${gameId})`);
+}
+
 function cleanupConnection(connId: string): void {
   const conn = connections.get(connId);
   if (!conn) return;
 
   removeFromQueue(connId);
+
+  const privateRoom = findPrivateRoomByConnId(connId);
+  if (privateRoom) {
+    const otherConnId = privateRoom.hostId === connId ? privateRoom.guestId : privateRoom.hostId;
+    if (otherConnId) {
+      const otherConn = connections.get(otherConnId);
+      if (otherConn) {
+        sendMessage(otherConn, { type: "room_error", message: "Other player left the room" });
+      }
+    }
+    privateRooms.delete(privateRoom.roomCode);
+  }
 
   if (conn.gameId && conn.playerRole) {
     const room = gameRooms.get(conn.gameId);
@@ -170,62 +281,7 @@ async function attemptMatchmaking(): Promise<void> {
     }
 
     try {
-      const game = await storage.createGame();
-      const gameId = game.id;
-
-      const room: GameRoom = {
-        gameId,
-        player1: p1,
-        player2: p2,
-        currentRound: 1,
-        currentPlayer: "player1",
-        totalRounds: 3,
-        status: "active",
-        completedAt: null,
-      };
-
-      gameRooms.set(gameId, room);
-
-      p1.gameId = gameId;
-      p1.playerRole = "player1";
-      p2.gameId = gameId;
-      p2.playerRole = "player2";
-
-      await storage.updateGame(gameId, { status: "active" });
-
-      sendMessage(p1, {
-        type: "match_found",
-        gameId,
-        playerRole: "player1",
-        opponentName: p2.playerName,
-      });
-
-      sendMessage(p2, {
-        type: "match_found",
-        gameId,
-        playerRole: "player2",
-        opponentName: p1.playerName,
-      });
-
-      sendMessage(p1, {
-        type: "game_state",
-        gameId,
-        currentRound: 1,
-        currentPlayer: "player1",
-        totalRounds: 3,
-        status: "active",
-      });
-
-      sendMessage(p2, {
-        type: "game_state",
-        gameId,
-        currentRound: 1,
-        currentPlayer: "player1",
-        totalRounds: 3,
-        status: "active",
-      });
-
-      console.log(`Match created: ${p1.playerName} vs ${p2.playerName} (game ${gameId})`);
+      await startGameBetween(p1, p2);
     } catch (err) {
       console.error("Failed to create match:", err);
       matchmakingQueue.unshift(p1Id);
@@ -354,7 +410,7 @@ async function handleSubmitTurn(conn: PlayerConnection, strokes: unknown[]): Pro
   }
 }
 
-function handleMessage(conn: PlayerConnection, data: Buffer | ArrayBuffer | Buffer[]): void {
+async function handleMessage(conn: PlayerConnection, data: Buffer | ArrayBuffer | Buffer[]): Promise<void> {
   if (isRateLimited(conn)) {
     sendMessage(conn, { type: "error", message: "Rate limited, slow down", code: "RATE_LIMITED" });
     return;
@@ -418,6 +474,90 @@ function handleMessage(conn: PlayerConnection, data: Buffer | ArrayBuffer | Buff
       removeFromQueue(conn.id);
       sendMessage(conn, { type: "queue_left" });
       break;
+
+    case "create_room": {
+      if (conn.gameId) {
+        sendMessage(conn, { type: "room_error", message: "Already in a game" });
+        break;
+      }
+      if (findPrivateRoomByConnId(conn.id)) {
+        sendMessage(conn, { type: "room_error", message: "Already in a room" });
+        break;
+      }
+      removeFromQueue(conn.id);
+      const roomCode = generateRoomCode();
+      const newRoom: PrivateRoom = {
+        roomCode,
+        hostId: conn.id,
+        guestId: null,
+        createdAt: Date.now(),
+      };
+      privateRooms.set(roomCode, newRoom);
+      sendMessage(conn, { type: "room_created", roomCode });
+      console.log(`${conn.playerName} created private room ${roomCode}`);
+      break;
+    }
+
+    case "join_room": {
+      if (conn.gameId) {
+        sendMessage(conn, { type: "room_error", message: "Already in a game" });
+        break;
+      }
+      if (findPrivateRoomByConnId(conn.id)) {
+        sendMessage(conn, { type: "room_error", message: "Already in a room" });
+        break;
+      }
+      const code = msg.roomCode.toUpperCase();
+      const existingRoom = privateRooms.get(code);
+      if (!existingRoom) {
+        sendMessage(conn, { type: "room_error", message: "Room not found. Check the code and try again." });
+        break;
+      }
+      if (existingRoom.hostId === conn.id) {
+        sendMessage(conn, { type: "room_error", message: "You can't join your own room" });
+        break;
+      }
+      if (existingRoom.guestId) {
+        sendMessage(conn, { type: "room_error", message: "Room is full" });
+        break;
+      }
+      const host = connections.get(existingRoom.hostId);
+      if (!host || host.ws.readyState !== WebSocket.OPEN) {
+        privateRooms.delete(code);
+        sendMessage(conn, { type: "room_error", message: "Room is no longer available" });
+        break;
+      }
+      removeFromQueue(conn.id);
+      existingRoom.guestId = conn.id;
+      sendMessage(conn, { type: "room_joined", roomCode: code });
+      privateRooms.delete(code);
+      try {
+        await startGameBetween(host, conn);
+        console.log(`${conn.playerName} joined private room ${code}, game starting`);
+      } catch (err) {
+        console.error(`Failed to start private game for room ${code}:`, err);
+        sendMessage(conn, { type: "room_error", message: "Failed to start game" });
+        sendMessage(host, { type: "room_error", message: "Failed to start game" });
+      }
+      break;
+    }
+
+    case "leave_room": {
+      const leftRoom = findPrivateRoomByConnId(conn.id);
+      if (!leftRoom) {
+        break;
+      }
+      const otherConnId = leftRoom.hostId === conn.id ? leftRoom.guestId : leftRoom.hostId;
+      if (otherConnId) {
+        const otherConn = connections.get(otherConnId);
+        if (otherConn) {
+          sendMessage(otherConn, { type: "room_error", message: "Other player left the room" });
+        }
+      }
+      privateRooms.delete(leftRoom.roomCode);
+      console.log(`${conn.playerName} left private room ${leftRoom.roomCode}`);
+      break;
+    }
 
     case "draw_stroke": {
       if (!conn.gameId || !conn.playerRole) {
@@ -486,7 +626,7 @@ function handleMessage(conn: PlayerConnection, data: Buffer | ArrayBuffer | Buff
     }
 
     case "submit_turn":
-      handleSubmitTurn(conn, msg.strokes);
+      await handleSubmitTurn(conn, msg.strokes);
       break;
   }
 }
@@ -557,6 +697,16 @@ export function setupWebSocket(server: Server): void {
           room.player2.playerRole = null;
         }
         gameRooms.delete(gameId);
+      }
+    }
+
+    for (const [code, pRoom] of privateRooms) {
+      if (now - pRoom.createdAt > PRIVATE_ROOM_EXPIRY) {
+        const hostConn = connections.get(pRoom.hostId);
+        if (hostConn) {
+          sendMessage(hostConn, { type: "room_error", message: "Room expired" });
+        }
+        privateRooms.delete(code);
       }
     }
   }, ROOM_CLEANUP_INTERVAL);
