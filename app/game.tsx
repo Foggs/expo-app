@@ -628,7 +628,7 @@ export default function GameScreen() {
         )}
       </View>
 
-      <View style={styles.canvasContainer} accessible={true} accessibilityLabel={isMyTurn ? "Drawing canvas. Touch and drag to draw." : "Opponent's drawing canvas. View only."}>
+      <View style={styles.canvasContainer} accessibilityLabel={isMyTurn ? "Drawing canvas. Touch and drag to draw." : "Opponent's drawing canvas. View only."}>
         <DrawingCanvas
           ref={canvasRef}
           strokeColor={activeColor}
