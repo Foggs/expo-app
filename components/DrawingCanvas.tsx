@@ -1,4 +1,10 @@
-import React, { useRef, useCallback, useImperativeHandle, forwardRef } from "react";
+import React, {
+  useRef,
+  useCallback,
+  useImperativeHandle,
+  forwardRef,
+  useEffect,
+} from "react";
 import {
   View,
   StyleSheet,
@@ -55,6 +61,7 @@ const DrawingCanvas = forwardRef<DrawingCanvasRef, DrawingCanvasProps>(
     const onStrokesChangeRef = useRef(onStrokesChange);
     const onStrokeCompleteRef = useRef(onStrokeComplete);
     const disabledRef = useRef(disabled);
+    const prevDisabledRef = useRef<boolean | null>(null);
 
     strokeColorRef.current = strokeColor;
     strokeWidthRef.current = strokeWidth;
@@ -62,6 +69,13 @@ const DrawingCanvas = forwardRef<DrawingCanvasRef, DrawingCanvasProps>(
     onStrokesChangeRef.current = onStrokesChange;
     onStrokeCompleteRef.current = onStrokeComplete;
     disabledRef.current = disabled;
+
+    useEffect(() => {
+      if (!__DEV__) return;
+      if (prevDisabledRef.current === disabled) return;
+      prevDisabledRef.current = disabled;
+      console.log(`[DrawingCanvas] disabled=${disabled}`);
+    }, [disabled]);
 
     const handleLayout = useCallback((event: LayoutChangeEvent) => {
       const { width, height } = event.nativeEvent.layout;
@@ -82,9 +96,14 @@ const DrawingCanvas = forwardRef<DrawingCanvasRef, DrawingCanvasProps>(
     const panResponder = useRef(
       PanResponder.create({
         onStartShouldSetPanResponder: () => !disabledRef.current,
+        onStartShouldSetPanResponderCapture: () => !disabledRef.current,
         onMoveShouldSetPanResponder: () => !disabledRef.current,
+        onMoveShouldSetPanResponderCapture: () => !disabledRef.current,
         onPanResponderGrant: (event: GestureResponderEvent) => {
           if (disabledRef.current) return;
+          if (__DEV__) {
+            console.log("[DrawingCanvas] pan responder granted");
+          }
           const point = getPoint(event);
           currentStrokeIdRef.current = generateId();
           currentPathRef.current = `M${point.x.toFixed(2)},${point.y.toFixed(2)}`;
@@ -166,30 +185,32 @@ const DrawingCanvas = forwardRef<DrawingCanvasRef, DrawingCanvasProps>(
         onLayout={handleLayout}
         {...panResponder.panHandlers}
       >
-        <Svg width="100%" height="100%" style={[StyleSheet.absoluteFill, { pointerEvents: "none" }]}>
-          {backgroundStrokes.map((stroke) => (
-            <Path
-              key={`bg-${stroke.id}`}
-              d={stroke.path}
-              stroke={stroke.color}
-              strokeWidth={stroke.strokeWidth}
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              fill="none"
-            />
-          ))}
-          {strokes.map((stroke) => (
-            <Path
-              key={stroke.id}
-              d={stroke.path}
-              stroke={stroke.color}
-              strokeWidth={stroke.strokeWidth}
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              fill="none"
-            />
-          ))}
-        </Svg>
+        <View pointerEvents="none" style={StyleSheet.absoluteFill}>
+          <Svg width="100%" height="100%">
+            {backgroundStrokes.map((stroke) => (
+              <Path
+                key={`bg-${stroke.id}`}
+                d={stroke.path}
+                stroke={stroke.color}
+                strokeWidth={stroke.strokeWidth}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                fill="none"
+              />
+            ))}
+            {strokes.map((stroke) => (
+              <Path
+                key={stroke.id}
+                d={stroke.path}
+                stroke={stroke.color}
+                strokeWidth={stroke.strokeWidth}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                fill="none"
+              />
+            ))}
+          </Svg>
+        </View>
       </View>
     );
   }
