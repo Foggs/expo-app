@@ -3,6 +3,7 @@ import { router, useLocalSearchParams } from "expo-router";
 import * as Haptics from "expo-haptics";
 import React, { useRef, useState, useCallback, useEffect } from "react";
 import {
+  ActivityIndicator,
   Modal,
   Platform,
   Pressable,
@@ -679,6 +680,88 @@ export default function GameScreen() {
           </Animated.View>
         </View>
       </Modal>
+
+      {turnFlow.turnState === "submit_retrying" && (
+        <View style={styles.retryingBanner} pointerEvents="none">
+          <View style={styles.retryingContent}>
+            <ActivityIndicator size="small" color="#fff" />
+            <Text style={styles.retryingText}>Retrying...</Text>
+          </View>
+        </View>
+      )}
+
+      <Modal
+        visible={turnFlow.turnState === "submit_failed"}
+        transparent
+        animationType="fade"
+        statusBarTranslucent
+      >
+        <View style={styles.errorOverlay}>
+          <View style={[styles.errorModal, { backgroundColor: colors.card }]}>
+            <Ionicons name="alert-circle" size={40} color={colors.error} />
+            <Text style={[styles.errorTitle, { color: colors.text }]}>
+              Submission Failed
+            </Text>
+            <Text style={[styles.errorMessage, { color: colors.textSecondary }]}>
+              {turnFlow.lastError?.message || "Your drawing could not be sent. Please try again."}
+            </Text>
+            <View style={styles.errorActions}>
+              <Pressable
+                onPress={() => turnFlow.retrySubmit()}
+                style={[styles.errorButton, { backgroundColor: colors.tint }]}
+                accessibilityRole="button"
+                accessibilityLabel="Retry submission"
+              >
+                <Ionicons name="refresh" size={18} color="#fff" />
+                <Text style={styles.errorButtonText}>Retry</Text>
+              </Pressable>
+              <Pressable
+                onPress={() => {
+                  ws.disconnect();
+                  router.replace("/");
+                }}
+                style={[styles.errorButtonOutline, { borderColor: colors.border }]}
+                accessibilityRole="button"
+                accessibilityLabel="Exit game"
+              >
+                <Ionicons name="exit-outline" size={18} color={colors.error} />
+                <Text style={[styles.errorButtonOutlineText, { color: colors.error }]}>Exit</Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
+        visible={turnFlow.turnState === "sync_error_fatal"}
+        transparent
+        animationType="fade"
+        statusBarTranslucent
+      >
+        <View style={styles.errorOverlay}>
+          <View style={[styles.errorModal, { backgroundColor: colors.card }]}>
+            <Ionicons name="close-circle" size={40} color={colors.error} />
+            <Text style={[styles.errorTitle, { color: colors.text }]}>
+              Connection Lost
+            </Text>
+            <Text style={[styles.errorMessage, { color: colors.textSecondary }]}>
+              {turnFlow.lastError?.message || "The game session could not be recovered."}
+            </Text>
+            <Pressable
+              onPress={() => {
+                ws.disconnect();
+                router.replace("/");
+              }}
+              style={[styles.errorButton, { backgroundColor: colors.error }]}
+              accessibilityRole="button"
+              accessibilityLabel="Return home"
+            >
+              <Ionicons name="home" size={18} color="#fff" />
+              <Text style={styles.errorButtonText}>Return Home</Text>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -845,5 +928,84 @@ const styles = StyleSheet.create({
     fontSize: 56,
     fontFamily: "Inter_700Bold",
     marginTop: 4,
+  },
+  retryingBanner: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    alignItems: "center",
+    paddingTop: 100,
+  },
+  retryingContent: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    backgroundColor: "rgba(0, 0, 0, 0.7)",
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+  },
+  retryingText: {
+    color: "#fff",
+    fontSize: 14,
+    fontFamily: "Inter_500Medium",
+  },
+  errorOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0, 0, 0, 0.6)",
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 24,
+  },
+  errorModal: {
+    width: "100%",
+    maxWidth: 320,
+    borderRadius: 24,
+    padding: 32,
+    alignItems: "center",
+    gap: 12,
+  },
+  errorTitle: {
+    fontSize: 20,
+    fontFamily: "Inter_600SemiBold",
+    textAlign: "center",
+  },
+  errorMessage: {
+    fontSize: 14,
+    fontFamily: "Inter_400Regular",
+    textAlign: "center",
+    lineHeight: 20,
+  },
+  errorActions: {
+    flexDirection: "row",
+    gap: 12,
+    marginTop: 8,
+  },
+  errorButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderRadius: 16,
+  },
+  errorButtonText: {
+    color: "#fff",
+    fontSize: 15,
+    fontFamily: "Inter_600SemiBold",
+  },
+  errorButtonOutline: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderRadius: 16,
+    borderWidth: 1,
+  },
+  errorButtonOutlineText: {
+    fontSize: 15,
+    fontFamily: "Inter_500Medium",
   },
 });

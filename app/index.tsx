@@ -2,7 +2,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { router } from "expo-router";
 import * as Haptics from "expo-haptics";
-import React, { useCallback, useEffect, useRef } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Modal,
@@ -66,6 +66,28 @@ export default function HomeScreen() {
   }, []);
 
   const isSearching = ws.matchStatus === "queueing" || ws.matchStatus === "matched";
+  const isErrorState = ws.flowState === "error_recoverable" || ws.flowState === "error_backoff" || ws.flowState === "error_fatal";
+  const showSearchModal = isSearching || isErrorState;
+
+  const [backoffCountdown, setBackoffCountdown] = useState(0);
+
+  useEffect(() => {
+    if (ws.flowState === "error_backoff" && ws.retryDelayMs > 0) {
+      setBackoffCountdown(Math.ceil(ws.retryDelayMs / 1000));
+      const interval = setInterval(() => {
+        setBackoffCountdown((prev) => {
+          if (prev <= 1) {
+            clearInterval(interval);
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+      return () => clearInterval(interval);
+    } else {
+      setBackoffCountdown(0);
+    }
+  }, [ws.flowState, ws.retryDelayMs]);
 
   React.useEffect(() => {
     pulseOpacity.value = withRepeat(
@@ -281,42 +303,115 @@ export default function HomeScreen() {
       </View>
 
       <Modal
-        visible={isSearching}
+        visible={showSearchModal}
         transparent
         animationType="fade"
         onRequestClose={handleCancelSearch}
       >
         <View style={styles.modalOverlay}>
           <View style={[styles.searchModal, { backgroundColor: colors.card }]}>
-            <Animated.View style={searchPulseStyle}>
-              <ActivityIndicator size="large" color={colors.tint} />
-            </Animated.View>
+            {ws.flowState === "error_fatal" ? (
+              <>
+                <Ionicons name="close-circle" size={48} color={colors.error} />
+                <Text style={[styles.searchTitle, { color: colors.text }]} accessibilityRole="alert">
+                  Connection Failed
+                </Text>
+                <Text style={[styles.searchHint, { color: colors.textSecondary }]}>
+                  {ws.lastError?.message || "Unable to connect to the server."}
+                </Text>
+                <Pressable
+                  onPress={() => {
+                    ws.disconnect();
+                    setTimeout(() => handleFindMatch(), 100);
+                  }}
+                  style={[styles.retryButton, { backgroundColor: colors.tint }]}
+                  accessibilityRole="button"
+                  accessibilityLabel="Try again"
+                >
+                  <Ionicons name="refresh" size={20} color="#fff" />
+                  <Text style={styles.retryButtonText}>Try Again</Text>
+                </Pressable>
+                <Pressable
+                  onPress={handleCancelSearch}
+                  style={[styles.cancelButton, { borderColor: colors.border }]}
+                  accessibilityRole="button"
+                  accessibilityLabel="Cancel"
+                >
+                  <Ionicons name="close" size={20} color={colors.error} />
+                  <Text style={[styles.cancelText, { color: colors.error }]}>Cancel</Text>
+                </Pressable>
+              </>
+            ) : ws.flowState === "error_backoff" ? (
+              <>
+                <Ionicons name="time-outline" size={48} color={colors.accent} />
+                <Text style={[styles.searchTitle, { color: colors.text }]} accessibilityRole="alert" accessibilityLiveRegion="polite">
+                  Reconnecting in {backoffCountdown}s...
+                </Text>
+                <Text style={[styles.searchHint, { color: colors.textSecondary }]}>
+                  Waiting before retrying connection
+                </Text>
+                <Pressable
+                  onPress={handleCancelSearch}
+                  style={[styles.cancelButton, { borderColor: colors.border }]}
+                  accessibilityRole="button"
+                  accessibilityLabel="Cancel"
+                >
+                  <Ionicons name="close" size={20} color={colors.error} />
+                  <Text style={[styles.cancelText, { color: colors.error }]}>Cancel</Text>
+                </Pressable>
+              </>
+            ) : ws.flowState === "error_recoverable" ? (
+              <>
+                <ActivityIndicator size="large" color={colors.accent} />
+                <Text style={[styles.searchTitle, { color: colors.text }]} accessibilityRole="alert" accessibilityLiveRegion="polite">
+                  Reconnecting...
+                </Text>
+                <Text style={[styles.searchHint, { color: colors.textSecondary }]}>
+                  Attempting to restore connection
+                </Text>
+                <Pressable
+                  onPress={handleCancelSearch}
+                  style={[styles.cancelButton, { borderColor: colors.border }]}
+                  accessibilityRole="button"
+                  accessibilityLabel="Cancel"
+                >
+                  <Ionicons name="close" size={20} color={colors.error} />
+                  <Text style={[styles.cancelText, { color: colors.error }]}>Cancel</Text>
+                </Pressable>
+              </>
+            ) : (
+              <>
+                <Animated.View style={searchPulseStyle}>
+                  <ActivityIndicator size="large" color={colors.tint} />
+                </Animated.View>
 
-            <Text style={[styles.searchTitle, { color: colors.text }]} accessibilityLiveRegion="polite" accessibilityRole="alert">
-              Searching for opponent...
-            </Text>
+                <Text style={[styles.searchTitle, { color: colors.text }]} accessibilityLiveRegion="polite" accessibilityRole="alert">
+                  Searching for opponent...
+                </Text>
 
-            {ws.queuePosition > 0 && (
-              <Text style={[styles.queueText, { color: colors.textSecondary }]} accessibilityLiveRegion="polite">
-                Queue position: {ws.queuePosition}
-              </Text>
+                {ws.queuePosition > 0 && (
+                  <Text style={[styles.queueText, { color: colors.textSecondary }]} accessibilityLiveRegion="polite">
+                    Queue position: {ws.queuePosition}
+                  </Text>
+                )}
+
+                <Text style={[styles.searchHint, { color: colors.textSecondary }]}>
+                  This may take a moment
+                </Text>
+
+                <Pressable
+                  onPress={handleCancelSearch}
+                  style={[styles.cancelButton, { borderColor: colors.border }]}
+                  accessibilityRole="button"
+                  accessibilityLabel="Cancel search"
+                >
+                  <Ionicons name="close" size={20} color={colors.error} />
+                  <Text style={[styles.cancelText, { color: colors.error }]}>
+                    Cancel
+                  </Text>
+                </Pressable>
+              </>
             )}
-
-            <Text style={[styles.searchHint, { color: colors.textSecondary }]}>
-              This may take a moment
-            </Text>
-
-            <Pressable
-              onPress={handleCancelSearch}
-              style={[styles.cancelButton, { borderColor: colors.border }]}
-              accessibilityRole="button"
-              accessibilityLabel="Cancel search"
-            >
-              <Ionicons name="close" size={20} color={colors.error} />
-              <Text style={[styles.cancelText, { color: colors.error }]}>
-                Cancel
-              </Text>
-            </Pressable>
           </View>
         </View>
       </Modal>
@@ -473,5 +568,19 @@ const styles = StyleSheet.create({
   cancelText: {
     fontSize: 16,
     fontFamily: "Inter_500Medium",
+  },
+  retryButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingVertical: 14,
+    paddingHorizontal: 28,
+    borderRadius: 16,
+    marginTop: 8,
+  },
+  retryButtonText: {
+    color: "#fff",
+    fontSize: 16,
+    fontFamily: "Inter_600SemiBold",
   },
 });

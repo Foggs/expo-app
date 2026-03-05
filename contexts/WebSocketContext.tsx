@@ -208,6 +208,7 @@ interface WebSocketContextValue {
   lastError: FlowError | null;
   errorState: ErrorClass | null;
   canRetry: boolean;
+  retryDelayMs: number;
   connect: () => void;
   disconnect: () => void;
   resetState: () => void;
@@ -680,6 +681,7 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
       lastError,
       errorState,
       canRetry,
+      retryDelayMs: flowSnapshot.model.retryDelayMs,
       connect,
       disconnect,
       resetState,
