@@ -1,3 +1,30 @@
+/*
+ * ─── TURN FLOW TRANSITION MAP (current baseline, implicit) ───
+ *
+ * There is no formal turn state; all values are derived from serverGameState.
+ *
+ * Derived condition                            Implicit "state"
+ * ──────────────────────────────────────────── ──────────────────────
+ * serverGameState === null                     no game loaded
+ * serverGameState.status === "completed"       game_complete (isMyTurn = false)
+ * currentPlayer === playerRole                 drawing_turn  (isMyTurn = true)
+ * currentPlayer !== playerRole                 waiting_for_turn (isMyTurn = false)
+ *
+ * There are no explicit submitting / awaiting_ack states.
+ * submitTurn() appends to local turns array immediately; no server ACK tracking.
+ * handleServerTurnSubmitted() adds opponent strokes on receipt.
+ *
+ * Untracked implicit states in game.tsx (via refs):
+ *   - isSubmitting (useState<boolean>)
+ *   - pendingSubmitRef (useRef) — stores strokes for retry
+ *   - submitRetryRef (useRef<setTimeout>) — retry timer
+ *   - showGetReady / getReadyCountdown — UI countdown before turn
+ *   - opponentTimerRef — countdown shown during opponent's turn
+ *
+ * These refs represent hidden state that should migrate to TurnFlowMachine.
+ * ──────────────────────────────────────────────────────────────────────────
+ */
+
 import { useState, useCallback, useMemo } from "react";
 import { Stroke } from "@/components/DrawingCanvas";
 import type { GameStateFromServer } from "@/contexts/WebSocketContext";

@@ -1,3 +1,34 @@
+/*
+ * ─── MATCH FLOW TRANSITION MAP (current baseline) ───
+ *
+ * ConnectionStatus: "disconnected" | "connecting" | "connected"
+ * MatchStatus:      "idle" | "searching" | "matched" | "playing"
+ *                   | "opponent_disconnected" | "completed"
+ *
+ * Trigger (WS message / user action)          From               To
+ * ──────────────────────────────────────────── ────────────────── ──────────────────
+ * connect() called                            disconnected       connecting
+ * ws.onopen fires                             connecting         connected
+ * ws.onclose (unintentional, not completed)   connected          disconnected (+ schedule reconnect)
+ * ws.onclose (intentional or completed)       connected          disconnected
+ * ws.onerror                                  any                disconnected (via onclose)
+ * joinQueue() → server "queue_joined"         idle               searching
+ * leaveQueue() → server "queue_left"          searching          idle
+ * server "match_found"                        searching          matched
+ * server "game_state"                         matched/playing    playing
+ * server "game_complete"                      playing            completed
+ * server "opponent_disconnected"              playing            opponent_disconnected
+ * server "error" code=MATCHMAKING_TIMEOUT     searching          idle
+ * disconnect() called                         any                disconnected + idle
+ * resetState() called                         any                idle (match only)
+ *
+ * Unguarded / implicit transitions:
+ *   - "queue_joined" can fire when matchStatus is not "idle" (no guard)
+ *   - "game_state" unconditionally sets "playing" regardless of prior state
+ *   - ws.onerror was previously empty (now fixed below)
+ * ────────────────────────────────────────────────────────────────────────────────
+ */
+
 import {
   createContext,
   useContext,
@@ -10,6 +41,7 @@ import {
 } from "react";
 import { Platform } from "react-native";
 import { z } from "zod";
+import { logInvalidTransition } from "@/lib/state";
 
 export type ConnectionStatus = "disconnected" | "connecting" | "connected";
 export type MatchStatus =
@@ -358,7 +390,19 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
         }
       };
 
-      ws.onerror = () => {};
+      ws.onerror = (event: Event) => {
+        if (!mountedRef.current) return;
+        const currentState = matchStatusRef.current;
+        logInvalidTransition(
+          "MatchFlow",
+          currentState,
+          "WS_ERROR",
+        );
+        callbacksRef.current.onError?.(
+          "WebSocket connection error",
+          "WS_ERROR",
+        );
+      };
     } catch {
       setConnectionStatus("disconnected");
     }
