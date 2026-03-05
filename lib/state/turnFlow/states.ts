@@ -139,7 +139,7 @@ export const submittingTurnState: TState = {
   id: "submitting_turn",
   enter: () => [],
   exit: () => [],
-  handle: (_model, event): TResult => {
+  handle: (model, event): TResult => {
     if (event.type === "SUBMIT_SEND_OK") {
       return {
         nextStateId: "awaiting_server_ack",
@@ -159,6 +159,22 @@ export const submittingTurnState: TState = {
         nextStateId: "submit_retrying",
         modelPatch: { lastError: event.error },
         effects: [],
+      };
+    }
+    if (event.type === "SERVER_GAME_STATE_ACK" || event.type === "SERVER_TURN_CHANGED") {
+      const nextState = event.currentPlayer === model.playerRole ? "drawing_turn" : "waiting_for_turn";
+      return {
+        nextStateId: nextState,
+        modelPatch: {
+          currentPlayer: event.currentPlayer,
+          currentRound: event.currentRound,
+          totalRounds: event.totalRounds,
+          submissionId: null,
+          pendingStrokes: null,
+          retryCount: 0,
+          stateVersion: model.stateVersion + 1,
+        },
+        effects: [{ type: "CLEAR_TRANSIENT_STROKES" }],
       };
     }
     return handleTerminalEvents(event);

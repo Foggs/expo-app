@@ -92,6 +92,48 @@ describe("TurnFlow", () => {
     });
   });
 
+  describe("submitting_turn handles SERVER_GAME_STATE_ACK and SERVER_TURN_CHANGED", () => {
+    it("SERVER_GAME_STATE_ACK with different player → waiting_for_turn", () => {
+      const m = createTurnMachine(
+        { playerRole: "player1", submissionId: "sub-1", pendingStrokes: [{ id: "s1" }] },
+        "submitting_turn",
+      );
+      collectEffects(m, { type: "SERVER_GAME_STATE_ACK", currentPlayer: "player2", currentRound: 1, totalRounds: 3 });
+      expect(m.currentStateId).toBe("waiting_for_turn");
+      expect(m.model.submissionId).toBeNull();
+      expect(m.model.pendingStrokes).toBeNull();
+    });
+
+    it("SERVER_GAME_STATE_ACK with same player → drawing_turn", () => {
+      const m = createTurnMachine(
+        { playerRole: "player1", submissionId: "sub-1", pendingStrokes: [{ id: "s1" }] },
+        "submitting_turn",
+      );
+      collectEffects(m, { type: "SERVER_GAME_STATE_ACK", currentPlayer: "player1", currentRound: 2, totalRounds: 3 });
+      expect(m.currentStateId).toBe("drawing_turn");
+      expect(m.model.submissionId).toBeNull();
+    });
+
+    it("SERVER_TURN_CHANGED with different player → waiting_for_turn", () => {
+      const m = createTurnMachine(
+        { playerRole: "player1", submissionId: "sub-1", pendingStrokes: [{ id: "s1" }] },
+        "submitting_turn",
+      );
+      collectEffects(m, { type: "SERVER_TURN_CHANGED", currentPlayer: "player2", currentRound: 1, totalRounds: 3 });
+      expect(m.currentStateId).toBe("waiting_for_turn");
+      expect(m.model.submissionId).toBeNull();
+    });
+
+    it("SERVER_TURN_CHANGED with same player → drawing_turn", () => {
+      const m = createTurnMachine(
+        { playerRole: "player1", submissionId: "sub-1", pendingStrokes: [{ id: "s1" }] },
+        "submitting_turn",
+      );
+      collectEffects(m, { type: "SERVER_TURN_CHANGED", currentPlayer: "player1", currentRound: 2, totalRounds: 3 });
+      expect(m.currentStateId).toBe("drawing_turn");
+    });
+  });
+
   describe("SUBMIT_SEND_FAILED non-fatal", () => {
     it("non-fatal SUBMIT_SEND_FAILED → submit_retrying", () => {
       const m = createTurnMachine(

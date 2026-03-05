@@ -48,7 +48,7 @@ Preferred communication style: Simple, everyday language.
 ### Game Features
 - **Drawing Canvas**: `react-native-svg` with PanResponder for input, 12 colors, 5 brush sizes, eraser, undo, clear. Drawings accumulate across rounds, with previous rounds forming a non-editable background layer.
 - **Game Timer**: 2-minute countdown per turn with auto-submit and visual state indicators.
-- **State Machines**: Core `createMachine` factory with FIFO dispatch. `MatchFlowMachine` handles match lifecycle, `TurnFlowMachine` manages turn states.
+- **State Machines**: Core `createMachine` factory with FIFO dispatch. `MatchFlowMachine` handles match lifecycle, `TurnFlowMachine` manages turn states. After a player submits a turn, `SUBMIT_SEND_OK` is dispatched to advance TurnFlow from `submitting_turn` → `awaiting_server_ack`. The `submitting_turn` state also handles `SERVER_GAME_STATE_ACK` and `SERVER_TURN_CHANGED` as safety-net transitions.
 - **Results Screen**: Displays game stats, round-by-round cumulative drawing thumbnails, and an option to save to gallery. `GameStore` persists drawings across screens.
 - **Gallery Feature**: Dedicated screen to view, save, and delete drawings from a PostgreSQL table.
 - **Get Ready Modal**: 10-second countdown before a player's turn with haptic feedback and accessibility features.

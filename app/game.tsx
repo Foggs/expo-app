@@ -165,7 +165,23 @@ export default function GameScreen() {
 
     turnFlow.submitTurn(wsStrokes);
 
-    ws.submitTurn(wsStrokes);
+    const sent = ws.submitTurn(wsStrokes);
+    if (sent) {
+      turnFlow.dispatchTurn({ type: "SUBMIT_SEND_OK" });
+    } else {
+      turnFlow.dispatchTurn({
+        type: "SUBMIT_SEND_FAILED",
+        error: {
+          code: "SEND_FAILED",
+          source: "websocket",
+          retryable: true,
+          fatal: false,
+          message: "Failed to send turn data",
+          stateVersion: 0,
+          occurredAt: Date.now(),
+        },
+      });
+    }
   }, [strokes, backgroundStrokes, isSubmitting, isMyTurn, ws.submitTurn, turnFlow, currentRound, playerRole]);
 
   handleSubmitTurnRef.current = handleSubmitTurn;
