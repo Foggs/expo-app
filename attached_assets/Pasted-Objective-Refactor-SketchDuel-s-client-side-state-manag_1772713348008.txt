@@ -1,0 +1,161 @@
+Objective
+Refactor SketchDuel's client-side state management from scattered useState/useRef/boolean flags into two explicit GoF-style state machines — MatchFlowMachine and TurnFlowMachine — with full error states as described in the State Pattern Migration Plan and its Addendum. The refactor must be behavior-parity first (no UX changes), incremental, and keep the existing WebSocket server protocol unchanged.
+
+Tasks
+T001: Phase 0 — Baseline invariants and dev logging
+Blocked By: []
+Details:
+Add a dev-only logInvalidTransition(from, event) utility that logs to console when an event is received in a state that has no handler for it. This will be used by both machines in later tasks.
+Document the existing MatchStatus and implicit turn states as a transition map comment block at the top of contexts/WebSocketContext.tsx and hooks/useGameState.ts, capturing exactly which message causes which state change today.
+Fix the silent ws.onerror = () => {}; on line 361 of contexts/WebSocketContext.tsx — replace with a handler that at minimum logs the error and sets connectionStatus to "disconnected". This is a standalone bug fix independent of the full refactor.
+Files: contexts/WebSocketContext.tsx, hooks/useGameState.ts
+Acceptance: ws.onerror is no longer empty; transition map comments exist; logInvalidTransition utility exists.
+T002: Phase 1 — Core state infrastructure (lib/state/core.ts)
+Blocked By: [T001]
+Details:
+Create lib/state/core.ts with the following pure TypeScript exports (no React imports):
+interface IState<TModel, TEvent, TEffect> with fields: id: string, enter(model): TEffect[], exit(model): TEffect[], handle(model, event): TransitionResult<TModel, TEffect> | null
+interface TransitionResult<TModel, TEffect> with fields: nextStateId: string, modelPatch: Partial<TModel>, effects: TEffect[]
+interface StateContext<TModel, TEvent, TEffect> with fields: currentStateId, model, dispatch(event): void, can(event): boolean
+createMachine(states, initialStateId, initialModel) factory that returns a StateContext. The dispatcher must be a single FIFO queue — events received while handling another event are queued, not immediately executed. No event is silently dropped; invalid transitions call logInvalidTransition.
+Files: lib/state/core.ts (new), lib/state/index.ts (new barrel export)
+Acceptance: Pure TypeScript, zero React imports, all types exported, FIFO dispatch queue implemented.
+T003: Phase 1 — FlowError type and error classifier
+Blocked By: [T002]
+Details:
+Create lib/state/errors.ts with:
+FlowError interface: code: string, source: "websocket" | "server" | "runtime", retryable: boolean, fatal: boolean, message: string, stateVersion: number, occurredAt: number
+ErrorClass union type: "recoverable" | "backoff" | "fatal" | "validation" | "security"
+classifyError(code: string | undefined, closeCode?: number): ErrorClass function implementing the policy from the addendum:
+SESSION_EXPIRED, SESSION_REPLAYED, auth/security violation, schema mismatch, impossible stateVersion regression → "fatal" (security codes → "security", others → "fatal")
+Repeated reconnect failures, rate limiting, server overload → "backoff"
+Malformed payload → "validation" (escalates to fatal)
+Transient close (1001, 1006), timeout, network loss, SUBMIT_FAILED without protocol violation → "recoverable"
+toFlowError(raw: { message: string; code?: string }, source, stateVersion): FlowError adapter that also converts existing error server messages
+Shared event type: { type: "ERROR_RAISED"; error: FlowError }
+Files: lib/state/errors.ts (new)
+Acceptance: Classifier is a pure function with no side-effects; all five error classes handled; existing error server message can be adapted.
+T004: Phase 1 — MatchFlow pure model, events, and effects
+Blocked By: [T003]
+Details:
+Create lib/state/matchFlow/types.ts defining:
+MatchFlowStateId union: "idle" | "connecting" | "queueing" | "matched" | "playing" | "completed" | "opponent_disconnected" | "reconnecting" | "error_recoverable" | "error_backoff" | "error_fatal"
+MatchFlowModel interface: { stateVersion: number; gameId: string | null; playerRole: "player1" | "player2" | null; opponentName: string | null; queuePosition: number; reconnectAttempt: number; lastError: FlowError | null; retryDelayMs: number }
+MatchFlowEvent discriminated union covering all events from the migration plan plus ERROR_RAISED: FIND_MATCH_CLICKED | WS_OPENED | WS_CLOSED | QUEUE_JOINED | QUEUE_LEFT | MATCH_FOUND | GAME_STATE_RECEIVED | GAME_COMPLETE_RECEIVED | OPPONENT_DISCONNECTED_RECEIVED | CANCEL_SEARCH | MATCHMAKING_TIMEOUT | DISCONNECT_REQUESTED | RETRY_TIMER_EXPIRED | ERROR_RAISED
+MatchFlowEffect discriminated union: OPEN_SOCKET | SEND_JOIN_QUEUE | SEND_LEAVE_QUEUE | CLOSE_SOCKET | SCHEDULE_RECONNECT | CLEAR_RECONNECT | SCHEDULE_BACKOFF_TIMER | CLEAR_BACKOFF_TIMER | SET_CALLBACK_PAYLOAD | CLEAR_SESSION | EMIT_ERROR_UI
+Files: lib/state/matchFlow/types.ts (new)
+Acceptance: All types exported; no React imports; MatchFlowStateId includes all three error states from the addendum.
+T005: Phase 1 — MatchFlow state objects
+Blocked By: [T004]
+Details:
+Create lib/state/matchFlow/states.ts implementing IState for each of the 11 MatchFlow states. Transition rules must exactly match the migration plan and addendum:
+idle: FIND_MATCH_CLICKED → connecting; others → null
+connecting: WS_OPENED → queueing (effect: SEND_JOIN_QUEUE); WS_CLOSED → error_recoverable; DISCONNECT_REQUESTED → idle
+queueing: QUEUE_JOINED → self (update position); MATCH_FOUND → matched; CANCEL_SEARCH → idle; WS_CLOSED(recoverable) → error_recoverable; ERROR_RAISED(fatal) → error_fatal
+matched: GAME_STATE_RECEIVED → playing; CANCEL_SEARCH → idle; ERROR_RAISED(fatal) → error_fatal
+playing: GAME_COMPLETE_RECEIVED → completed; OPPONENT_DISCONNECTED_RECEIVED → opponent_disconnected; WS_CLOSED(recoverable) → error_recoverable; ERROR_RAISED(fatal) → error_fatal
+completed: DISCONNECT_REQUESTED → idle; all others → null
+opponent_disconnected: DISCONNECT_REQUESTED → idle; all others → null
+reconnecting: WS_OPENED → queueing; ERROR_RAISED(retryable, reconnectAttempt >= 8) → error_fatal; ERROR_RAISED(retryable) → error_recoverable
+error_recoverable: enter stops live actions; if policy says delayed → error_backoff; else → reconnecting; DISCONNECT_REQUESTED → idle
+error_backoff: enter schedules bounded exponential timer with jitter; RETRY_TIMER_EXPIRED → reconnecting; DISCONNECT_REQUESTED → idle; exit clears timer
+error_fatal: enter clears tokens/session, closes socket, blocks auto-retry; only exits: DISCONNECT_REQUESTED → idle
+Retry cap: 8 attempts then error_fatal. Backoff: exponential with jitter, hard max 30 seconds.
+Files: lib/state/matchFlow/states.ts (new), lib/state/matchFlow/index.ts (barrel)
+Acceptance: All 11 states implemented; error_fatal never schedules reconnect timers; retry cap enforced; every state exit disposes its timers.
+T006: Phase 1 — TurnFlow pure model, events, and effects
+Blocked By: [T003]
+Details:
+Create lib/state/turnFlow/types.ts defining:
+TurnFlowStateId union: "waiting_for_turn" | "drawing_turn" | "submitting_turn" | "awaiting_server_ack" | "game_complete" | "opponent_disconnected" | "submit_retrying" | "submit_failed" | "sync_error_fatal"
+TurnFlowModel interface: { playerRole: "player1" | "player2"; currentRound: number; currentPlayer: "player1" | "player2" | null; submissionId: string | null; retryCount: number; pendingStrokes: Stroke[] | null; lastError: FlowError | null; stateVersion: number }
+TurnFlowEvent discriminated union: SERVER_TURN_CHANGED | USER_SUBMIT | TIMER_EXPIRED | SUBMIT_SEND_OK | SUBMIT_SEND_FAILED | SERVER_GAME_STATE_ACK | SERVER_NOT_YOUR_TURN | SERVER_GAME_COMPLETED | SERVER_OPPONENT_DISCONNECTED | RETRY_BUDGET_REMAINING | RETRY_BUDGET_EXHAUSTED | USER_RETRY_SUBMIT | SERVER_STATE_RESYNC | NAVIGATE_HOME | ERROR_RAISED
+TurnFlowEffect discriminated union: START_PLAYER_TIMER | PAUSE_PLAYER_TIMER | START_OPPONENT_COUNTDOWN | STOP_OPPONENT_COUNTDOWN | QUEUE_SUBMIT_RETRY | CLEAR_SUBMIT_RETRY | CLEAR_TRANSIENT_STROKES | COMMIT_ROUND_DRAWING | NAVIGATE_RESULTS | NAVIGATE_HOME | EMIT_ERROR_UI
+Files: lib/state/turnFlow/types.ts (new)
+Acceptance: submissionId is in the model; all nine states represented; retry budget events defined.
+T007: Phase 1 — TurnFlow state objects
+Blocked By: [T006]
+Details:
+Create lib/state/turnFlow/states.ts implementing IState for each of the 9 TurnFlow states. Transition rules:
+waiting_for_turn: SERVER_TURN_CHANGED(currentPlayer === playerRole) → drawing_turn (effects: START_PLAYER_TIMER); SERVER_GAME_COMPLETED → game_complete; SERVER_OPPONENT_DISCONNECTED → opponent_disconnected; ERROR_RAISED(fatal) → sync_error_fatal
+drawing_turn: USER_SUBMIT | TIMER_EXPIRED → submitting_turn (generate submissionId, store pendingStrokes, effects: PAUSE_PLAYER_TIMER); SERVER_GAME_COMPLETED → game_complete; SERVER_OPPONENT_DISCONNECTED → opponent_disconnected; ERROR_RAISED(fatal) → sync_error_fatal
+submitting_turn: SUBMIT_SEND_OK → awaiting_server_ack; SUBMIT_SEND_FAILED + retryable → submit_retrying; SUBMIT_SEND_FAILED + fatal → sync_error_fatal; ERROR_RAISED(fatal) → sync_error_fatal
+awaiting_server_ack: SERVER_GAME_STATE_ACK(currentPlayer === playerRole) → drawing_turn; SERVER_GAME_STATE_ACK(currentPlayer !== playerRole) → waiting_for_turn; ERROR_RAISED(retryable) → submit_retrying; ERROR_RAISED(fatal) → sync_error_fatal; SERVER_GAME_COMPLETED → game_complete
+submit_retrying: enter pauses drawing input, keeps snapshot immutable, runs bounded retry (max 5); RETRY_BUDGET_REMAINING → awaiting_server_ack (reuse same submissionId); RETRY_BUDGET_EXHAUSTED → submit_failed; exit clears retry timer
+submit_failed: enter stops retry timers, preserves unsent payload; USER_RETRY_SUBMIT → submitting_turn; SERVER_STATE_RESYNC → waiting_for_turn or drawing_turn depending on server player; ERROR_RAISED(fatal) → sync_error_fatal
+sync_error_fatal: enter stops all timers/listeners, forces safe teardown; only exit: NAVIGATE_HOME
+game_complete: enter triggers NAVIGATE_RESULTS effect; no further transitions
+opponent_disconnected: enter triggers NAVIGATE_HOME effect; no further transitions
+Retry caps: submit retries 5, then submit_failed.
+Files: lib/state/turnFlow/states.ts (new), lib/state/turnFlow/index.ts (barrel)
+Acceptance: All 9 states implemented; retry timer disposed on every state exit; submissionId reused across retries; sync_error_fatal blocks all timers.
+T008: Phase 2 — Integrate MatchFlowMachine into WebSocketContext
+Blocked By: [T005]
+Details:
+Replace the matchStatus useState + manual switch-case in contexts/WebSocketContext.tsx with the MatchFlowMachine from lib/state/matchFlow.
+Wire WebSocket callbacks to dispatch MatchFlow events: onopen → WS_OPENED, onclose → WS_CLOSED, onmessage parses and dispatches the corresponding event, onerror → ERROR_RAISED (classify via classifyError).
+Execute machine effects in a side-effect runner: OPEN_SOCKET calls the current connect logic, SCHEDULE_RECONNECT replaces reconnectTimerRef, CLEAR_RECONNECT clears that timer, etc.
+Update the exported WebSocketContextValue interface:
+Add: flowState: MatchFlowStateId, dispatchFlow(event: MatchFlowEvent): void, can(action: "findMatch" | "cancelSearch" | "submitTurn" | "draw"): boolean, lastError: FlowError | null, errorState: ErrorClass | null, canRetry: boolean
+Keep all existing methods (connect, joinQueue, leaveQueue, submitTurn, sendStroke, sendClear, sendUndo) as compatibility wrappers that call dispatchFlow.
+Rename the searching MatchStatus value to queueing (update all usages across the codebase, including app/index.tsx and any other screens that read matchStatus).
+Narrow GameStateFromServer.status from string to "active" | "completed" | "abandoned" | "waiting".
+Add flow_error to wsServerMessageSchema and adapt it using toFlowError from lib/state/errors.ts.
+Files: contexts/WebSocketContext.tsx, app/index.tsx, any other file referencing matchStatus === "searching"
+Acceptance: No useState<MatchStatus> remains; all WS events route through dispatchFlow; can() returns correct booleans; searching renamed to queueing everywhere; existing app behavior unchanged.
+T009: Phase 3 — Build useTurnFlow hook
+Blocked By: [T007, T008]
+Details:
+Create hooks/useTurnFlow.ts that wraps TurnFlowMachine in a React hook:
+Accepts playerRole and the WS context as inputs.
+Subscribes to SERVER_TURN_CHANGED, SERVER_GAME_COMPLETED, SERVER_OPPONENT_DISCONNECTED by registering callbacks via setCallbacks.
+Executes effects: START_PLAYER_TIMER / PAUSE_PLAYER_TIMER calls into useGameTimer's start/pause; QUEUE_SUBMIT_RETRY schedules a retry using submitTurn from WS context with the same submissionId; COMMIT_ROUND_DRAWING calls addRoundDrawing from lib/gameStore; NAVIGATE_RESULTS / NAVIGATE_HOME calls router.replace.
+Disposes all timers on unmount.
+Returns: { turnState: TurnFlowStateId; isMyTurn: boolean; currentRound: number; roundDisplay: string; turnDisplay: string; submitTurn(strokes): void; lastError: FlowError | null; canRetry: boolean }
+Update app/game.tsx to use useTurnFlow in place of useGameState + manual refs (isSubmitting, submitRetryRef, pendingSubmitRef, opponentTimerRef). Remove those refs once replaced.
+Keep useGameState as a thin adapter (re-export its fields from useTurnFlow) until final cleanup in T011.
+Files: hooks/useTurnFlow.ts (new), app/game.tsx
+Acceptance: isSubmitting state ref and submitRetryRef and pendingSubmitRef removed from game.tsx; retry logic lives in the machine; useTurnFlow correctly starts/pauses the timer based on machine state.
+T010: Phase 3 — Wire error states to game UI
+Blocked By: [T009]
+Details:
+In app/game.tsx, handle the three TurnFlow error states in the render:
+submit_retrying: disable the drawing canvas input, show a subtle "Retrying..." indicator.
+submit_failed: show an actionable modal/overlay with "Retry" (USER_RETRY_SUBMIT) and "Exit" (NAVIGATE_HOME) buttons. Preserve the unsent drawing visually.
+sync_error_fatal: show a blocking error screen with "Return Home" button (NAVIGATE_HOME). No canvas access.
+In app/index.tsx (home/matchmaking screen), handle the three MatchFlow error states:
+error_recoverable: show a "Reconnecting…" status replacing the normal connecting UI.
+error_backoff: show "Reconnecting in X seconds…" with a countdown derived from retryDelayMs in the model.
+error_fatal: show a "Connection failed" message with a single "Try Again" button that dispatches DISCONNECT_REQUESTED → then FIND_MATCH_CLICKED. Clear the session on enter.
+All error UI must be behavior-parity with the existing app — no new navigation flows, no redesign.
+Files: app/game.tsx, app/index.tsx
+Acceptance: All six error states have visible UI; no error state is silently ignored; "Retry" and "Exit" actions work.
+T011: Phase 4 — Cleanup and hardening
+Blocked By: [T010]
+Details:
+Delete hooks/useWebSocket.ts (confirmed unused by migration plan).
+Delete the thin useGameState adapter once useTurnFlow is the sole consumer; update app/game.tsx imports.
+Collapse duplicated status checks (any remaining matchStatus === "searching" or matchStatus === "playing" guards) into the can() selector from the context.
+Tighten TypeScript: remove any remaining status: string types; ensure MatchFlowStateId and TurnFlowStateId are the only state identity types.
+Ensure all retry timers are keyed by machine state and verified to be cleared on state exit by adding // TIMER-KEY: <stateName> comments co-located with each setTimeout/setInterval inside the machines.
+Verify telemetry: confirm that EMIT_ERROR_UI and logging paths in lib/state/errors.ts never include token strings or payload bodies (redaction check).
+Files: hooks/useWebSocket.ts (delete), hooks/useGameState.ts (delete or thin adapter → delete), app/game.tsx, contexts/WebSocketContext.tsx
+Acceptance: No dead files; no status: string; can() is the sole gate for action availability; all timer disposals annotated.
+T012: Tests
+Blocked By: [T011]
+Details:
+Add unit tests in lib/state/__tests__/ (or __tests__/ at root) covering:
+MatchFlow happy path: idle → connecting → queueing → matched → playing → completed (one event per step, verify state id and model patch)
+Cancel search: from queueing dispatching CANCEL_SEARCH → idle; verify SEND_LEAVE_QUEUE and CLOSE_SOCKET effects emitted
+Reconnect behavior: unexpected WS_CLOSED in playing → error_recoverable → reconnecting; never reconnects after completed
+Error recoverable → backoff: repeated WS_CLOSED events increment reconnectAttempt; at attempt 8 transitions to error_fatal not error_backoff
+Fatal never retries: ERROR_RAISED(fatal=true) from any state → error_fatal; subsequent WS_OPENED is a no-op
+TurnFlow submit path: drawing_turn → submitting_turn → awaiting_server_ack → waiting_for_turn (server changes player)
+Submit retry reuses submissionId: submit_retrying + RETRY_BUDGET_REMAINING → awaiting_server_ack; submissionId in model unchanged
+Submit budget exhaustion: after 5 RETRY_BUDGET_REMAINING events, RETRY_BUDGET_EXHAUSTED → submit_failed
+sync_error_fatal: ERROR_RAISED(fatal=true) in awaiting_server_ack → sync_error_fatal; NAVIGATE_HOME is the only exit
+Leak tests: after leaving error_recoverable, error_backoff, submit_retrying, verify no SCHEDULE_RECONNECT or QUEUE_SUBMIT_RETRY effects remain active (assert CLEAR_* effects were emitted on exit)
+Race test: concurrent ERROR_RAISED + GAME_STATE_RECEIVED dispatched in same tick → only one state transition occurs (FIFO queue determinism)
+Invalid event no-op: every state must return null for an event it does not handle; assert model is unchanged
+Files: lib/state/__tests__/matchFlow.test.ts (new), lib/state/__tests__/turnFlow.test.ts (new)
+Acceptance: All 12 test scenarios pass; no test touches React or UI; pure model tests only.
