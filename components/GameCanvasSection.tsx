@@ -9,6 +9,7 @@ import DrawingCanvas, {
 export interface GameCanvasSectionProps {
   canvasRef: React.RefObject<DrawingCanvasRef | null>;
   isMyTurn: boolean;
+  canDraw: boolean;
   isSubmitting: boolean;
   activeColor: string;
   strokeWidth: number;
@@ -22,6 +23,7 @@ export interface GameCanvasSectionProps {
 export default function GameCanvasSection({
   canvasRef,
   isMyTurn,
+  canDraw,
   isSubmitting,
   activeColor,
   strokeWidth,
@@ -48,7 +50,7 @@ export default function GameCanvasSection({
         strokes={isMyTurn ? strokes : opponentStrokes}
         onStrokesChange={onStrokesChange}
         onStrokeComplete={onStrokeComplete}
-        disabled={!isMyTurn || isSubmitting}
+        disabled={!canDraw || isSubmitting}
         backgroundStrokes={backgroundStrokes}
       />
       {!isMyTurn && (

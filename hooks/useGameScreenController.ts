@@ -62,6 +62,7 @@ export function useGameScreenController({
   const ws = useGameWebSocket();
   const {
     gameState,
+    flowState,
     submitTurn: submitTurnToWs,
     sendStroke,
     sendUndo,
@@ -119,12 +120,11 @@ export function useGameScreenController({
   });
 
   const {
-    isMyTurn,
     isSubmitting,
     currentRound,
     currentPlayer,
     roundDisplay,
-    turnDisplay,
+    turnDisplay: flowTurnDisplay,
     showGetReady,
     getReadyCountdown,
   } = turnFlow;
@@ -136,8 +136,34 @@ export function useGameScreenController({
     lastError,
   } = turnFlow;
 
+  const serverCurrentPlayer = gameState?.currentPlayer ?? currentPlayer;
+  const isTurnOwner = serverCurrentPlayer === playerRole;
+  const isTurnBlocked =
+    isSubmitting ||
+    turnState === "submit_failed" ||
+    turnState === "sync_error_fatal" ||
+    turnState === "game_complete" ||
+    turnState === "opponent_disconnected";
+  const canDraw = flowState === "playing" && isTurnOwner && !isTurnBlocked;
+
+  let turnDisplay = flowTurnDisplay;
+  if (
+    turnState !== "game_complete" &&
+    turnState !== "opponent_disconnected" &&
+    turnState !== "sync_error_fatal" &&
+    turnState !== "submit_failed"
+  ) {
+    if (!gameState) {
+      turnDisplay = "Syncing turn...";
+    } else if (isSubmitting) {
+      turnDisplay = "Submitting...";
+    } else {
+      turnDisplay = isTurnOwner ? "Your Turn to Draw" : "Opponent's Turn";
+    }
+  }
+
   const handleSubmitTurn = useCallback(() => {
-    if (isSubmitting || !isMyTurn) return;
+    if (!canDraw) return;
 
     notifySuccess();
 
@@ -172,8 +198,7 @@ export function useGameScreenController({
       },
     });
   }, [
-    isSubmitting,
-    isMyTurn,
+    canDraw,
     strokes,
     currentRound,
     playerRole,
@@ -222,9 +247,9 @@ export function useGameScreenController({
 
   useEffect(() => {
     const wasMyTurn = prevIsMyTurnRef.current;
-    prevIsMyTurnRef.current = isMyTurn;
+    prevIsMyTurnRef.current = isTurnOwner;
 
-    if (isMyTurn && wasMyTurn !== null && wasMyTurn !== isMyTurn) {
+    if (isTurnOwner && wasMyTurn !== null && wasMyTurn !== isTurnOwner) {
       notifyWarning();
       if (opponentStrokes.length > 0) {
         addRoundDrawing({
@@ -238,11 +263,11 @@ export function useGameScreenController({
       setOpponentStrokes([]);
     }
 
-    if (!isMyTurn) {
+    if (!isTurnOwner) {
       opponentDrawingRoundRef.current = currentRound;
     }
   }, [
-    isMyTurn,
+    isTurnOwner,
     currentRound,
     playerRole,
     opponentStrokes,
@@ -350,10 +375,10 @@ export function useGameScreenController({
       destructive: true,
       onConfirm: doLeave,
       onCancel: () => {
-        if (isMyTurn) timer.start();
+        if (canDraw) timer.start();
       },
     });
-  }, [disconnect, isMyTurn, timer]);
+  }, [disconnect, canDraw, timer]);
 
   const handleSubmit = useCallback(() => {
     notifySuccess();
@@ -418,9 +443,10 @@ export function useGameScreenController({
     isEraser,
     showColorPicker,
     showBrushPicker,
-    isMyTurn,
+    isMyTurn: isTurnOwner,
+    canDraw,
     isSubmitting,
-    currentPlayer,
+    currentPlayer: serverCurrentPlayer,
     roundDisplay,
     turnDisplay,
     showGetReady,

@@ -516,6 +516,28 @@ function handleLeaveRoom(conn: PlayerConnection): void {
   abandonGame(conn, true);
 }
 
+function handleRequestGameState(conn: PlayerConnection): void {
+  if (!conn.gameId || !conn.playerRole) {
+    sendMessage(conn, { type: "error", message: "Not in a game", code: "NOT_IN_GAME" });
+    return;
+  }
+
+  const room = gameRooms.get(conn.gameId);
+  if (!room) {
+    sendMessage(conn, { type: "error", message: "Game room not found", code: "ROOM_NOT_FOUND" });
+    return;
+  }
+
+  sendMessage(conn, {
+    type: "game_state",
+    gameId: room.gameId,
+    currentRound: room.currentRound,
+    currentPlayer: room.currentPlayer,
+    totalRounds: room.totalRounds,
+    status: room.status,
+  });
+}
+
 async function handleSubmitTurn(conn: PlayerConnection, strokes: unknown[]): Promise<void> {
   if (!conn.gameId || !conn.playerRole) {
     sendMessage(conn, { type: "error", message: "Not in a game", code: "NOT_IN_GAME" });
@@ -804,6 +826,9 @@ function handleMessage(conn: PlayerConnection, data: Buffer | ArrayBuffer | Buff
 
     case "submit_turn":
       handleSubmitTurn(conn, msg.strokes);
+      break;
+    case "request_game_state":
+      handleRequestGameState(conn);
       break;
   }
 }

@@ -242,6 +242,7 @@ interface WebSocketContextValue {
   joinFriendRoom: (roomCode: string) => boolean;
   leaveFriendRoom: () => void;
   clearFriendRoomError: () => void;
+  requestGameState: () => boolean;
   submitTurn: (
     strokes: Array<{
       points: Array<{ x: number; y: number }>;
@@ -374,6 +375,9 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
           opponentName: msg.opponentName,
           matchType: msg.matchType,
         });
+        if (msg.matchType === "friend") {
+          sendRaw({ type: "request_game_state" });
+        }
         break;
 
       case "game_state":
@@ -471,7 +475,7 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
         cb.onError?.(msg.message, msg.code);
         break;
     }
-  }, []);
+  }, [sendRaw]);
 
   const openSocket = useCallback(() => {
     if (
@@ -812,6 +816,10 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
     setFriendRoomError(null);
   }, []);
 
+  const requestGameState = useCallback((): boolean => {
+    return sendRaw({ type: "request_game_state" });
+  }, [sendRaw]);
+
   const submitTurn = useCallback(
     (
       strokes: Array<{
@@ -887,6 +895,7 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
       joinFriendRoom,
       leaveFriendRoom,
       clearFriendRoomError,
+      requestGameState,
       submitTurn,
       sendStroke,
       sendClear,
@@ -916,6 +925,7 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
       joinFriendRoom,
       leaveFriendRoom,
       clearFriendRoomError,
+      requestGameState,
       submitTurn,
       sendStroke,
       sendClear,

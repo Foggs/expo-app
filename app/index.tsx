@@ -49,6 +49,7 @@ export default function HomeScreen() {
     joinFriendRoom,
     leaveFriendRoom,
     clearFriendRoomError,
+    requestGameState,
   } = useGameWebSocket();
 
   const isSearching = matchStatus === "queueing" || matchStatus === "matched";
@@ -62,6 +63,9 @@ export default function HomeScreen() {
         navigatedRef.current = true;
         setIsFriendsModalOpen(false);
         setFriendRoomInput("");
+        if (info.matchType === "friend") {
+          requestGameState();
+        }
         notifySuccess();
         router.push({
           pathname: "/game",
@@ -80,7 +84,7 @@ export default function HomeScreen() {
     return () => {
       setCallbacks({});
     };
-  }, [setCallbacks]);
+  }, [requestGameState, setCallbacks]);
 
   const isErrorState =
     flowState === "error_recoverable" ||

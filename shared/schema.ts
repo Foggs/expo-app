@@ -145,6 +145,9 @@ export const wsClientMessageSchema = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("ping"),
   }),
+  z.object({
+    type: z.literal("request_game_state"),
+  }),
 ]);
 
 export type WsClientMessage = z.infer<typeof wsClientMessageSchema>;

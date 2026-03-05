@@ -6,7 +6,7 @@ import type { ThemeColors } from "@/hooks/useThemeColors";
 export interface GameToolbarProps {
   colors: ThemeColors;
   bottomPadding: number;
-  isMyTurn: boolean;
+  canDraw: boolean;
   isSubmitting: boolean;
   isEraser: boolean;
   strokeColor: string;
@@ -22,7 +22,7 @@ export interface GameToolbarProps {
 export default function GameToolbar({
   colors,
   bottomPadding,
-  isMyTurn,
+  canDraw,
   isSubmitting,
   isEraser,
   strokeColor,
@@ -44,7 +44,7 @@ export default function GameToolbar({
             { backgroundColor: colors.card },
             !isEraser && styles.toolButtonActive,
           ]}
-          disabled={!isMyTurn}
+          disabled={!canDraw}
           accessibilityRole="button"
           accessibilityLabel="Select brush size"
         >
@@ -58,7 +58,7 @@ export default function GameToolbar({
         <Pressable
           onPress={onColorPress}
           style={[styles.toolButton, { backgroundColor: colors.card }]}
-          disabled={!isMyTurn}
+          disabled={!canDraw}
           accessibilityRole="button"
           accessibilityLabel="Select brush color"
         >
@@ -81,7 +81,7 @@ export default function GameToolbar({
             { backgroundColor: colors.card },
             isEraser && styles.toolButtonActive,
           ]}
-          disabled={!isMyTurn}
+          disabled={!canDraw}
           accessibilityRole="button"
           accessibilityLabel={isEraser ? "Switch to brush" : "Switch to eraser"}
           accessibilityState={{ selected: isEraser }}
@@ -102,7 +102,7 @@ export default function GameToolbar({
             { backgroundColor: colors.card },
             strokeCount === 0 && styles.toolButtonDisabled,
           ]}
-          disabled={strokeCount === 0 || !isMyTurn}
+          disabled={strokeCount === 0 || !canDraw}
           accessibilityRole="button"
           accessibilityLabel="Undo last stroke"
         >
@@ -120,7 +120,7 @@ export default function GameToolbar({
             { backgroundColor: colors.card },
             strokeCount === 0 && styles.toolButtonDisabled,
           ]}
-          disabled={strokeCount === 0 || !isMyTurn}
+          disabled={strokeCount === 0 || !canDraw}
           accessibilityRole="button"
           accessibilityLabel="Clear canvas"
         >
@@ -137,9 +137,9 @@ export default function GameToolbar({
         style={[
           styles.submitButton,
           { backgroundColor: colors.tint },
-          (!isMyTurn || isSubmitting) && styles.submitButtonDisabled,
+          (!canDraw || isSubmitting) && styles.submitButtonDisabled,
         ]}
-        disabled={!isMyTurn || isSubmitting}
+        disabled={!canDraw || isSubmitting}
         accessibilityRole="button"
         accessibilityLabel="Submit your drawing and end turn"
       >
