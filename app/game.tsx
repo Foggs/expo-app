@@ -54,7 +54,6 @@ export default function GameScreen() {
 
   const canvasRef = useRef<DrawingCanvasRef>(null);
   const navigatedRef = useRef(false);
-  const gameStartedRef = useRef(false);
   const mountedRef = useRef(true);
 
   const [strokes, setStrokes] = useState<Stroke[]>([]);
@@ -72,8 +71,6 @@ export default function GameScreen() {
   const opponentTimeRef = useRef(60);
   const submitRetryRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pendingSubmitRef = useRef<Array<{ points: Array<{ x: number; y: number }>; color: string; width: number }> | null>(null);
-  const submitRetryCountRef = useRef(0);
-  const MAX_SUBMIT_RETRIES = 5;
 
   const timerPulse = useSharedValue(1);
   const getReadyScale = useSharedValue(1);
@@ -104,7 +101,6 @@ export default function GameScreen() {
       submitRetryRef.current = null;
     }
     pendingSubmitRef.current = null;
-    submitRetryCountRef.current = 0;
   }, []);
 
   const retrySubmit = useCallback(() => {
@@ -114,13 +110,6 @@ export default function GameScreen() {
     }
     const pending = pendingSubmitRef.current;
     if (!pending) return;
-
-    submitRetryCountRef.current += 1;
-    if (submitRetryCountRef.current > MAX_SUBMIT_RETRIES) {
-      clearSubmitRetry();
-      setIsSubmitting(false);
-      return;
-    }
 
     const sent = ws.submitTurn(pending);
     if (sent) {
@@ -208,7 +197,6 @@ export default function GameScreen() {
         }
       },
       onGameState: () => {
-        gameStartedRef.current = true;
         clearSubmitRetry();
         setIsSubmitting(false);
       },
@@ -268,13 +256,9 @@ export default function GameScreen() {
           );
         }
       },
-      onRoundComplete: () => {
-        clearSubmitRetry();
-        setIsSubmitting(false);
-      },
       onError: (message, code) => {
         console.warn("Game WebSocket error:", message, code);
-        if (code === "NOT_YOUR_TURN" || code === "GAME_COMPLETED" || code === "RATE_LIMITED") {
+        if (code === "NOT_YOUR_TURN" || code === "GAME_COMPLETED") {
           clearSubmitRetry();
           setIsSubmitting(false);
         }
@@ -365,11 +349,8 @@ export default function GameScreen() {
       mountedRef.current = false;
       clearOpponentTimer();
       clearSubmitRetry();
-      if (!navigatedRef.current && gameStartedRef.current) {
-        ws.disconnect();
-      }
     };
-  }, [clearOpponentTimer, clearSubmitRetry, ws.disconnect]);
+  }, [clearOpponentTimer, clearSubmitRetry]);
 
   useEffect(() => {
     if (timer.timerColor === "critical") {
@@ -630,7 +611,7 @@ export default function GameScreen() {
         )}
       </View>
 
-      <View style={styles.canvasContainer} accessibilityLabel={isMyTurn ? "Drawing canvas. Touch and drag to draw." : "Opponent's drawing canvas. View only."}>
+      <View style={styles.canvasContainer} accessible={true} accessibilityLabel={isMyTurn ? "Drawing canvas. Touch and drag to draw." : "Opponent's drawing canvas. View only."}>
         <DrawingCanvas
           ref={canvasRef}
           strokeColor={activeColor}

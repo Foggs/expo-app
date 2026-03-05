@@ -2,17 +2,14 @@ import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { router } from "expo-router";
 import * as Haptics from "expo-haptics";
-import * as Clipboard from "expo-clipboard";
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useRef } from "react";
 import {
   ActivityIndicator,
-  Alert,
   Modal,
   Platform,
   Pressable,
   StyleSheet,
   Text,
-  TextInput,
   View,
   useColorScheme,
 } from "react-native";
@@ -40,20 +37,12 @@ export default function HomeScreen() {
   const navigatedRef = useRef(false);
 
   const ws = useGameWebSocket();
-  const [friendMode, setFriendMode] = useState<"none" | "choose" | "join">("none");
-  const [joinCode, setJoinCode] = useState("");
-  const [roomError, setRoomError] = useState<string | null>(null);
-  const [copied, setCopied] = useState(false);
-  const [friendConnecting, setFriendConnecting] = useState(false);
 
   useEffect(() => {
     ws.setCallbacks({
       onMatchFound: (info) => {
         if (navigatedRef.current) return;
         navigatedRef.current = true;
-        setFriendMode("none");
-        setJoinCode("");
-        setRoomError(null);
         if (Platform.OS !== "web") {
           Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         }
@@ -67,8 +56,6 @@ export default function HomeScreen() {
         });
       },
       onError: (message) => {
-        setRoomError(message);
-        setFriendConnecting(false);
         console.warn("WebSocket error:", message);
       },
     });
@@ -79,111 +66,6 @@ export default function HomeScreen() {
   }, []);
 
   const isSearching = ws.matchStatus === "searching" || ws.matchStatus === "matched";
-  const isHosting = ws.matchStatus === "hosting";
-
-  const handleCreateRoom = useCallback(() => {
-    if (friendConnecting) return;
-    if (Platform.OS !== "web") {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    }
-    navigatedRef.current = false;
-    setRoomError(null);
-    setCopied(false);
-    setFriendConnecting(true);
-    ws.resetState();
-
-    if (ws.connectionStatus === "connected") {
-      ws.createRoom();
-    } else {
-      ws.connect();
-      wantToCreateRef.current = true;
-    }
-  }, [friendConnecting, ws.connectionStatus, ws.connect, ws.createRoom, ws.resetState]);
-
-  const wantToCreateRef = useRef(false);
-  const wantToJoinCodeRef = useRef<string | null>(null);
-
-  useEffect(() => {
-    if (ws.connectionStatus === "connected" && wantToCreateRef.current && ws.matchStatus === "idle") {
-      wantToCreateRef.current = false;
-      ws.createRoom();
-    }
-    if (ws.connectionStatus === "connected" && wantToJoinCodeRef.current && ws.matchStatus === "idle") {
-      const code = wantToJoinCodeRef.current;
-      wantToJoinCodeRef.current = null;
-      ws.joinRoom(code);
-    }
-  }, [ws.connectionStatus, ws.matchStatus, ws.createRoom, ws.joinRoom]);
-
-  useEffect(() => {
-    if (isHosting) {
-      setFriendMode("none");
-      setFriendConnecting(false);
-    }
-  }, [isHosting]);
-
-  useEffect(() => {
-    if (ws.matchStatus === "matched" || ws.matchStatus === "playing") {
-      setFriendMode("none");
-      setFriendConnecting(false);
-    }
-  }, [ws.matchStatus]);
-
-  const handleJoinRoom = useCallback(() => {
-    if (joinCode.length !== 4 || friendConnecting) return;
-    if (Platform.OS !== "web") {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    }
-    navigatedRef.current = false;
-    setRoomError(null);
-    setFriendConnecting(true);
-    ws.resetState();
-
-    if (ws.connectionStatus === "connected") {
-      ws.joinRoom(joinCode);
-    } else {
-      wantToJoinCodeRef.current = joinCode;
-      ws.connect();
-    }
-  }, [joinCode, friendConnecting, ws.connectionStatus, ws.connect, ws.joinRoom, ws.resetState]);
-
-  const handleCancelRoom = useCallback(() => {
-    if (Platform.OS !== "web") {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    }
-    wantToCreateRef.current = false;
-    wantToJoinCodeRef.current = null;
-    ws.leaveRoom();
-    ws.disconnect();
-    setFriendMode("none");
-    setJoinCode("");
-    setRoomError(null);
-    setCopied(false);
-    setFriendConnecting(false);
-  }, [ws.leaveRoom, ws.disconnect]);
-
-  const copyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  useEffect(() => {
-    return () => {
-      if (copyTimerRef.current) clearTimeout(copyTimerRef.current);
-    };
-  }, []);
-
-  const handleCopyCode = useCallback(async () => {
-    if (!ws.roomCode) return;
-    try {
-      await Clipboard.setStringAsync(ws.roomCode);
-      setCopied(true);
-      if (Platform.OS !== "web") {
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      }
-      if (copyTimerRef.current) clearTimeout(copyTimerRef.current);
-      copyTimerRef.current = setTimeout(() => setCopied(false), 2000);
-    } catch {
-      // Clipboard may not be available
-    }
-  }, [ws.roomCode]);
 
   React.useEffect(() => {
     pulseOpacity.value = withRepeat(
@@ -197,7 +79,7 @@ export default function HomeScreen() {
   }, []);
 
   useEffect(() => {
-    if (isSearching || isHosting) {
+    if (isSearching) {
       searchPulse.value = withRepeat(
         withSequence(
           withTiming(1, { duration: 1000 }),
@@ -207,7 +89,7 @@ export default function HomeScreen() {
         true
       );
     }
-  }, [isSearching, isHosting]);
+  }, [isSearching]);
 
   const pulseStyle = useAnimatedStyle(() => ({
     opacity: pulseOpacity.value,
@@ -347,49 +229,22 @@ export default function HomeScreen() {
           </View>
         </View>
 
-        <View style={styles.bottomButtons}>
-          <Pressable
-            onPress={() => {
-              if (Platform.OS !== "web") {
-                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-              }
-              router.push("/gallery");
-            }}
-            style={[styles.galleryButton, { backgroundColor: colors.card }]}
-            accessibilityRole="button"
-            accessibilityLabel="View saved drawings gallery"
-          >
-            <Ionicons name="images" size={20} color={colors.tint} />
-            <Text style={[styles.galleryButtonText, { color: colors.text }]}>
-              Gallery
-            </Text>
-          </Pressable>
-
-          <Animated.View style={buttonAnimatedStyle}>
-            <Pressable
-              onPress={() => {
-                if (Platform.OS !== "web") {
-                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                }
-                setFriendMode("choose");
-                setRoomError(null);
-              }}
-              disabled={isSearching || isHosting}
-              accessibilityRole="button"
-              accessibilityLabel="Play with a friend using a room code"
-            >
-              <LinearGradient
-                colors={[colors.tint, colors.accentSecondary]}
-                style={[styles.findMatchButton, (isSearching || isHosting) && styles.buttonDisabled]}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-              >
-                <Ionicons name="people" size={24} color="#fff" />
-                <Text style={styles.buttonText}>Play with Friend</Text>
-              </LinearGradient>
-            </Pressable>
-          </Animated.View>
-        </View>
+        <Pressable
+          onPress={() => {
+            if (Platform.OS !== "web") {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+            }
+            router.push("/gallery");
+          }}
+          style={[styles.galleryButton, { backgroundColor: colors.card }]}
+          accessibilityRole="button"
+          accessibilityLabel="View saved drawings gallery"
+        >
+          <Ionicons name="images" size={20} color={colors.tint} />
+          <Text style={[styles.galleryButtonText, { color: colors.text }]}>
+            Gallery
+          </Text>
+        </Pressable>
 
         <View style={styles.footer}>
           <Animated.View style={[styles.pulseRing, pulseStyle]}>
@@ -465,195 +320,6 @@ export default function HomeScreen() {
           </View>
         </View>
       </Modal>
-
-      <Modal
-        visible={friendMode === "choose"}
-        transparent
-        animationType="fade"
-        onRequestClose={() => { if (!friendConnecting) setFriendMode("none"); }}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={[styles.searchModal, { backgroundColor: colors.card }]}>
-            {friendConnecting ? (
-              <>
-                <ActivityIndicator size="large" color={colors.tint} />
-                <Text style={[styles.searchTitle, { color: colors.text }]}>
-                  Creating room...
-                </Text>
-                <Pressable
-                  onPress={handleCancelRoom}
-                  style={[styles.cancelButton, { borderColor: colors.border }]}
-                  accessibilityRole="button"
-                  accessibilityLabel="Cancel"
-                >
-                  <Ionicons name="close" size={20} color={colors.error} />
-                  <Text style={[styles.cancelText, { color: colors.error }]}>Cancel</Text>
-                </Pressable>
-              </>
-            ) : (
-              <>
-                <Ionicons name="people" size={40} color={colors.accent} />
-                <Text style={[styles.searchTitle, { color: colors.text }]}>
-                  Play with Friend
-                </Text>
-
-                <Pressable
-                  onPress={handleCreateRoom}
-                  style={[styles.friendOptionButton, { backgroundColor: colors.tint }]}
-                  accessibilityRole="button"
-                  accessibilityLabel="Create a room and get a code to share"
-                >
-                  <Ionicons name="add-circle" size={22} color="#fff" />
-                  <Text style={styles.friendOptionText}>Create Room</Text>
-                </Pressable>
-
-                <Pressable
-                  onPress={() => {
-                    setFriendMode("join");
-                    setJoinCode("");
-                    setRoomError(null);
-                  }}
-                  style={[styles.friendOptionButton, { backgroundColor: colors.accent }]}
-                  accessibilityRole="button"
-                  accessibilityLabel="Join a room with a code from a friend"
-                >
-                  <Ionicons name="enter" size={22} color="#fff" />
-                  <Text style={styles.friendOptionText}>Join Room</Text>
-                </Pressable>
-
-                <Pressable
-                  onPress={() => setFriendMode("none")}
-                  style={[styles.cancelButton, { borderColor: colors.border }]}
-                  accessibilityRole="button"
-                  accessibilityLabel="Cancel"
-                >
-                  <Text style={[styles.cancelText, { color: colors.textSecondary }]}>Cancel</Text>
-                </Pressable>
-              </>
-            )}
-          </View>
-        </View>
-      </Modal>
-
-      <Modal
-        visible={isHosting}
-        transparent
-        animationType="fade"
-        onRequestClose={handleCancelRoom}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={[styles.searchModal, { backgroundColor: colors.card }]}>
-            <Text style={[styles.searchTitle, { color: colors.text }]}>
-              Your Room Code
-            </Text>
-
-            <View style={[styles.roomCodeContainer, { borderColor: colors.tint }]}>
-              <Text style={[styles.roomCodeText, { color: colors.tint }]} selectable>
-                {ws.roomCode}
-              </Text>
-            </View>
-
-            <Pressable
-              onPress={handleCopyCode}
-              style={[styles.copyButton, { backgroundColor: copied ? colors.success : colors.tint }]}
-              accessibilityRole="button"
-              accessibilityLabel={copied ? "Code copied" : "Copy room code"}
-            >
-              <Ionicons name={copied ? "checkmark" : "copy"} size={18} color="#fff" />
-              <Text style={styles.copyButtonText}>
-                {copied ? "Copied!" : "Copy Code"}
-              </Text>
-            </Pressable>
-
-            <Text style={[styles.searchHint, { color: colors.textSecondary }]}>
-              Share this code with your friend
-            </Text>
-
-            {roomError && (
-              <Text style={[styles.errorText, { color: colors.error }]}>
-                {roomError}
-              </Text>
-            )}
-
-            <Animated.View style={searchPulseStyle}>
-              <ActivityIndicator size="small" color={colors.accent} />
-            </Animated.View>
-            <Text style={[styles.queueText, { color: colors.textSecondary }]}>
-              Waiting for friend to join...
-            </Text>
-
-            <Pressable
-              onPress={handleCancelRoom}
-              style={[styles.cancelButton, { borderColor: colors.border }]}
-              accessibilityRole="button"
-              accessibilityLabel="Cancel room"
-            >
-              <Ionicons name="close" size={20} color={colors.error} />
-              <Text style={[styles.cancelText, { color: colors.error }]}>Cancel</Text>
-            </Pressable>
-          </View>
-        </View>
-      </Modal>
-
-      <Modal
-        visible={friendMode === "join"}
-        transparent
-        animationType="fade"
-        onRequestClose={() => { setFriendMode("none"); setJoinCode(""); setRoomError(null); }}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={[styles.searchModal, { backgroundColor: colors.card }]}>
-            <Text style={[styles.searchTitle, { color: colors.text }]}>
-              Enter Room Code
-            </Text>
-
-            <TextInput
-              style={[styles.codeInput, { color: colors.text, borderColor: roomError ? colors.error : colors.border }]}
-              value={joinCode}
-              onChangeText={(text) => {
-                setJoinCode(text.toUpperCase().replace(/[^A-Z]/g, "").slice(0, 4));
-                setRoomError(null);
-              }}
-              placeholder="ABCD"
-              placeholderTextColor={colors.textSecondary}
-              maxLength={4}
-              autoCapitalize="characters"
-              autoCorrect={false}
-              accessibilityLabel="Room code input"
-              accessibilityHint="Enter the 4-letter code your friend shared"
-            />
-
-            {roomError && (
-              <Text style={[styles.errorText, { color: colors.error }]}>
-                {roomError}
-              </Text>
-            )}
-
-            <Pressable
-              onPress={handleJoinRoom}
-              disabled={joinCode.length !== 4}
-              style={[
-                styles.friendOptionButton,
-                { backgroundColor: joinCode.length === 4 ? colors.accent : colors.border },
-              ]}
-              accessibilityRole="button"
-              accessibilityLabel="Join room"
-            >
-              <Ionicons name="enter" size={22} color="#fff" />
-              <Text style={styles.friendOptionText}>Join</Text>
-            </Pressable>
-
-            <Pressable
-              onPress={() => { setFriendMode("none"); setJoinCode(""); setRoomError(null); }}
-              style={[styles.cancelButton, { borderColor: colors.border }]}
-              accessibilityRole="button"
-              accessibilityLabel="Cancel"
-            >
-              <Text style={[styles.cancelText, { color: colors.textSecondary }]}>Cancel</Text>
-            </Pressable>
-          </View>
-        </View>
-      </Modal>
     </View>
   );
 }
@@ -717,19 +383,16 @@ const styles = StyleSheet.create({
     fontSize: 17,
     fontFamily: "Inter_500Medium",
   },
-  bottomButtons: {
-    alignItems: "center",
-    gap: 16,
-    marginBottom: 24,
-  },
   galleryButton: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     gap: 8,
+    alignSelf: "center",
     paddingVertical: 10,
     paddingHorizontal: 20,
     borderRadius: 20,
+    marginBottom: 8,
   },
   galleryButtonText: {
     fontSize: 15,
@@ -810,62 +473,5 @@ const styles = StyleSheet.create({
   cancelText: {
     fontSize: 16,
     fontFamily: "Inter_500Medium",
-  },
-  friendOptionButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 10,
-    paddingVertical: 14,
-    paddingHorizontal: 32,
-    borderRadius: 16,
-    width: "100%",
-  },
-  friendOptionText: {
-    color: "#fff",
-    fontSize: 16,
-    fontFamily: "Inter_600SemiBold",
-  },
-  roomCodeContainer: {
-    borderWidth: 2,
-    borderRadius: 16,
-    borderStyle: "dashed",
-    paddingVertical: 16,
-    paddingHorizontal: 32,
-    alignItems: "center",
-  },
-  roomCodeText: {
-    fontSize: 36,
-    fontFamily: "Inter_700Bold",
-    letterSpacing: 8,
-  },
-  copyButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    paddingVertical: 10,
-    paddingHorizontal: 20,
-    borderRadius: 12,
-  },
-  copyButtonText: {
-    color: "#fff",
-    fontSize: 14,
-    fontFamily: "Inter_500Medium",
-  },
-  codeInput: {
-    fontSize: 32,
-    fontFamily: "Inter_700Bold",
-    letterSpacing: 8,
-    textAlign: "center",
-    borderWidth: 2,
-    borderRadius: 16,
-    paddingVertical: 14,
-    paddingHorizontal: 24,
-    width: "100%",
-  },
-  errorText: {
-    fontSize: 14,
-    fontFamily: "Inter_500Medium",
-    textAlign: "center",
   },
 });
