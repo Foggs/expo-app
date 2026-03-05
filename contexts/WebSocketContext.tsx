@@ -246,6 +246,7 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
       }
 
       case "game_state": {
+        console.log(`[DEBUG] game_state received: currentPlayer=${msg.currentPlayer}, round=${msg.currentRound}, status=${msg.status}, matchStatusBefore=${matchStatusRef.current}`);
         setMatchStatus("playing");
         const state: GameStateFromServer = {
           gameId: msg.gameId,
@@ -473,7 +474,10 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
 
   const sendStroke = useCallback(
     (stroke: StrokeData) => {
-      if (matchStatusRef.current !== "playing") return;
+      if (matchStatusRef.current !== "playing") {
+        console.log(`[DEBUG] sendStroke BLOCKED: matchStatusRef=${matchStatusRef.current}`);
+        return;
+      }
       sendRaw({ type: "draw_stroke", stroke });
     },
     [sendRaw]

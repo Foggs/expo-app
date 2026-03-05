@@ -318,6 +318,8 @@ export default function GameScreen() {
     const wasMyTurn = prevIsMyTurnRef.current;
     prevIsMyTurnRef.current = isMyTurn;
 
+    console.log(`[DEBUG] isMyTurn effect: isMyTurn=${isMyTurn}, wasMyTurn=${wasMyTurn}, playerRole=${playerRole}, currentPlayer=${currentPlayer}, gameState.currentPlayer=${ws.gameState?.currentPlayer}, disabled=${!isMyTurn || isSubmitting}`);
+
     if (isMyTurn && wasMyTurn !== null && wasMyTurn !== isMyTurn) {
       clearOpponentTimer();
       setShowGetReady(false);
@@ -416,6 +418,7 @@ export default function GameScreen() {
   }));
 
   const handleStrokesChange = useCallback((newStrokes: Stroke[]) => {
+    console.log(`[DEBUG] handleStrokesChange called, strokes count: ${newStrokes.length}`);
     setStrokes(newStrokes);
     if (newStrokes.length > 0) {
       const latestStroke = newStrokes[newStrokes.length - 1];

@@ -81,9 +81,13 @@ const DrawingCanvas = forwardRef<DrawingCanvasRef, DrawingCanvasProps>(
 
     const panResponder = useRef(
       PanResponder.create({
-        onStartShouldSetPanResponder: () => !disabledRef.current,
+        onStartShouldSetPanResponder: () => {
+          console.log(`[DEBUG] onStartShouldSetPanResponder: disabled=${disabledRef.current}, returning ${!disabledRef.current}`);
+          return !disabledRef.current;
+        },
         onMoveShouldSetPanResponder: () => !disabledRef.current,
         onPanResponderGrant: (event: GestureResponderEvent) => {
+          console.log(`[DEBUG] onPanResponderGrant: disabled=${disabledRef.current}`);
           if (disabledRef.current) return;
           const point = getPoint(event);
           currentStrokeIdRef.current = generateId();

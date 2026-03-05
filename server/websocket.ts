@@ -350,6 +350,8 @@ async function handleSubmitTurn(conn: PlayerConnection, strokes: unknown[]): Pro
       strokes,
     });
 
+    console.log(`[DEBUG] Turn submitted by ${conn.playerName} (${conn.playerRole}) in round ${room.currentRound}, game ${conn.gameId}`);
+
     if (room.currentPlayer === "player2") {
       if (room.currentRound >= room.totalRounds) {
         room.status = "completed";
@@ -412,6 +414,7 @@ async function handleSubmitTurn(conn: PlayerConnection, strokes: unknown[]): Pro
         totalRounds: room.totalRounds,
         status: "active",
       };
+      console.log(`[DEBUG] Sending game_state currentPlayer=player2 to both players. P1 ws open: ${room.player1?.ws.readyState === WebSocket.OPEN}, P2 ws open: ${room.player2?.ws.readyState === WebSocket.OPEN}`);
       if (room.player1) sendMessage(room.player1, stateMsg);
       if (room.player2) sendMessage(room.player2, stateMsg);
     }
