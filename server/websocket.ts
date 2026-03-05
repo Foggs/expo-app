@@ -292,6 +292,15 @@ async function attemptMatchmaking(): Promise<void> {
   }
 }
 
+function clearStaleGameId(conn: PlayerConnection): void {
+  if (!conn.gameId) return;
+  const staleRoom = gameRooms.get(conn.gameId);
+  if (!staleRoom || staleRoom.status === "completed" || staleRoom.status === "abandoned") {
+    conn.gameId = null;
+    conn.playerRole = null;
+  }
+}
+
 async function handleSubmitTurn(conn: PlayerConnection, strokes: unknown[]): Promise<void> {
   if (!conn.gameId || !conn.playerRole) {
     sendMessage(conn, { type: "error", message: "Not in a game", code: "NOT_IN_GAME" });
@@ -357,15 +366,6 @@ async function handleSubmitTurn(conn: PlayerConnection, strokes: unknown[]): Pro
         const completeMsg: WsServerMessage = { type: "game_complete", gameId: conn.gameId };
         if (room.player1) sendMessage(room.player1, completeMsg);
         if (room.player2) sendMessage(room.player2, completeMsg);
-
-        if (room.player1) {
-          room.player1.gameId = null;
-          room.player1.playerRole = null;
-        }
-        if (room.player2) {
-          room.player2.gameId = null;
-          room.player2.playerRole = null;
-        }
 
         console.log(`Game ${conn.gameId} completed`);
       } else {
@@ -466,6 +466,7 @@ async function handleMessage(conn: PlayerConnection, data: Buffer | ArrayBuffer 
       break;
 
     case "join_queue":
+      clearStaleGameId(conn);
       if (conn.gameId) {
         sendMessage(conn, { type: "error", message: "Already in a game", code: "ALREADY_IN_GAME" });
         return;
@@ -487,6 +488,7 @@ async function handleMessage(conn: PlayerConnection, data: Buffer | ArrayBuffer 
       break;
 
     case "create_room": {
+      clearStaleGameId(conn);
       if (conn.gameId) {
         sendMessage(conn, { type: "room_error", message: "Already in a game" });
         break;
@@ -510,6 +512,7 @@ async function handleMessage(conn: PlayerConnection, data: Buffer | ArrayBuffer 
     }
 
     case "join_room": {
+      clearStaleGameId(conn);
       if (conn.gameId) {
         sendMessage(conn, { type: "room_error", message: "Already in a game" });
         break;
