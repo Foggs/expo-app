@@ -162,8 +162,10 @@ export default function HomeScreen() {
     }
     wantToJoinRef.current = false;
     ws.leaveQueue();
-    ws.disconnect();
-  }, [ws.leaveQueue, ws.disconnect]);
+    if (ws.connectionStatus !== "disconnected") {
+      ws.disconnect();
+    }
+  }, [ws.leaveQueue, ws.disconnect, ws.connectionStatus]);
 
   const topPadding = Platform.OS === "web" ? 67 : insets.top;
   const bottomPadding = Platform.OS === "web" ? 34 : insets.bottom;
