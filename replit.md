@@ -40,11 +40,11 @@ Preferred communication style: Simple, everyday language.
 
 ### Core Features
 - **Drawing Canvas**: `DrawingCanvas.tsx` using `react-native-svg` with 12 colors, 5 brush sizes, eraser, undo, and clear functionalities. Supports live drawing sync via WebSocket.
-- **Game Flow**: 3 rounds, alternating turns, with a 2-minute timer per turn. Drawings are cumulative across rounds, with `backgroundStrokes` accumulating previous turns' work.
-- **Matchmaking**: Queue-based system for automatic pairing and private rooms for playing with friends using 4-letter codes.
+- **Game Flow**: 3 rounds, alternating turns, with a 1-minute timer per turn. Drawings are cumulative across rounds, with `backgroundStrokes` accumulating previous turns' work. Game screen unmount calls `ws.disconnect()` (guarded by `navigatedRef`) to immediately notify opponent on abandonment. Submit retry capped at 5 attempts to prevent permanent UI lockout.
+- **Matchmaking**: Queue-based system for automatic pairing and private rooms for playing with friends using 4-letter codes. All match-start handlers (`handleFindMatch`, `handleCreateRoom`, `handleJoinRoom`) call `ws.resetState()` to clear stale `matchStatus` (e.g., `"completed"`) before attempting to queue or create rooms.
 - **Results Screen**: Displays game statistics, round-by-round cumulative drawing thumbnails, and an option to save the final drawing to a gallery.
 - **Gallery**: A dedicated screen (`app/gallery.tsx`) to view, save, and delete saved drawings.
-- **Security**: Comprehensive measures including Helmet for HTTP headers, rate limiting on API and WebSocket, Zod validation for all inputs, body size limits, CORS, and WebSocket origin validation.
+- **Security**: Comprehensive measures including Helmet for HTTP headers, rate limiting on API (200 req/15min) and WebSocket (1500 msg/min per connection), Zod validation for all inputs, body size limits, CORS, and WebSocket origin validation. Server clears `conn.gameId`/`conn.playerRole` immediately on game completion and opponent disconnect, allowing instant re-queuing without waiting for the 2-minute room cleanup timer.
 - **Accessibility**: WCAG AA compliance with accessibility labels, roles, screen reader hints, haptic feedback, and live regions.
 
 ## External Dependencies

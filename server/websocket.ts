@@ -241,6 +241,8 @@ function cleanupConnection(connId: string): void {
 
       if (otherConn) {
         sendMessage(otherConn, { type: "opponent_disconnected" });
+        otherConn.gameId = null;
+        otherConn.playerRole = null;
       }
 
       if (room.status !== "completed") {
@@ -355,6 +357,15 @@ async function handleSubmitTurn(conn: PlayerConnection, strokes: unknown[]): Pro
         const completeMsg: WsServerMessage = { type: "game_complete", gameId: conn.gameId };
         if (room.player1) sendMessage(room.player1, completeMsg);
         if (room.player2) sendMessage(room.player2, completeMsg);
+
+        if (room.player1) {
+          room.player1.gameId = null;
+          room.player1.playerRole = null;
+        }
+        if (room.player2) {
+          room.player2.gameId = null;
+          room.player2.playerRole = null;
+        }
 
         console.log(`Game ${conn.gameId} completed`);
       } else {

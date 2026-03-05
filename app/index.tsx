@@ -237,13 +237,14 @@ export default function HomeScreen() {
     }
     navigatedRef.current = false;
     wantToJoinRef.current = true;
+    ws.resetState();
 
     if (ws.connectionStatus === "connected") {
       ws.joinQueue();
     } else {
       ws.connect();
     }
-  }, [ws.connectionStatus, ws.connect, ws.joinQueue]);
+  }, [ws.connectionStatus, ws.connect, ws.joinQueue, ws.resetState]);
 
   useEffect(() => {
     if (ws.connectionStatus === "connected" && wantToJoinRef.current && ws.matchStatus === "idle") {
