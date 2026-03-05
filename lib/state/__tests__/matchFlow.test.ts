@@ -158,6 +158,19 @@ describe("MatchFlow", () => {
     });
   });
 
+  describe("DISCONNECT_REQUESTED from opponent_disconnected", () => {
+    it("transitions to idle and clears model", () => {
+      const m = createMatchMachine({ gameId: "g1", playerRole: "player1", opponentName: "Bob" }, "opponent_disconnected");
+      const result = collectEffects(m, { type: "DISCONNECT_REQUESTED" });
+      expect(m.currentStateId).toBe("idle");
+      expect(m.model.gameId).toBeNull();
+      expect(m.model.playerRole).toBeNull();
+      expect(m.model.opponentName).toBeNull();
+      expect(m.model.reconnectAttempt).toBe(0);
+      expect(result.effects.some((e) => e.type === "CLOSE_SOCKET")).toBe(true);
+    });
+  });
+
   describe("WS_CLOSED in connecting", () => {
     it("transitions to error_recoverable", () => {
       const m = createMatchMachine({}, "connecting");

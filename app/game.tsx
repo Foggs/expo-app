@@ -112,6 +112,7 @@ export default function GameScreen() {
     onNavigateHome: () => {
       if (navigatedRef.current) return;
       navigatedRef.current = true;
+      ws.disconnect();
       if (Platform.OS === "web") {
         alert("Your opponent has disconnected. Returning to home.");
         router.replace("/");
