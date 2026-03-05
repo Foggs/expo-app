@@ -18,7 +18,9 @@ export type MatchStatus =
   | "matched"
   | "playing"
   | "opponent_disconnected"
-  | "completed";
+  | "completed"
+  | "hosting"
+  | "joining";
 
 export interface MatchInfo {
   gameId: string;
@@ -116,11 +118,15 @@ interface WebSocketContextValue {
   matchInfo: MatchInfo | null;
   gameState: GameStateFromServer | null;
   queuePosition: number;
+  roomCode: string | null;
   connect: () => void;
   disconnect: () => void;
   resetState: () => void;
   joinQueue: () => void;
   leaveQueue: () => void;
+  createRoom: () => void;
+  joinRoom: (code: string) => void;
+  leaveRoom: () => void;
   submitTurn: (
     strokes: Array<{
       points: Array<{ x: number; y: number }>;
@@ -164,6 +170,7 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
   const [matchInfo, setMatchInfo] = useState<MatchInfo | null>(null);
   const [gameState, setGameState] = useState<GameStateFromServer | null>(null);
   const [queuePosition, setQueuePosition] = useState<number>(0);
+  const [roomCode, setRoomCode] = useState<string | null>(null);
 
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectAttemptRef = useRef(0);
@@ -289,6 +296,24 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
         cb.onOpponentDisconnected?.();
         break;
 
+      case "room_created":
+        setMatchStatus("hosting");
+        setRoomCode(msg.roomCode);
+        break;
+
+      case "room_joined":
+        setMatchStatus("joining");
+        setRoomCode(msg.roomCode);
+        break;
+
+      case "room_error":
+        if (matchStatusRef.current === "hosting" || matchStatusRef.current === "joining") {
+          setMatchStatus("idle");
+          setRoomCode(null);
+        }
+        cb.onError?.(msg.message);
+        break;
+
       case "error":
         if (msg.code === "MATCHMAKING_TIMEOUT") {
           setMatchStatus("idle");
@@ -377,6 +402,7 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
     setMatchInfo(null);
     setGameState(null);
     setQueuePosition(0);
+    setRoomCode(null);
   }, [clearTimers]);
 
   const resetState = useCallback(() => {
@@ -384,6 +410,7 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
     setMatchInfo(null);
     setGameState(null);
     setQueuePosition(0);
+    setRoomCode(null);
   }, []);
 
   const joinQueue = useCallback(() => {
@@ -398,6 +425,35 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
 
   const leaveQueue = useCallback(() => {
     sendRaw({ type: "leave_queue" });
+  }, [sendRaw]);
+
+  const createRoom = useCallback(() => {
+    if (
+      matchStatusRef.current !== "idle" ||
+      wsRef.current?.readyState !== WebSocket.OPEN
+    ) {
+      return;
+    }
+    sendRaw({ type: "create_room" });
+  }, [sendRaw]);
+
+  const joinRoom = useCallback(
+    (code: string) => {
+      if (
+        matchStatusRef.current !== "idle" ||
+        wsRef.current?.readyState !== WebSocket.OPEN
+      ) {
+        return;
+      }
+      sendRaw({ type: "join_room", roomCode: code.toUpperCase() });
+    },
+    [sendRaw]
+  );
+
+  const leaveRoom = useCallback(() => {
+    sendRaw({ type: "leave_room" });
+    setMatchStatus("idle");
+    setRoomCode(null);
   }, [sendRaw]);
 
   const submitTurn = useCallback(
@@ -457,11 +513,15 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
       matchInfo,
       gameState,
       queuePosition,
+      roomCode,
       connect,
       disconnect,
       resetState,
       joinQueue,
       leaveQueue,
+      createRoom,
+      joinRoom,
+      leaveRoom,
       submitTurn,
       sendStroke,
       sendClear,
@@ -474,11 +534,15 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
       matchInfo,
       gameState,
       queuePosition,
+      roomCode,
       connect,
       disconnect,
       resetState,
       joinQueue,
       leaveQueue,
+      createRoom,
+      joinRoom,
+      leaveRoom,
       submitTurn,
       sendStroke,
       sendClear,
