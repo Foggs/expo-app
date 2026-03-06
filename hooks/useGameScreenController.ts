@@ -27,6 +27,7 @@ import {
 
 const DEFAULT_COLOR = "#6C5CE7";
 const DEFAULT_BRUSH_SIZE = 4;
+const STROKE_SEND_INTERVAL_MS = 80;
 
 interface UseGameScreenControllerOptions {
   playerRole: PlayerId;
@@ -55,6 +56,9 @@ export function useGameScreenController({
   const getReadyScale = useSharedValue(1);
   const prevIsMyTurnRef = useRef<boolean | null>(null);
   const lastStrokeSendRef = useRef<number>(0);
+  const pendingStrokeRef = useRef<Stroke | null>(null);
+  const strokeFlushTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const canDrawRef = useRef<boolean>(false);
   const opponentDrawingRoundRef = useRef<number>(1);
   const opponentStrokesRef = useRef<Stroke[]>([]);
   const backgroundStrokesRef = useRef<Stroke[]>([]);
@@ -323,28 +327,97 @@ export function useGameScreenController({
     transform: [{ scale: timerPulse.value }],
   }));
 
+  const clearStrokeFlushTimer = useCallback(() => {
+    if (strokeFlushTimerRef.current) {
+      clearTimeout(strokeFlushTimerRef.current);
+      strokeFlushTimerRef.current = null;
+    }
+  }, []);
+
+  const flushPendingStroke = useCallback(() => {
+    const pending = pendingStrokeRef.current;
+    if (!pending) return;
+
+    if (!canDrawRef.current) {
+      pendingStrokeRef.current = null;
+      return;
+    }
+
+    pendingStrokeRef.current = null;
+    lastStrokeSendRef.current = Date.now();
+    sendStroke({
+      id: pending.id,
+      path: pending.path,
+      color: pending.color,
+      strokeWidth: pending.strokeWidth,
+    });
+  }, [sendStroke]);
+
+  const scheduleStrokeFlush = useCallback(() => {
+    if (strokeFlushTimerRef.current || !canDrawRef.current) return;
+
+    const elapsed = Date.now() - lastStrokeSendRef.current;
+    const delay = Math.max(0, STROKE_SEND_INTERVAL_MS - elapsed);
+
+    strokeFlushTimerRef.current = setTimeout(() => {
+      strokeFlushTimerRef.current = null;
+      flushPendingStroke();
+      if (pendingStrokeRef.current) {
+        scheduleStrokeFlush();
+      }
+    }, delay);
+  }, [flushPendingStroke]);
+
+  const queueStrokeForSend = useCallback(
+    (stroke: Stroke) => {
+      if (!canDrawRef.current) return;
+
+      pendingStrokeRef.current = stroke;
+      const elapsed = Date.now() - lastStrokeSendRef.current;
+
+      if (elapsed >= STROKE_SEND_INTERVAL_MS && !strokeFlushTimerRef.current) {
+        flushPendingStroke();
+        return;
+      }
+
+      scheduleStrokeFlush();
+    },
+    [flushPendingStroke, scheduleStrokeFlush],
+  );
+
+  useEffect(() => {
+    canDrawRef.current = canDraw;
+    if (!canDraw) {
+      pendingStrokeRef.current = null;
+      clearStrokeFlushTimer();
+    }
+  }, [canDraw, clearStrokeFlushTimer]);
+
+  useEffect(() => {
+    return () => {
+      pendingStrokeRef.current = null;
+      clearStrokeFlushTimer();
+    };
+  }, [clearStrokeFlushTimer]);
+
   const handleStrokesChange = useCallback(
     (newStrokes: Stroke[]) => {
       setStrokes(newStrokes);
       if (newStrokes.length === 0) return;
 
       const latestStroke = newStrokes[newStrokes.length - 1];
-      const now = Date.now();
-      if (now - lastStrokeSendRef.current < 50) return;
-
-      lastStrokeSendRef.current = now;
-      sendStroke({
-        id: latestStroke.id,
-        path: latestStroke.path,
-        color: latestStroke.color,
-        strokeWidth: latestStroke.strokeWidth,
-      });
+      queueStrokeForSend(latestStroke);
     },
-    [sendStroke]
+    [queueStrokeForSend]
   );
 
   const handleStrokeComplete = useCallback(
     (stroke: Stroke) => {
+      pendingStrokeRef.current = null;
+      clearStrokeFlushTimer();
+
+      if (!canDrawRef.current) return;
+
       lastStrokeSendRef.current = Date.now();
       sendStroke({
         id: stroke.id,
@@ -353,7 +426,7 @@ export function useGameScreenController({
         strokeWidth: stroke.strokeWidth,
       });
     },
-    [sendStroke]
+    [clearStrokeFlushTimer, sendStroke]
   );
 
   const handleBack = useCallback(() => {

@@ -13,9 +13,11 @@ import { randomInt } from "crypto";
 const MAX_MESSAGE_SIZE = 512 * 1024; // 512KB
 const HEARTBEAT_INTERVAL = 30_000;
 const HEARTBEAT_TIMEOUT = 10_000;
-const MAX_MESSAGES_PER_MINUTE = 300;
+const MAX_CONTROL_MESSAGES_PER_MINUTE = 300;
+const MAX_DRAW_MESSAGES_PER_MINUTE = 1_200;
 const MATCHMAKING_TIMEOUT = 120_000; // 2 minutes
 const RATE_LIMIT_WINDOW = 60_000;
+const RATE_LIMIT_DIAGNOSTIC_INTERVAL = 10_000;
 const ROOM_CLEANUP_INTERVAL = 60_000;
 const ROOM_CLEANUP_DELAY = 120_000; // 2 minutes after completion
 const FRIEND_ROOM_TTL = 10 * 60_000; // 10 minutes
@@ -30,6 +32,10 @@ interface PlayerConnection {
   friendRoomCode: string | null;
   isAlive: boolean;
   messageCount: number;
+  drawMessageCount: number;
+  droppedControlMessages: number;
+  droppedDrawMessages: number;
+  lastRateLimitLogAt: number;
   rateLimitReset: number;
   joinedAt: number;
 }
@@ -103,14 +109,84 @@ function sendMessage(conn: PlayerConnection, message: WsServerMessage): void {
   }
 }
 
-function isRateLimited(conn: PlayerConnection): boolean {
-  const now = Date.now();
-  if (now > conn.rateLimitReset) {
-    conn.messageCount = 0;
-    conn.rateLimitReset = now + RATE_LIMIT_WINDOW;
+type RateLimitBucket = "control" | "draw";
+
+function maybeLogRateLimitDiagnostics(
+  conn: PlayerConnection,
+  now: number,
+  force = false,
+): void {
+  if (process.env.NODE_ENV === "production") return;
+  if (!force && now - conn.lastRateLimitLogAt < RATE_LIMIT_DIAGNOSTIC_INTERVAL) {
+    return;
   }
+  if (conn.droppedControlMessages === 0 && conn.droppedDrawMessages === 0) {
+    return;
+  }
+
+  console.warn(
+    `[ws-rate-limit] ${conn.playerName} throttled messages: draw=${conn.droppedDrawMessages}, control=${conn.droppedControlMessages}`,
+  );
+  conn.droppedControlMessages = 0;
+  conn.droppedDrawMessages = 0;
+  conn.lastRateLimitLogAt = now;
+}
+
+function resetRateLimitWindowIfNeeded(conn: PlayerConnection, now: number): void {
+  if (now <= conn.rateLimitReset) return;
+  maybeLogRateLimitDiagnostics(conn, now, true);
+  conn.messageCount = 0;
+  conn.drawMessageCount = 0;
+  conn.rateLimitReset = now + RATE_LIMIT_WINDOW;
+}
+
+function isRateLimited(conn: PlayerConnection, bucket: RateLimitBucket): boolean {
+  const now = Date.now();
+  resetRateLimitWindowIfNeeded(conn, now);
+
+  if (bucket === "draw") {
+    conn.drawMessageCount++;
+    if (conn.drawMessageCount > MAX_DRAW_MESSAGES_PER_MINUTE) {
+      conn.droppedDrawMessages++;
+      maybeLogRateLimitDiagnostics(conn, now);
+      return true;
+    }
+    return false;
+  }
+
   conn.messageCount++;
-  return conn.messageCount > MAX_MESSAGES_PER_MINUTE;
+  if (conn.messageCount > MAX_CONTROL_MESSAGES_PER_MINUTE) {
+    conn.droppedControlMessages++;
+    maybeLogRateLimitDiagnostics(conn, now);
+    return true;
+  }
+
+  return false;
+}
+
+function isPrivateOrLocalHostname(hostname: string): boolean {
+  return (
+    hostname === "localhost" ||
+    hostname === "127.0.0.1" ||
+    hostname === "::1" ||
+    hostname.startsWith("10.") ||
+    hostname.startsWith("192.168.") ||
+    /^172\.(1[6-9]|2\d|3[0-1])\./.test(hostname)
+  );
+}
+
+function parseConfiguredHostname(value: string): string | null {
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+
+  try {
+    if (/^https?:\/\//i.test(trimmed)) {
+      return new URL(trimmed).hostname;
+    }
+    return new URL(`https://${trimmed}`).hostname;
+  } catch {
+    return null;
+  }
 }
 
 function validateOrigin(origin: string | undefined): boolean {
@@ -125,6 +201,28 @@ function validateOrigin(origin: string | undefined): boolean {
 
   if (hostname === "localhost" || hostname === "127.0.0.1") {
     return true;
+  }
+
+  if (
+    process.env.NODE_ENV !== "production" &&
+    isPrivateOrLocalHostname(hostname)
+  ) {
+    return true;
+  }
+
+  if (
+    process.env.NODE_ENV !== "production" &&
+    (hostname.endsWith(".ngrok-free.dev") || hostname.endsWith(".ngrok.io"))
+  ) {
+    return true;
+  }
+
+  const publicDomain = process.env.EXPO_PUBLIC_DOMAIN;
+  if (publicDomain) {
+    const configuredHost = parseConfiguredHostname(publicDomain);
+    if (configuredHost && (hostname === configuredHost || hostname.endsWith("." + configuredHost))) {
+      return true;
+    }
   }
 
   if (process.env.REPLIT_DEV_DOMAIN) {
@@ -367,8 +465,10 @@ async function attemptMatchmaking(): Promise<void> {
       console.log(`Match created: ${p1.playerName} vs ${p2.playerName} (game ${gameId})`);
     } catch (err) {
       console.error("Failed to create match:", err);
-      matchmakingQueue.unshift(p1Id);
+      // Requeue both players and stop this pass to avoid tight failure loops.
       matchmakingQueue.unshift(p2Id);
+      matchmakingQueue.unshift(p1Id);
+      break;
     }
   }
 }
@@ -674,15 +774,11 @@ async function handleSubmitTurn(conn: PlayerConnection, strokes: unknown[]): Pro
 }
 
 function handleMessage(conn: PlayerConnection, data: Buffer | ArrayBuffer | Buffer[]): void {
-  if (isRateLimited(conn)) {
-    sendMessage(conn, { type: "error", message: "Rate limited, slow down", code: "RATE_LIMITED" });
-    return;
-  }
-
   let raw: string;
   try {
     raw = data.toString();
   } catch {
+    if (isRateLimited(conn, "control")) return;
     sendMessage(conn, { type: "error", message: "Invalid message encoding", code: "INVALID_ENCODING" });
     return;
   }
@@ -696,12 +792,14 @@ function handleMessage(conn: PlayerConnection, data: Buffer | ArrayBuffer | Buff
   try {
     parsed = JSON.parse(raw);
   } catch {
+    if (isRateLimited(conn, "control")) return;
     sendMessage(conn, { type: "error", message: "Invalid JSON", code: "INVALID_JSON" });
     return;
   }
 
   const result = wsClientMessageSchema.safeParse(parsed);
   if (!result.success) {
+    if (isRateLimited(conn, "control")) return;
     sendMessage(conn, {
       type: "error",
       message: "Invalid message format",
@@ -711,6 +809,18 @@ function handleMessage(conn: PlayerConnection, data: Buffer | ArrayBuffer | Buff
   }
 
   const msg: WsClientMessage = result.data;
+  const rateLimitBucket: RateLimitBucket =
+    msg.type === "draw_stroke" ? "draw" : "control";
+  if (isRateLimited(conn, rateLimitBucket)) {
+    if (rateLimitBucket === "control") {
+      sendMessage(conn, {
+        type: "error",
+        message: "Rate limited, slow down",
+        code: "RATE_LIMITED",
+      });
+    }
+    return;
+  }
 
   switch (msg.type) {
     case "ping":
@@ -954,6 +1064,10 @@ export function setupWebSocket(server: Server): void {
       friendRoomCode: null,
       isAlive: true,
       messageCount: 0,
+      drawMessageCount: 0,
+      droppedControlMessages: 0,
+      droppedDrawMessages: 0,
+      lastRateLimitLogAt: Date.now(),
       rateLimitReset: Date.now() + RATE_LIMIT_WINDOW,
       joinedAt: Date.now(),
     };

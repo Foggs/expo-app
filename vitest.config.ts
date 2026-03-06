@@ -9,6 +9,9 @@ export default defineConfig({
     },
   },
   test: {
-    include: ["lib/state/__tests__/**/*.test.ts"],
+    include: [
+      "lib/state/__tests__/**/*.test.ts",
+      "lib/network/__tests__/**/*.test.ts",
+    ],
   },
 });

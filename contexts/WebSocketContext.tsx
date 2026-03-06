@@ -33,6 +33,7 @@ import {
   matchFlowStates,
   INITIAL_MATCH_FLOW_MODEL,
 } from "@/lib/state/matchFlow";
+import { resolveNativeWsUrl } from "@/lib/network/endpoints";
 import type {
   MatchFlowStateId,
   MatchFlowEvent,
@@ -265,19 +266,17 @@ const PING_INTERVAL = 25_000;
 function getWsUrl(): string {
   if (Platform.OS === "web" && typeof window !== "undefined") {
     const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-    const host = window.location.hostname;
-    const port = "5000";
+    const host =
+      window.location.hostname === "localhost"
+        ? "127.0.0.1"
+        : window.location.hostname;
+    const port = process.env.EXPO_PUBLIC_SERVER_PORT || "5050";
     return `${protocol}//${host}:${port}/ws`;
   }
 
   const domain = process.env.EXPO_PUBLIC_DOMAIN;
   if (!domain) throw new Error("EXPO_PUBLIC_DOMAIN not set");
-
-  const [host, port] = domain.split(":");
-  if (port) {
-    return `wss://${host}:${port}/ws`;
-  }
-  return `wss://${host}/ws`;
+  return resolveNativeWsUrl(domain);
 }
 
 export function WebSocketProvider({ children }: { children: ReactNode }) {
