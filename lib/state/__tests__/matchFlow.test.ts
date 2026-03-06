@@ -178,6 +178,15 @@ describe("MatchFlow", () => {
     });
   });
 
+  describe("DISCONNECT_REQUESTED from idle", () => {
+    it("stays in idle without side effects", () => {
+      const m = createMatchMachine({}, "idle");
+      const result = collectEffects(m, { type: "DISCONNECT_REQUESTED" });
+      expect(m.currentStateId).toBe("idle");
+      expect(result.effects).toEqual([]);
+    });
+  });
+
   describe("DISCONNECT_REQUESTED from opponent_disconnected", () => {
     it("transitions to idle and clears model", () => {
       const m = createMatchMachine({ gameId: "g1", playerRole: "player1", opponentName: "Bob" }, "opponent_disconnected");

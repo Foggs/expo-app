@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { Platform } from "react-native";
 import type { WsServerMessage, WsClientMessage } from "@shared/schema";
+import { resolveNativeWsUrl } from "@/lib/network/endpoints";
 
 export type ConnectionStatus = "disconnected" | "connecting" | "connected";
 
@@ -48,12 +49,7 @@ function getWsUrl(): string {
 
   const domain = process.env.EXPO_PUBLIC_DOMAIN;
   if (!domain) throw new Error("EXPO_PUBLIC_DOMAIN not set");
-
-  const [host, port] = domain.split(":");
-  if (port) {
-    return `wss://${host}:${port}/ws`;
-  }
-  return `wss://${host}/ws`;
+  return resolveNativeWsUrl(domain);
 }
 
 export function useWebSocket(options: UseWebSocketOptions = {}) {

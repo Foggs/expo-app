@@ -3,6 +3,7 @@ set -Eeuo pipefail
 
 MODE="web"
 USE_NGROK="0"
+USE_LAN="0"
 RUN_DB_PUSH="1"
 START_POSTGRES="1"
 
@@ -40,6 +41,7 @@ Usage: bash scripts/dev-local.sh [options]
 Options:
   --web                 Start Expo in web mode (default).
   --mobile              Start Expo for mobile (Expo Go).
+  --lan                 Auto-detect LAN IP and set EXPO_PUBLIC_DOMAIN=http://<ip>:<port>.
   --ngrok               Start ngrok tunnel (recommended with --mobile).
   --no-db-push          Skip "npm run db:push".
   --no-postgres         Skip Postgres container startup checks.
@@ -47,6 +49,7 @@ Options:
 
 Examples:
   bash scripts/dev-local.sh --web
+  bash scripts/dev-local.sh --mobile --lan
   bash scripts/dev-local.sh --mobile --ngrok
 EOF
 }
@@ -237,6 +240,43 @@ start_ngrok() {
   die "Could not detect ngrok public URL. Check log: ${NGROK_LOG}"
 }
 
+detect_lan_ip() {
+  local ip=""
+
+  if command -v ipconfig >/dev/null 2>&1; then
+    ip="$(ipconfig getifaddr en0 2>/dev/null || true)"
+    if [[ -z "${ip}" ]]; then
+      ip="$(ipconfig getifaddr en1 2>/dev/null || true)"
+    fi
+  fi
+
+  if [[ -z "${ip}" ]] && command -v hostname >/dev/null 2>&1; then
+    ip="$(hostname -I 2>/dev/null | awk '{print $1}' || true)"
+  fi
+
+  if [[ -z "${ip}" ]] && command -v ip >/dev/null 2>&1; then
+    ip="$(ip -4 route get 1.1.1.1 2>/dev/null | awk '{for (i=1;i<=NF;i++) if ($i=="src") {print $(i+1); exit}}' || true)"
+  fi
+
+  [[ -n "${ip}" ]] || return 1
+  printf '%s' "${ip}"
+}
+
+configure_lan_domain() {
+  if [[ -n "${EXPO_PUBLIC_DOMAIN:-}" ]]; then
+    log "EXPO_PUBLIC_DOMAIN already set; skipping --lan auto-detection."
+    return
+  fi
+
+  local lan_ip
+  if ! lan_ip="$(detect_lan_ip)"; then
+    die "Could not auto-detect LAN IP. Set EXPO_PUBLIC_DOMAIN manually."
+  fi
+
+  export EXPO_PUBLIC_DOMAIN="http://${lan_ip}:${SERVER_PORT}"
+  log "Using EXPO_PUBLIC_DOMAIN=${EXPO_PUBLIC_DOMAIN}"
+}
+
 run_expo() {
   log "Environment summary:"
   log "  DATABASE_URL=${DATABASE_URL}"
@@ -268,6 +308,10 @@ parse_args() {
         MODE="mobile"
         shift
         ;;
+      --lan)
+        USE_LAN="1"
+        shift
+        ;;
       --ngrok)
         USE_NGROK="1"
         shift
@@ -295,6 +339,14 @@ main() {
   parse_args "$@"
   trap cleanup EXIT INT TERM
 
+  if [[ "${USE_LAN}" == "1" && "${USE_NGROK}" == "1" ]]; then
+    die "Use either --lan or --ngrok, not both."
+  fi
+
+  if [[ "${USE_LAN}" == "1" && "${MODE}" != "mobile" ]]; then
+    die "--lan is only supported with --mobile."
+  fi
+
   require_command node
   require_command npm
   require_command curl
@@ -304,6 +356,10 @@ main() {
   ensure_postgres_container
   run_db_push
   start_backend
+
+  if [[ "${MODE}" == "mobile" && "${USE_LAN}" == "1" ]]; then
+    configure_lan_domain
+  fi
 
   if [[ "${MODE}" == "mobile" && "${USE_NGROK}" == "1" ]]; then
     start_ngrok

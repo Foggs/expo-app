@@ -1,6 +1,6 @@
 import { useLocalSearchParams } from "expo-router";
 import React, { useEffect } from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import BrushSizePicker from "@/components/BrushSizePicker";
 import ColorPicker from "@/components/ColorPicker";
@@ -31,7 +31,7 @@ export default function GameScreen() {
   const insets = useSafeAreaInsets();
   const { colors } = useThemeColors();
   const { topPadding, bottomPadding } = useScreenPadding(insets);
-  const { matchInfo, requestGameState, flowState } = useGameWebSocket();
+  const { matchInfo, requestGameState } = useGameWebSocket();
 
   const params = useLocalSearchParams<{
     gameId?: string | string[];
@@ -146,16 +146,6 @@ export default function GameScreen() {
         onExitGame={game.handleExitToHome}
         onReturnHome={game.handleExitToHome}
       />
-
-      {__DEV__ && (
-        <View style={styles.debugBadge} pointerEvents="none">
-          <Text style={styles.debugText}>role: {playerRole}</Text>
-          <Text style={styles.debugText}>current: {game.currentPlayer ?? "null"}</Text>
-          <Text style={styles.debugText}>turnState: {game.turnState}</Text>
-          <Text style={styles.debugText}>flow: {flowState}</Text>
-          <Text style={styles.debugText}>canDraw: {String(game.canDraw)}</Text>
-        </View>
-      )}
     </View>
   );
 }
@@ -163,20 +153,5 @@ export default function GameScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-  },
-  debugBadge: {
-    position: "absolute",
-    top: 96,
-    right: 12,
-    backgroundColor: "rgba(0,0,0,0.75)",
-    borderRadius: 8,
-    paddingHorizontal: 8,
-    paddingVertical: 6,
-    gap: 2,
-  },
-  debugText: {
-    color: "#fff",
-    fontSize: 11,
-    fontFamily: "Inter_500Medium",
   },
 });

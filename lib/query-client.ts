@@ -1,5 +1,6 @@
 import { fetch } from "expo/fetch";
 import { QueryClient, QueryFunction } from "@tanstack/react-query";
+import { resolveNativeApiBaseUrl } from "@/lib/network/endpoints";
 
 /**
  * Gets the base URL for the Express API server (e.g., "http://localhost:3000")
@@ -16,16 +17,13 @@ export function getApiUrl(): string {
     return `${protocol}//${host}:${port}/`;
   }
 
-  let host = process.env.EXPO_PUBLIC_DOMAIN;
+  const domain = process.env.EXPO_PUBLIC_DOMAIN;
 
-  if (!host) {
+  if (!domain) {
     throw new Error("EXPO_PUBLIC_DOMAIN is not set");
   }
 
-  host = host.replace(/^https?:\/\//, "").split("/")[0];
-  let url = new URL(`https://${host}`);
-
-  return url.href;
+  return resolveNativeApiBaseUrl(domain);
 }
 
 async function throwIfResNotOk(res: Response) {

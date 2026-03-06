@@ -26,20 +26,28 @@ Stop everything with `Ctrl+C` in that terminal.
 
 ## Quick Start (Mobile)
 
-For Expo Go / device testing:
+For Expo Go / device testing on local Wi-Fi (recommended):
 
 ```bash
-bash scripts/dev-local.sh --mobile --ngrok
+npm run local:dev:mobile
 ```
 
-This starts ngrok automatically and sets `EXPO_PUBLIC_DOMAIN` for you.
+This uses `scripts/dev-local.sh --mobile --lan`, auto-detects your LAN IP, and sets `EXPO_PUBLIC_DOMAIN=http://<lan-ip>:5050` for native API + WebSocket.
+
+Alternative (tunnel):
+
+```bash
+npm run local:dev:mobile:ngrok
+```
+
+Use ngrok if LAN connectivity is not possible.
 
 ## Requirements
 
 - Node.js `18+`
 - npm
 - Docker Desktop (for local Postgres)
-- ngrok (only for `--mobile --ngrok`)
+- ngrok (optional, only for `npm run local:dev:mobile:ngrok`)
 
 ## Useful Script Options
 
@@ -51,6 +59,7 @@ Common options:
 
 - `--web` (default)
 - `--mobile`
+- `--lan` (auto-detect LAN IP for mobile and set `EXPO_PUBLIC_DOMAIN`)
 - `--ngrok` (usually with mobile)
 - `--no-db-push`
 - `--no-postgres`
@@ -59,6 +68,7 @@ Common options:
 
 - Backend API + WebSocket: `http://localhost:5050` and `ws://127.0.0.1:5050/ws`
 - Expo web dev server: `http://localhost:8081`
+- Mobile LAN mode uses `EXPO_PUBLIC_DOMAIN=http://<your-lan-ip>:5050` (for example `http://192.168.1.239:5050`)
 
 Health checks:
 
@@ -116,6 +126,28 @@ Check `.dev-logs/server.log`.
 
 - If you see two queue joins but no `Match created`, there is a backend/database issue.
 - If no websocket entries appear, confirm both browsers are on `http://localhost:8081` and WS connects to `ws://127.0.0.1:5050/ws`.
+
+### Mobile shows "WebSocket connection error"
+
+1. Make sure Expo was started with `EXPO_PUBLIC_DOMAIN` set to your LAN backend URL:
+
+```bash
+npm run local:dev:mobile
+```
+
+2. Ensure phone and laptop are on the same Wi-Fi.
+3. Fully close and reopen Expo Go, then reconnect.
+4. Check backend log for origin rejection:
+
+```bash
+tail -n 120 .dev-logs/server.log
+```
+
+If you see `WebSocket connection rejected: invalid origin ...`, your `EXPO_PUBLIC_DOMAIN` value does not match the reachable backend host for that device.
+
+### ngrok URL does not work on this network
+
+Some networks/ISPs block ngrok domains. If tunnel mode fails, use LAN mode (`EXPO_PUBLIC_DOMAIN=http://<lan-ip>:5050`) instead.
 
 ### Re-running cleanly
 

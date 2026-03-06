@@ -207,7 +207,7 @@ const DrawingCanvas = forwardRef<DrawingCanvasRef, DrawingCanvasProps>(
           },
         ]}
         onLayout={handleLayout}
-        {...panResponder.panHandlers}
+        {...(Platform.OS === "web" ? panResponder.panHandlers : {})}
       >
         <View pointerEvents="none" style={StyleSheet.absoluteFill}>
           <Svg width="100%" height="100%">

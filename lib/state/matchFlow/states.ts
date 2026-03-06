@@ -62,6 +62,13 @@ export const idleState: MState = {
         effects: [{ type: "OPEN_SOCKET" }],
       };
     }
+    if (event.type === "DISCONNECT_REQUESTED") {
+      return {
+        nextStateId: "idle",
+        modelPatch: {},
+        effects: [],
+      };
+    }
     if (event.type === "MATCH_FOUND") {
       return {
         nextStateId: "matched",

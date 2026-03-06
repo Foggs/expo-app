@@ -1,6 +1,7 @@
 import { LinearGradient } from "expo-linear-gradient";
 import { router } from "expo-router";
 import React, { useCallback, useEffect, useRef, useState } from "react";
+import { useIsFocused } from "@react-navigation/native";
 import { StyleSheet, View } from "react-native";
 import { ROOM_CODE_LENGTH } from "@shared/friendRoom";
 import {
@@ -22,6 +23,7 @@ import { useThemeColors } from "@/hooks/useThemeColors";
 import { impactLight, impactMedium, notifySuccess } from "@/lib/platformFeedback";
 
 export default function HomeScreen() {
+  const isFocused = useIsFocused();
   const insets = useSafeAreaInsets();
   const { isDark, colors } = useThemeColors();
   const { topPadding, bottomPadding } = useScreenPadding(insets);
@@ -249,33 +251,37 @@ export default function HomeScreen() {
         />
       </View>
 
-      <MatchmakingModal
-        visible={showSearchModal}
-        colors={colors}
-        flowState={flowState}
-        lastErrorMessage={lastError?.message}
-        backoffCountdown={backoffCountdown}
-        queuePosition={queuePosition}
-        searchPulseStyle={searchPulseStyle}
-        onCancel={handleCancelSearch}
-        onRetry={() => {
-          disconnect();
-          setTimeout(() => handleFindMatch(), 100);
-        }}
-      />
+      {isFocused && (
+        <MatchmakingModal
+          visible={showSearchModal}
+          colors={colors}
+          flowState={flowState}
+          lastErrorMessage={lastError?.message}
+          backoffCountdown={backoffCountdown}
+          queuePosition={queuePosition}
+          searchPulseStyle={searchPulseStyle}
+          onCancel={handleCancelSearch}
+          onRetry={() => {
+            disconnect();
+            setTimeout(() => handleFindMatch(), 100);
+          }}
+        />
+      )}
 
-      <FriendsMatchModal
-        visible={showFriendsModal}
-        colors={colors}
-        status={friendRoomStatus}
-        roomCode={friendRoomCode}
-        roomError={friendRoomError}
-        roomInput={friendRoomInput}
-        onRoomInputChange={handleFriendRoomInput}
-        onCreateRoom={handleCreateFriendRoom}
-        onJoinRoom={handleJoinFriendRoom}
-        onClose={handleCloseFriendsModal}
-      />
+      {isFocused && (
+        <FriendsMatchModal
+          visible={showFriendsModal}
+          colors={colors}
+          status={friendRoomStatus}
+          roomCode={friendRoomCode}
+          roomError={friendRoomError}
+          roomInput={friendRoomInput}
+          onRoomInputChange={handleFriendRoomInput}
+          onCreateRoom={handleCreateFriendRoom}
+          onJoinRoom={handleJoinFriendRoom}
+          onClose={handleCloseFriendsModal}
+        />
+      )}
     </View>
   );
 }
