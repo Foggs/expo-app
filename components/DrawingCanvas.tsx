@@ -198,11 +198,30 @@ const DrawingCanvas = forwardRef<DrawingCanvasRef, DrawingCanvasProps>(
         },
         onPanResponderTerminate: () => {
           if (currentStrokeIdRef.current) {
-            const completedStroke = strokesRef.current.find(
-              (s) => s.id === currentStrokeIdRef.current
-            );
-            if (completedStroke) {
-              onStrokeCompleteRef.current?.(completedStroke);
+            let finalizedStroke: Stroke | undefined;
+            if (!currentPathRef.current.includes("L")) {
+              const match = currentPathRef.current.match(/M([\d.]+),([\d.]+)/);
+              if (match) {
+                const x = parseFloat(match[1]);
+                const y = parseFloat(match[2]);
+                currentPathRef.current += ` L${(x + 0.5).toFixed(2)},${(y + 0.5).toFixed(2)}`;
+              }
+              const updatedStrokes = strokesRef.current.map((stroke) =>
+                stroke.id === currentStrokeIdRef.current
+                  ? { ...stroke, path: currentPathRef.current }
+                  : stroke
+              );
+              onStrokesChangeRef.current(updatedStrokes);
+              finalizedStroke = updatedStrokes.find(
+                (s) => s.id === currentStrokeIdRef.current
+              );
+            } else {
+              finalizedStroke = strokesRef.current.find(
+                (s) => s.id === currentStrokeIdRef.current
+              );
+            }
+            if (finalizedStroke) {
+              onStrokeCompleteRef.current?.(finalizedStroke);
             }
           }
           currentPathRef.current = "";
