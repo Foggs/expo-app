@@ -77,12 +77,11 @@ export default function ResultsScreen() {
         return;
       }
 
-      const lastDrawing = drawings.reduce((a, b) => (a.round >= b.round ? a : b), drawings[0]);
       const token = await getSessionToken();
       await apiRequest("POST", "/api/gallery", {
         playerName: "You",
         opponentName: opponentName ?? "Opponent",
-        strokes: lastDrawing.strokes,
+        strokes: allStrokes,
         roundCount: Math.max(...drawings.map((d) => d.round)),
         sessionToken: token,
       });
