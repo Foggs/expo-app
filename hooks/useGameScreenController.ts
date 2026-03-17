@@ -61,6 +61,7 @@ export function useGameScreenController({
   const canDrawRef = useRef<boolean>(false);
   const opponentDrawingRoundRef = useRef<number>(1);
   const opponentStrokesRef = useRef<Stroke[]>([]);
+  const committedOpponentRoundRef = useRef<number>(0);
   const backgroundStrokesRef = useRef<Stroke[]>([]);
 
   const ws = useGameWebSocket();
@@ -254,10 +255,15 @@ export function useGameScreenController({
     prevIsMyTurnRef.current = isTurnOwner;
 
     if (isTurnOwner && wasMyTurn !== null && wasMyTurn !== isTurnOwner) {
-      notifyWarning();
-      if (opponentStrokes.length > 0) {
+      const opponentRound = opponentDrawingRoundRef.current;
+      if (
+        opponentStrokes.length > 0 &&
+        committedOpponentRoundRef.current !== opponentRound
+      ) {
+        committedOpponentRoundRef.current = opponentRound;
+        notifyWarning();
         addRoundDrawing({
-          round: opponentDrawingRoundRef.current,
+          round: opponentRound,
           playerRole: playerRole === "player1" ? "player2" : "player1",
           strokes: [...backgroundStrokes, ...opponentStrokes],
         });
