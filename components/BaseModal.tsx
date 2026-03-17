@@ -5,6 +5,8 @@ import {
   StyleSheet,
   Text,
   View,
+  type StyleProp,
+  type ViewStyle,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useThemeColors } from "@/hooks/useThemeColors";
@@ -16,6 +18,9 @@ interface BaseModalProps {
   closeLabel?: string;
   dismissOnOverlay?: boolean;
   maxWidth?: number;
+  statusBarTranslucent?: boolean;
+  cardStyle?: StyleProp<ViewStyle>;
+  overlayStyle?: StyleProp<ViewStyle>;
   children: React.ReactNode;
 }
 
@@ -26,6 +31,9 @@ export default function BaseModal({
   closeLabel = "Close",
   dismissOnOverlay = true,
   maxWidth = 320,
+  statusBarTranslucent,
+  cardStyle,
+  overlayStyle,
   children,
 }: BaseModalProps) {
   const { colors } = useThemeColors();
@@ -36,13 +44,14 @@ export default function BaseModal({
       transparent
       animationType="fade"
       onRequestClose={onClose}
+      statusBarTranslucent={statusBarTranslucent}
     >
       <Pressable
-        style={styles.overlay}
+        style={[styles.overlay, overlayStyle]}
         onPress={dismissOnOverlay ? onClose : undefined}
       >
         <Pressable
-          style={[styles.card, { backgroundColor: colors.card, maxWidth }]}
+          style={[styles.card, { backgroundColor: colors.card, maxWidth }, cardStyle]}
           onPress={(e) => e.stopPropagation()}
         >
           {title && (
@@ -70,15 +79,15 @@ export default function BaseModal({
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: "rgba(0, 0, 0, 0.5)",
+    backgroundColor: "rgba(0, 0, 0, 0.6)",
     justifyContent: "center",
     alignItems: "center",
     padding: 24,
   },
   card: {
     width: "100%",
-    borderRadius: 20,
-    padding: 20,
+    borderRadius: 24,
+    padding: 24,
   },
   header: {
     flexDirection: "row",

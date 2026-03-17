@@ -9,6 +9,7 @@ import {
   View,
 } from "react-native";
 import Animated from "react-native-reanimated";
+import BaseModal from "@/components/BaseModal";
 import type { ThemeColors } from "@/hooks/useThemeColors";
 
 export interface GameStatusOverlaysProps {
@@ -78,68 +79,62 @@ export default function GameStatusOverlays({
         </View>
       )}
 
-      <Modal
+      <BaseModal
         visible={showSubmitFailed}
-        transparent
-        animationType="fade"
+        onClose={onExitGame}
+        dismissOnOverlay={false}
         statusBarTranslucent
+        cardStyle={styles.errorCard}
       >
-        <View style={styles.errorOverlay}>
-          <View style={[styles.errorModal, { backgroundColor: colors.card }]}> 
-            <Ionicons name="alert-circle" size={40} color={colors.error} />
-            <Text style={[styles.errorTitle, { color: colors.text }]}>Submission Failed</Text>
-            <Text style={[styles.errorMessage, { color: colors.textSecondary }]}> 
-              {lastErrorMessage || "Your drawing could not be sent. Please try again."}
-            </Text>
-            <View style={styles.errorActions}>
-              <Pressable
-                onPress={onRetrySubmit}
-                style={[styles.errorButton, { backgroundColor: colors.tint }]}
-                accessibilityRole="button"
-                accessibilityLabel="Retry submission"
-              >
-                <Ionicons name="refresh" size={18} color="#fff" />
-                <Text style={styles.errorButtonText}>Retry</Text>
-              </Pressable>
-              <Pressable
-                onPress={onExitGame}
-                style={[styles.errorButtonOutline, { borderColor: colors.border }]}
-                accessibilityRole="button"
-                accessibilityLabel="Exit game"
-              >
-                <Ionicons name="exit-outline" size={18} color={colors.error} />
-                <Text style={[styles.errorButtonOutlineText, { color: colors.error }]}>Exit</Text>
-              </Pressable>
-            </View>
-          </View>
+        <Ionicons name="alert-circle" size={40} color={colors.error} />
+        <Text style={[styles.errorTitle, { color: colors.text }]}>Submission Failed</Text>
+        <Text style={[styles.errorMessage, { color: colors.textSecondary }]}>
+          {lastErrorMessage || "Your drawing could not be sent. Please try again."}
+        </Text>
+        <View style={styles.errorActions}>
+          <Pressable
+            onPress={onRetrySubmit}
+            style={[styles.errorButton, { backgroundColor: colors.tint }]}
+            accessibilityRole="button"
+            accessibilityLabel="Retry submission"
+          >
+            <Ionicons name="refresh" size={18} color="#fff" />
+            <Text style={styles.errorButtonText}>Retry</Text>
+          </Pressable>
+          <Pressable
+            onPress={onExitGame}
+            style={[styles.errorButtonOutline, { borderColor: colors.border }]}
+            accessibilityRole="button"
+            accessibilityLabel="Exit game"
+          >
+            <Ionicons name="exit-outline" size={18} color={colors.error} />
+            <Text style={[styles.errorButtonOutlineText, { color: colors.error }]}>Exit</Text>
+          </Pressable>
         </View>
-      </Modal>
+      </BaseModal>
 
-      <Modal
+      <BaseModal
         visible={showSyncFatal}
-        transparent
-        animationType="fade"
+        onClose={onReturnHome}
+        dismissOnOverlay={false}
         statusBarTranslucent
+        cardStyle={styles.errorCard}
       >
-        <View style={styles.errorOverlay}>
-          <View style={[styles.errorModal, { backgroundColor: colors.card }]}> 
-            <Ionicons name="close-circle" size={40} color={colors.error} />
-            <Text style={[styles.errorTitle, { color: colors.text }]}>Connection Lost</Text>
-            <Text style={[styles.errorMessage, { color: colors.textSecondary }]}> 
-              {lastErrorMessage || "The game session could not be recovered."}
-            </Text>
-            <Pressable
-              onPress={onReturnHome}
-              style={[styles.errorButton, { backgroundColor: colors.error }]}
-              accessibilityRole="button"
-              accessibilityLabel="Return home"
-            >
-              <Ionicons name="home" size={18} color="#fff" />
-              <Text style={styles.errorButtonText}>Return Home</Text>
-            </Pressable>
-          </View>
-        </View>
-      </Modal>
+        <Ionicons name="close-circle" size={40} color={colors.error} />
+        <Text style={[styles.errorTitle, { color: colors.text }]}>Connection Lost</Text>
+        <Text style={[styles.errorMessage, { color: colors.textSecondary }]}>
+          {lastErrorMessage || "The game session could not be recovered."}
+        </Text>
+        <Pressable
+          onPress={onReturnHome}
+          style={[styles.errorButton, { backgroundColor: colors.error }]}
+          accessibilityRole="button"
+          accessibilityLabel="Return home"
+        >
+          <Ionicons name="home" size={18} color="#fff" />
+          <Text style={styles.errorButtonText}>Return Home</Text>
+        </Pressable>
+      </BaseModal>
     </>
   );
 }
@@ -197,19 +192,9 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontFamily: "Inter_500Medium",
   },
-  errorOverlay: {
-    flex: 1,
-    backgroundColor: "rgba(0, 0, 0, 0.6)",
-    justifyContent: "center",
-    alignItems: "center",
-    padding: 24,
-  },
-  errorModal: {
-    width: "100%",
-    maxWidth: 320,
-    borderRadius: 24,
+  errorCard: {
     padding: 32,
-    alignItems: "center",
+    alignItems: "center" as const,
     gap: 12,
   },
   errorTitle: {

@@ -22,6 +22,8 @@ const ROOM_CLEANUP_INTERVAL = 60_000;
 const ROOM_CLEANUP_DELAY = 120_000; // 2 minutes after completion
 const FRIEND_ROOM_TTL = 10 * 60_000; // 10 minutes
 const MAX_ROOM_CODE_ATTEMPTS = 25;
+const MAX_CONNECTIONS = 500;
+const MAX_ROOM_JOINS_PER_MINUTE = 10;
 
 interface PlayerConnection {
   ws: WebSocket;
@@ -38,6 +40,8 @@ interface PlayerConnection {
   lastRateLimitLogAt: number;
   rateLimitReset: number;
   joinedAt: number;
+  roomJoinAttempts: number;
+  roomJoinReset: number;
 }
 
 interface GameRoom {
@@ -535,6 +539,21 @@ async function handleJoinRoom(conn: PlayerConnection, roomCode: string): Promise
       type: "room_error",
       message: "Already in a game.",
       code: "ALREADY_IN_GAME",
+    });
+    return;
+  }
+
+  const now = Date.now();
+  if (now > conn.roomJoinReset) {
+    conn.roomJoinAttempts = 0;
+    conn.roomJoinReset = now + RATE_LIMIT_WINDOW;
+  }
+  conn.roomJoinAttempts++;
+  if (conn.roomJoinAttempts > MAX_ROOM_JOINS_PER_MINUTE) {
+    sendMessage(conn, {
+      type: "room_error",
+      message: "Too many join attempts. Please wait a moment.",
+      code: "RATE_LIMITED",
     });
     return;
   }
@@ -1072,6 +1091,13 @@ export function setupWebSocket(server: Server): void {
   }, ROOM_CLEANUP_INTERVAL);
 
   wss.on("connection", (ws: WebSocket) => {
+    if (connections.size >= MAX_CONNECTIONS) {
+      console.warn(`Connection rejected: max connections (${MAX_CONNECTIONS}) reached`);
+      ws.close(1013, "Server at capacity");
+      return;
+    }
+
+    const now = Date.now();
     const connId = generateId();
     const conn: PlayerConnection = {
       ws,
@@ -1085,9 +1111,11 @@ export function setupWebSocket(server: Server): void {
       drawMessageCount: 0,
       droppedControlMessages: 0,
       droppedDrawMessages: 0,
-      lastRateLimitLogAt: Date.now(),
-      rateLimitReset: Date.now() + RATE_LIMIT_WINDOW,
-      joinedAt: Date.now(),
+      lastRateLimitLogAt: now,
+      rateLimitReset: now + RATE_LIMIT_WINDOW,
+      joinedAt: now,
+      roomJoinAttempts: 0,
+      roomJoinReset: now + RATE_LIMIT_WINDOW,
     };
 
     connections.set(connId, conn);
