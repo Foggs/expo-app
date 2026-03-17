@@ -121,11 +121,30 @@ const DrawingCanvas = forwardRef<DrawingCanvasRef, DrawingCanvasProps>(
 
     const finalizeStroke = useCallback(() => {
       if (currentStrokeIdRef.current) {
-        const completedStroke = strokesRef.current.find(
-          (s) => s.id === currentStrokeIdRef.current
-        );
-        if (completedStroke) {
-          onStrokeCompleteRef.current?.(completedStroke);
+        let finalizedStroke: Stroke | undefined;
+        if (!currentPathRef.current.includes("L")) {
+          const match = currentPathRef.current.match(/M([\d.]+),([\d.]+)/);
+          if (match) {
+            const x = parseFloat(match[1]);
+            const y = parseFloat(match[2]);
+            currentPathRef.current += ` L${(x + 0.5).toFixed(2)},${(y + 0.5).toFixed(2)}`;
+          }
+          const updatedStrokes = strokesRef.current.map((stroke) =>
+            stroke.id === currentStrokeIdRef.current
+              ? { ...stroke, path: currentPathRef.current }
+              : stroke
+          );
+          onStrokesChangeRef.current(updatedStrokes);
+          finalizedStroke = updatedStrokes.find(
+            (s) => s.id === currentStrokeIdRef.current
+          );
+        } else {
+          finalizedStroke = strokesRef.current.find(
+            (s) => s.id === currentStrokeIdRef.current
+          );
+        }
+        if (finalizedStroke) {
+          onStrokeCompleteRef.current?.(finalizedStroke);
         }
       }
       currentPathRef.current = "";
@@ -150,80 +169,7 @@ const DrawingCanvas = forwardRef<DrawingCanvasRef, DrawingCanvasProps>(
           _gestureState: PanResponderGestureState
         ) => {
           const point = getPoint(event);
-<<<<<<< HEAD
           appendStrokeAtPoint(point.x, point.y);
-=======
-          currentPathRef.current += ` L${point.x.toFixed(2)},${point.y.toFixed(2)}`;
-
-          const updatedStrokes = strokesRef.current.map((stroke) =>
-            stroke.id === currentStrokeIdRef.current
-              ? { ...stroke, path: currentPathRef.current }
-              : stroke
-          );
-          onStrokesChangeRef.current(updatedStrokes);
-        },
-        onPanResponderRelease: () => {
-          if (currentStrokeIdRef.current) {
-            let finalizedStroke: Stroke | undefined;
-            if (!currentPathRef.current.includes("L")) {
-              const match = currentPathRef.current.match(/M([\d.]+),([\d.]+)/);
-              if (match) {
-                const x = parseFloat(match[1]);
-                const y = parseFloat(match[2]);
-                currentPathRef.current += ` L${(x + 0.5).toFixed(2)},${(y + 0.5).toFixed(2)}`;
-              }
-              const updatedStrokes = strokesRef.current.map((stroke) =>
-                stroke.id === currentStrokeIdRef.current
-                  ? { ...stroke, path: currentPathRef.current }
-                  : stroke
-              );
-              onStrokesChangeRef.current(updatedStrokes);
-              finalizedStroke = updatedStrokes.find(
-                (s) => s.id === currentStrokeIdRef.current
-              );
-            } else {
-              finalizedStroke = strokesRef.current.find(
-                (s) => s.id === currentStrokeIdRef.current
-              );
-            }
-            if (finalizedStroke) {
-              onStrokeCompleteRef.current?.(finalizedStroke);
-            }
-          }
-          currentPathRef.current = "";
-          currentStrokeIdRef.current = "";
-        },
-        onPanResponderTerminate: () => {
-          if (currentStrokeIdRef.current) {
-            let finalizedStroke: Stroke | undefined;
-            if (!currentPathRef.current.includes("L")) {
-              const match = currentPathRef.current.match(/M([\d.]+),([\d.]+)/);
-              if (match) {
-                const x = parseFloat(match[1]);
-                const y = parseFloat(match[2]);
-                currentPathRef.current += ` L${(x + 0.5).toFixed(2)},${(y + 0.5).toFixed(2)}`;
-              }
-              const updatedStrokes = strokesRef.current.map((stroke) =>
-                stroke.id === currentStrokeIdRef.current
-                  ? { ...stroke, path: currentPathRef.current }
-                  : stroke
-              );
-              onStrokesChangeRef.current(updatedStrokes);
-              finalizedStroke = updatedStrokes.find(
-                (s) => s.id === currentStrokeIdRef.current
-              );
-            } else {
-              finalizedStroke = strokesRef.current.find(
-                (s) => s.id === currentStrokeIdRef.current
-              );
-            }
-            if (finalizedStroke) {
-              onStrokeCompleteRef.current?.(finalizedStroke);
-            }
-          }
-          currentPathRef.current = "";
-          currentStrokeIdRef.current = "";
->>>>>>> 01d217c (Task #2: Fix invisible single-tap strokes on drawing canvas)
         },
         onPanResponderRelease: finalizeStroke,
         onPanResponderTerminate: finalizeStroke,
