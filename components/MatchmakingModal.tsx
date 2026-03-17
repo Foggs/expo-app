@@ -153,7 +153,7 @@ const styles = StyleSheet.create({
   card: {
     padding: 32,
     alignItems: "center" as const,
-    gap: 16,
+    gap: 20,
   },
   searchTitle: {
     fontSize: 20,
