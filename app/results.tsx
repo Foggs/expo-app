@@ -70,18 +70,18 @@ export default function ResultsScreen() {
     impactMedium();
 
     try {
-      const allStrokes = drawings.flatMap((d) => d.strokes);
-      if (allStrokes.length === 0) {
+      if (drawings.length === 0) {
         showPlatformAlert("No Drawings", "There are no drawings to save.", undefined, "No drawings to save.");
         setIsSaving(false);
         return;
       }
 
+      const lastDrawing = drawings.reduce((a, b) => (a.round >= b.round ? a : b), drawings[0]);
       const token = await getSessionToken();
       await apiRequest("POST", "/api/gallery", {
         playerName: "You",
         opponentName: opponentName ?? "Opponent",
-        strokes: allStrokes,
+        strokes: lastDrawing.strokes,
         roundCount: Math.max(...drawings.map((d) => d.round)),
         sessionToken: token,
       });
