@@ -153,7 +153,51 @@ const DrawingCanvas = forwardRef<DrawingCanvasRef, DrawingCanvasProps>(
           _gestureState: PanResponderGestureState
         ) => {
           const point = getPoint(event);
+<<<<<<< HEAD
           appendStrokeAtPoint(point.x, point.y);
+=======
+          currentPathRef.current += ` L${point.x.toFixed(2)},${point.y.toFixed(2)}`;
+
+          const updatedStrokes = strokesRef.current.map((stroke) =>
+            stroke.id === currentStrokeIdRef.current
+              ? { ...stroke, path: currentPathRef.current }
+              : stroke
+          );
+          onStrokesChangeRef.current(updatedStrokes);
+        },
+        onPanResponderRelease: () => {
+          if (currentStrokeIdRef.current) {
+            if (!currentPathRef.current.includes("L")) {
+              currentPathRef.current += ` L${currentPathRef.current.slice(1)}`;
+              const updatedStrokes = strokesRef.current.map((stroke) =>
+                stroke.id === currentStrokeIdRef.current
+                  ? { ...stroke, path: currentPathRef.current }
+                  : stroke
+              );
+              onStrokesChangeRef.current(updatedStrokes);
+            }
+            const completedStroke = strokesRef.current.find(
+              (s) => s.id === currentStrokeIdRef.current
+            );
+            if (completedStroke) {
+              onStrokeCompleteRef.current?.(completedStroke);
+            }
+          }
+          currentPathRef.current = "";
+          currentStrokeIdRef.current = "";
+        },
+        onPanResponderTerminate: () => {
+          if (currentStrokeIdRef.current) {
+            const completedStroke = strokesRef.current.find(
+              (s) => s.id === currentStrokeIdRef.current
+            );
+            if (completedStroke) {
+              onStrokeCompleteRef.current?.(completedStroke);
+            }
+          }
+          currentPathRef.current = "";
+          currentStrokeIdRef.current = "";
+>>>>>>> 01d217c (Task #2: Fix invisible single-tap strokes on drawing canvas)
         },
         onPanResponderRelease: finalizeStroke,
         onPanResponderTerminate: finalizeStroke,
