@@ -444,43 +444,50 @@ async function startGameForPlayers(
 }
 
 let isMatchmaking = false;
+let matchmakingPending = false;
 
 async function attemptMatchmaking(): Promise<void> {
-  if (isMatchmaking) return;
+  if (isMatchmaking) {
+    matchmakingPending = true;
+    return;
+  }
   isMatchmaking = true;
   try {
-  while (matchmakingQueue.length >= 2) {
-    const p1Id = matchmakingQueue.shift()!;
-    const p2Id = matchmakingQueue.shift()!;
+    do {
+      matchmakingPending = false;
+      while (matchmakingQueue.length >= 2) {
+        const p1Id = matchmakingQueue.shift()!;
+        const p2Id = matchmakingQueue.shift()!;
 
-    const p1 = getOpenConnection(p1Id);
-    const p2 = getOpenConnection(p2Id);
+        const p1 = getOpenConnection(p1Id);
+        const p2 = getOpenConnection(p2Id);
 
-    if (!p1) {
-      if (p2) {
-        matchmakingQueue.unshift(p2Id);
+        if (!p1) {
+          if (p2) {
+            matchmakingQueue.unshift(p2Id);
+          }
+          continue;
+        }
+
+        if (!p2) {
+          matchmakingQueue.unshift(p1Id);
+          continue;
+        }
+
+        try {
+          const gameId = await startGameForPlayers(p1, p2, "queue");
+          console.log(`Match created: ${p1.playerName} vs ${p2.playerName} (game ${gameId})`);
+        } catch (err) {
+          console.error("Failed to create match:", err);
+          matchmakingQueue.unshift(p2Id);
+          matchmakingQueue.unshift(p1Id);
+          break;
+        }
       }
-      continue;
-    }
-
-    if (!p2) {
-      matchmakingQueue.unshift(p1Id);
-      continue;
-    }
-
-    try {
-      const gameId = await startGameForPlayers(p1, p2, "queue");
-      console.log(`Match created: ${p1.playerName} vs ${p2.playerName} (game ${gameId})`);
-    } catch (err) {
-      console.error("Failed to create match:", err);
-      // Requeue both players and stop this pass to avoid tight failure loops.
-      matchmakingQueue.unshift(p2Id);
-      matchmakingQueue.unshift(p1Id);
-      break;
-    }
-  }
+    } while (matchmakingPending);
   } finally {
     isMatchmaking = false;
+    matchmakingPending = false;
   }
 }
 
