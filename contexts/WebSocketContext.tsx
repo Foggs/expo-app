@@ -602,6 +602,7 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
               break;
             }
             case "gameComplete":
+              setGameState((prev) => prev ? { ...prev, status: "completed" } : null);
               cb.onGameComplete?.(effect.payload as string);
               break;
             case "opponentDisconnected":
