@@ -440,7 +440,12 @@ async function startGameForPlayers(
   return gameId;
 }
 
+let isMatchmaking = false;
+
 async function attemptMatchmaking(): Promise<void> {
+  if (isMatchmaking) return;
+  isMatchmaking = true;
+  try {
   while (matchmakingQueue.length >= 2) {
     const p1Id = matchmakingQueue.shift()!;
     const p2Id = matchmakingQueue.shift()!;
@@ -470,6 +475,9 @@ async function attemptMatchmaking(): Promise<void> {
       matchmakingQueue.unshift(p1Id);
       break;
     }
+  }
+  } finally {
+    isMatchmaking = false;
   }
 }
 
