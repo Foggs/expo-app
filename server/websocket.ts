@@ -103,8 +103,11 @@ function sendMessage(conn: PlayerConnection, message: WsServerMessage): void {
   if (conn.ws.readyState === WebSocket.OPEN) {
     try {
       conn.ws.send(JSON.stringify(message));
-    } catch {
-      // Connection might have closed between check and send
+    } catch (err) {
+      console.warn(
+        `[WS] Failed to send "${message.type}" to ${conn.playerName ?? conn.id}:`,
+        err instanceof Error ? err.message : err
+      );
     }
   }
 }
