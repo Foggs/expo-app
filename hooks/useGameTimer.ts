@@ -65,9 +65,7 @@ export function useGameTimer({
           if (prev <= 1) {
             clearTimer();
             setIsRunning(false);
-            setTimeout(() => {
-              onTimeUpRef.current?.();
-            }, 0);
+            onTimeUpRef.current?.();
             return 0;
           }
           return prev - 1;

@@ -14,7 +14,7 @@ export interface GameHeaderProps {
   roundDisplay: string;
 }
 
-export default function GameHeader({
+function GameHeader({
   colors,
   topPadding,
   onBack,
@@ -105,3 +105,5 @@ const styles = StyleSheet.create({
     fontFamily: "Inter_500Medium",
   },
 });
+
+export default React.memo(GameHeader);

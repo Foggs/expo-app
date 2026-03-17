@@ -19,7 +19,7 @@ export interface GameToolbarProps {
   onSubmit: () => void;
 }
 
-export default function GameToolbar({
+function GameToolbar({
   colors,
   bottomPadding,
   canDraw,
@@ -193,3 +193,5 @@ const styles = StyleSheet.create({
     opacity: 0.6,
   },
 });
+
+export default React.memo(GameToolbar);

@@ -3,14 +3,12 @@ import {
   View,
   Pressable,
   StyleSheet,
-  useColorScheme,
-  Modal,
   Text,
-  Platform,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import * as Haptics from "expo-haptics";
-import Colors from "@/constants/colors";
+import { useThemeColors } from "@/hooks/useThemeColors";
+import { impactLight } from "@/lib/platformFeedback";
+import BaseModal from "@/components/BaseModal";
 
 const BRUSH_SIZES = [
   { size: 2, label: "Fine" },
@@ -35,126 +33,72 @@ export default function BrushSizePicker({
   onClose,
   currentColor,
 }: BrushSizePickerProps) {
-  const colorScheme = useColorScheme();
-  const isDark = colorScheme === "dark";
-  const colors = isDark ? Colors.dark : Colors.light;
+  const { colors } = useThemeColors();
 
   const handleSizeSelect = (size: number) => {
-    if (Platform.OS !== "web") {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    }
+    impactLight();
     onSizeChange(size);
     onClose();
   };
 
   return (
-    <Modal
+    <BaseModal
       visible={visible}
-      transparent
-      animationType="fade"
-      onRequestClose={onClose}
+      onClose={onClose}
+      title="Brush Size"
+      closeLabel="Close brush size picker"
     >
-      <Pressable style={styles.overlay} onPress={onClose}>
-        <Pressable
-          style={[styles.container, { backgroundColor: colors.card }]}
-          onPress={(e) => e.stopPropagation()}
-        >
-          <View style={styles.header}>
-            <Text style={[styles.title, { color: colors.text }]}>
-              Brush Size
-            </Text>
-            <Pressable
-              onPress={onClose}
-              style={styles.closeButton}
-              accessibilityRole="button"
-              accessibilityLabel="Close brush size picker"
-            >
-              <Ionicons name="close" size={24} color={colors.text} />
-            </Pressable>
-          </View>
-
-          <View style={styles.sizesContainer}>
-            {BRUSH_SIZES.map(({ size, label }) => (
-              <Pressable
-                key={size}
-                onPress={() => handleSizeSelect(size)}
+      <View style={styles.sizesContainer}>
+        {BRUSH_SIZES.map(({ size, label }) => (
+          <Pressable
+            key={size}
+            onPress={() => handleSizeSelect(size)}
+            style={[
+              styles.sizeRow,
+              { backgroundColor: colors.background },
+              selectedSize === size && {
+                backgroundColor: colors.tint + "20",
+                borderColor: colors.tint,
+              },
+            ]}
+            accessibilityRole="button"
+            accessibilityLabel={`Select ${label} brush size`}
+            accessibilityHint="Double tap to select this brush size"
+            accessibilityState={{ selected: selectedSize === size }}
+          >
+            <View style={styles.previewContainer}>
+              <View
                 style={[
-                  styles.sizeRow,
-                  { backgroundColor: colors.background },
-                  selectedSize === size && {
-                    backgroundColor: colors.tint + "20",
-                    borderColor: colors.tint,
+                  styles.sizePreview,
+                  {
+                    width: size + 10,
+                    height: size + 10,
+                    backgroundColor: currentColor,
+                    borderRadius: (size + 10) / 2,
                   },
                 ]}
-                accessibilityRole="button"
-                accessibilityLabel={`Select ${label} brush size`}
-                accessibilityHint="Double tap to select this brush size"
-                accessibilityState={{ selected: selectedSize === size }}
-              >
-                <View style={styles.previewContainer}>
-                  <View
-                    style={[
-                      styles.sizePreview,
-                      {
-                        width: size + 10,
-                        height: size + 10,
-                        backgroundColor: currentColor,
-                        borderRadius: (size + 10) / 2,
-                      },
-                    ]}
-                  />
-                </View>
-                <Text
-                  style={[
-                    styles.sizeLabel,
-                    { color: colors.text },
-                    selectedSize === size && { color: colors.tint },
-                  ]}
-                >
-                  {label}
-                </Text>
-                {selectedSize === size && (
-                  <Ionicons name="checkmark" size={20} color={colors.tint} />
-                )}
-              </Pressable>
-            ))}
-          </View>
-        </Pressable>
-      </Pressable>
-    </Modal>
+              />
+            </View>
+            <Text
+              style={[
+                styles.sizeLabel,
+                { color: colors.text },
+                selectedSize === size && { color: colors.tint },
+              ]}
+            >
+              {label}
+            </Text>
+            {selectedSize === size && (
+              <Ionicons name="checkmark" size={20} color={colors.tint} />
+            )}
+          </Pressable>
+        ))}
+      </View>
+    </BaseModal>
   );
 }
 
 const styles = StyleSheet.create({
-  overlay: {
-    flex: 1,
-    backgroundColor: "rgba(0, 0, 0, 0.5)",
-    justifyContent: "center",
-    alignItems: "center",
-    padding: 24,
-  },
-  container: {
-    width: "100%",
-    maxWidth: 320,
-    borderRadius: 20,
-    padding: 20,
-  },
-  header: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 16,
-  },
-  title: {
-    fontSize: 18,
-    fontFamily: "Inter_600SemiBold",
-  },
-  closeButton: {
-    width: 32,
-    height: 32,
-    justifyContent: "center",
-    alignItems: "center",
-  },
   sizesContainer: {
     gap: 8,
   },

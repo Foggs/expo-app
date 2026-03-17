@@ -12,13 +12,12 @@ import {
   PanResponder,
   GestureResponderEvent,
   PanResponderGestureState,
-  useColorScheme,
   LayoutChangeEvent,
   Platform,
 } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import Svg, { Path } from "react-native-svg";
-import Colors from "@/constants/colors";
+import { useThemeColors } from "@/hooks/useThemeColors";
 
 export interface Stroke {
   id: string;
@@ -50,9 +49,7 @@ function generateId(): string {
 
 const DrawingCanvas = forwardRef<DrawingCanvasRef, DrawingCanvasProps>(
   ({ strokeColor, strokeWidth, strokes, onStrokesChange, onStrokeComplete, disabled = false, backgroundStrokes = [] }, ref) => {
-    const colorScheme = useColorScheme();
-    const isDark = colorScheme === "dark";
-    const colors = isDark ? Colors.dark : Colors.light;
+    const { colors } = useThemeColors();
 
     const currentPathRef = useRef<string>("");
     const currentStrokeIdRef = useRef<string>("");

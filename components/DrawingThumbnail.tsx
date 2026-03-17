@@ -18,7 +18,7 @@ interface DrawingThumbnailProps {
   borderWidth?: number;
 }
 
-export default function DrawingThumbnail({
+function DrawingThumbnail({
   strokes,
   size = 120,
   borderRadius = 12,
@@ -68,3 +68,5 @@ const styles = StyleSheet.create({
     overflow: "hidden",
   },
 });
+
+export default React.memo(DrawingThumbnail);

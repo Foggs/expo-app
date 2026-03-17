@@ -11,7 +11,7 @@ export interface GameTurnIndicatorProps {
   opponentName: string;
 }
 
-export default function GameTurnIndicator({
+function GameTurnIndicator({
   colors,
   currentPlayer,
   turnDisplay,
@@ -65,3 +65,5 @@ const styles = StyleSheet.create({
     fontFamily: "Inter_400Regular",
   },
 });
+
+export default React.memo(GameTurnIndicator);
