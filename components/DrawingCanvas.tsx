@@ -1,15 +1,23 @@
-import React, { useRef, useCallback, useImperativeHandle, forwardRef } from "react";
+import React, {
+  useRef,
+  useCallback,
+  useImperativeHandle,
+  forwardRef,
+  useEffect,
+  useMemo,
+} from "react";
 import {
   View,
   StyleSheet,
   PanResponder,
   GestureResponderEvent,
   PanResponderGestureState,
-  useColorScheme,
   LayoutChangeEvent,
+  Platform,
 } from "react-native";
+import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import Svg, { Path } from "react-native-svg";
-import Colors from "@/constants/colors";
+import { useThemeColors } from "@/hooks/useThemeColors";
 
 export interface Stroke {
   id: string;
@@ -41,9 +49,7 @@ function generateId(): string {
 
 const DrawingCanvas = forwardRef<DrawingCanvasRef, DrawingCanvasProps>(
   ({ strokeColor, strokeWidth, strokes, onStrokesChange, onStrokeComplete, disabled = false, backgroundStrokes = [] }, ref) => {
-    const colorScheme = useColorScheme();
-    const isDark = colorScheme === "dark";
-    const colors = isDark ? Colors.dark : Colors.light;
+    const { colors } = useThemeColors();
 
     const currentPathRef = useRef<string>("");
     const currentStrokeIdRef = useRef<string>("");
@@ -55,6 +61,7 @@ const DrawingCanvas = forwardRef<DrawingCanvasRef, DrawingCanvasProps>(
     const onStrokesChangeRef = useRef(onStrokesChange);
     const onStrokeCompleteRef = useRef(onStrokeComplete);
     const disabledRef = useRef(disabled);
+    const prevDisabledRef = useRef<boolean | null>(null);
 
     strokeColorRef.current = strokeColor;
     strokeWidthRef.current = strokeWidth;
@@ -62,6 +69,13 @@ const DrawingCanvas = forwardRef<DrawingCanvasRef, DrawingCanvasProps>(
     onStrokesChangeRef.current = onStrokesChange;
     onStrokeCompleteRef.current = onStrokeComplete;
     disabledRef.current = disabled;
+
+    useEffect(() => {
+      if (!__DEV__) return;
+      if (prevDisabledRef.current === disabled) return;
+      prevDisabledRef.current = disabled;
+      console.log(`[DrawingCanvas] disabled=${disabled}`);
+    }, [disabled]);
 
     const handleLayout = useCallback((event: LayoutChangeEvent) => {
       const { width, height } = event.nativeEvent.layout;
@@ -79,65 +93,110 @@ const DrawingCanvas = forwardRef<DrawingCanvasRef, DrawingCanvasProps>(
       []
     );
 
-    const panResponder = useRef(
-      PanResponder.create({
-        onStartShouldSetPanResponder: () => !disabledRef.current,
-        onMoveShouldSetPanResponder: () => !disabledRef.current,
-        onPanResponderGrant: (event: GestureResponderEvent) => {
-          if (disabledRef.current) return;
-          const point = getPoint(event);
-          currentStrokeIdRef.current = generateId();
-          currentPathRef.current = `M${point.x.toFixed(2)},${point.y.toFixed(2)}`;
+    const beginStrokeAtPoint = useCallback((x: number, y: number) => {
+      if (disabledRef.current) return;
+      currentStrokeIdRef.current = generateId();
+      currentPathRef.current = `M${Math.max(0, x).toFixed(2)},${Math.max(0, y).toFixed(2)}`;
 
-          const newStroke: Stroke = {
-            id: currentStrokeIdRef.current,
-            path: currentPathRef.current,
-            color: strokeColorRef.current,
-            strokeWidth: strokeWidthRef.current,
-          };
-          onStrokesChangeRef.current([...strokesRef.current, newStroke]);
-        },
-        onPanResponderMove: (
-          event: GestureResponderEvent,
-          _gestureState: PanResponderGestureState
-        ) => {
-          if (disabledRef.current || !currentStrokeIdRef.current) return;
-          const point = getPoint(event);
-          currentPathRef.current += ` L${point.x.toFixed(2)},${point.y.toFixed(2)}`;
+      const newStroke: Stroke = {
+        id: currentStrokeIdRef.current,
+        path: currentPathRef.current,
+        color: strokeColorRef.current,
+        strokeWidth: strokeWidthRef.current,
+      };
+      onStrokesChangeRef.current([...strokesRef.current, newStroke]);
+    }, []);
 
+    const appendStrokeAtPoint = useCallback((x: number, y: number) => {
+      if (disabledRef.current || !currentStrokeIdRef.current) return;
+      currentPathRef.current += ` L${Math.max(0, x).toFixed(2)},${Math.max(0, y).toFixed(2)}`;
+
+      const updatedStrokes = strokesRef.current.map((stroke) =>
+        stroke.id === currentStrokeIdRef.current
+          ? { ...stroke, path: currentPathRef.current }
+          : stroke
+      );
+      onStrokesChangeRef.current(updatedStrokes);
+    }, []);
+
+    const finalizeStroke = useCallback(() => {
+      if (currentStrokeIdRef.current) {
+        let finalizedStroke: Stroke | undefined;
+        if (!currentPathRef.current.includes("L")) {
+          const match = currentPathRef.current.match(/M([\d.]+),([\d.]+)/);
+          if (match) {
+            const x = parseFloat(match[1]);
+            const y = parseFloat(match[2]);
+            currentPathRef.current += ` L${(x + 0.5).toFixed(2)},${(y + 0.5).toFixed(2)}`;
+          }
           const updatedStrokes = strokesRef.current.map((stroke) =>
             stroke.id === currentStrokeIdRef.current
               ? { ...stroke, path: currentPathRef.current }
               : stroke
           );
           onStrokesChangeRef.current(updatedStrokes);
-        },
-        onPanResponderRelease: () => {
-          if (currentStrokeIdRef.current) {
-            const completedStroke = strokesRef.current.find(
-              (s) => s.id === currentStrokeIdRef.current
-            );
-            if (completedStroke) {
-              onStrokeCompleteRef.current?.(completedStroke);
-            }
+          finalizedStroke = updatedStrokes.find(
+            (s) => s.id === currentStrokeIdRef.current
+          );
+        } else {
+          finalizedStroke = strokesRef.current.find(
+            (s) => s.id === currentStrokeIdRef.current
+          );
+        }
+        if (finalizedStroke) {
+          onStrokeCompleteRef.current?.(finalizedStroke);
+        }
+      }
+      currentPathRef.current = "";
+      currentStrokeIdRef.current = "";
+    }, []);
+
+    const panResponder = useRef(
+      PanResponder.create({
+        onStartShouldSetPanResponder: () => !disabledRef.current,
+        onStartShouldSetPanResponderCapture: () => !disabledRef.current,
+        onMoveShouldSetPanResponder: () => !disabledRef.current,
+        onMoveShouldSetPanResponderCapture: () => !disabledRef.current,
+        onPanResponderGrant: (event: GestureResponderEvent) => {
+          if (__DEV__) {
+            console.log("[DrawingCanvas] pan responder granted");
           }
-          currentPathRef.current = "";
-          currentStrokeIdRef.current = "";
+          const point = getPoint(event);
+          beginStrokeAtPoint(point.x, point.y);
         },
-        onPanResponderTerminate: () => {
-          if (currentStrokeIdRef.current) {
-            const completedStroke = strokesRef.current.find(
-              (s) => s.id === currentStrokeIdRef.current
-            );
-            if (completedStroke) {
-              onStrokeCompleteRef.current?.(completedStroke);
-            }
-          }
-          currentPathRef.current = "";
-          currentStrokeIdRef.current = "";
+        onPanResponderMove: (
+          event: GestureResponderEvent,
+          _gestureState: PanResponderGestureState
+        ) => {
+          const point = getPoint(event);
+          appendStrokeAtPoint(point.x, point.y);
         },
+        onPanResponderRelease: finalizeStroke,
+        onPanResponderTerminate: finalizeStroke,
       })
     ).current;
+
+    const panGesture = useMemo(() => {
+      return Gesture.Pan()
+        .runOnJS(true)
+        .minDistance(0)
+        .enabled(!disabled)
+        .onBegin((event) => {
+          if (__DEV__) {
+            console.log("[DrawingCanvas] gesture pan begin");
+          }
+          beginStrokeAtPoint(event.x, event.y);
+        })
+        .onUpdate((event) => {
+          appendStrokeAtPoint(event.x, event.y);
+        })
+        .onEnd(() => {
+          finalizeStroke();
+        })
+        .onFinalize(() => {
+          finalizeStroke();
+        });
+    }, [appendStrokeAtPoint, beginStrokeAtPoint, disabled, finalizeStroke]);
 
     useImperativeHandle(ref, () => ({
       undo: () => {
@@ -154,7 +213,7 @@ const DrawingCanvas = forwardRef<DrawingCanvasRef, DrawingCanvasProps>(
       },
     }));
 
-    return (
+    const canvasContent = (
       <View
         style={[
           styles.container,
@@ -164,34 +223,42 @@ const DrawingCanvas = forwardRef<DrawingCanvasRef, DrawingCanvasProps>(
           },
         ]}
         onLayout={handleLayout}
-        {...panResponder.panHandlers}
+        {...(Platform.OS === "web" ? panResponder.panHandlers : {})}
       >
-        <Svg width="100%" height="100%" style={[StyleSheet.absoluteFill, { pointerEvents: "none" }]}>
-          {backgroundStrokes.map((stroke) => (
-            <Path
-              key={`bg-${stroke.id}`}
-              d={stroke.path}
-              stroke={stroke.color}
-              strokeWidth={stroke.strokeWidth}
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              fill="none"
-            />
-          ))}
-          {strokes.map((stroke) => (
-            <Path
-              key={stroke.id}
-              d={stroke.path}
-              stroke={stroke.color}
-              strokeWidth={stroke.strokeWidth}
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              fill="none"
-            />
-          ))}
-        </Svg>
+        <View pointerEvents="none" style={StyleSheet.absoluteFill}>
+          <Svg width="100%" height="100%">
+            {backgroundStrokes.map((stroke) => (
+              <Path
+                key={`bg-${stroke.id}`}
+                d={stroke.path}
+                stroke={stroke.color}
+                strokeWidth={stroke.strokeWidth}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                fill="none"
+              />
+            ))}
+            {strokes.map((stroke) => (
+              <Path
+                key={stroke.id}
+                d={stroke.path}
+                stroke={stroke.color}
+                strokeWidth={stroke.strokeWidth}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                fill="none"
+              />
+            ))}
+          </Svg>
+        </View>
       </View>
     );
+
+    if (Platform.OS !== "web") {
+      return <GestureDetector gesture={panGesture}>{canvasContent}</GestureDetector>;
+    }
+
+    return canvasContent;
   }
 );
 

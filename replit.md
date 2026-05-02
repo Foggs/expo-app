@@ -16,6 +16,7 @@ Preferred communication style: Simple, everyday language.
 - **State Management**: React Query for server state, GoF State Pattern machines for game flow (MatchFlowMachine, TurnFlowMachine), React hooks for local state
 - **UI/UX**: React Native core components with custom styling, Reanimated for animations, shared constants for theming (Colors). WCAG AA contrast, accessibility labels, roles, and live regions are implemented.
 - **Design Pattern**: Component-based architecture and GoF State Pattern for game lifecycle.
+- **Shared Components**: `BaseModal` for consistent modal UI, `platformFeedback` helpers for cross-platform haptics. Game UI components (`GameHeader`, `GameToolbar`, `GameTurnIndicator`, `DrawingThumbnail`) are wrapped with `React.memo`. Theme colors accessed via `useThemeColors` hook (not raw `useColorScheme`).
 
 ### Backend
 - **Framework**: Express running on Node.js
@@ -63,7 +64,7 @@ Preferred communication style: Simple, everyday language.
 - **CORS & WebSocket Origin**: Dynamic and secure origin validation.
 - **Game Abandonment**: Database status updates for disconnected players.
 - **Matchmaking Timeout**: Accurate tracking of queue wait time.
-- **Memory Leak Prevention**: Guards on timers and machine state cleanups.
+- **Memory Leak Prevention**: Guards on timers and machine state cleanups. `useGameTimer` calls `onTimeUp` synchronously to avoid cleanup race conditions.
 
 ### SEO & Landing Page
 - Landing page with Open Graph, Twitter cards, and JSON-LD structured data.

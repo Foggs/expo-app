@@ -1,51 +1,74 @@
-import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { router } from "expo-router";
-import * as Haptics from "expo-haptics";
 import React, { useCallback, useEffect, useRef, useState } from "react";
+import { useIsFocused } from "@react-navigation/native";
+import { StyleSheet, View } from "react-native";
+import { ROOM_CODE_LENGTH } from "@shared/friendRoom";
 import {
-  ActivityIndicator,
-  Modal,
-  Platform,
-  Pressable,
-  StyleSheet,
-  Text,
-  View,
-  useColorScheme,
-} from "react-native";
-import Animated, {
   useAnimatedStyle,
   useSharedValue,
   withRepeat,
   withSequence,
-  withTiming,
   withSpring,
+  withTiming,
 } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import Colors from "@/constants/colors";
+import FriendsMatchModal from "@/components/FriendsMatchModal";
+import HomeHero from "@/components/HomeHero";
+import HomePrimaryActions from "@/components/HomePrimaryActions";
+import MatchmakingModal from "@/components/MatchmakingModal";
 import { useGameWebSocket } from "@/contexts/WebSocketContext";
+import { useScreenPadding } from "@/hooks/useScreenPadding";
+import { useThemeColors } from "@/hooks/useThemeColors";
+import { impactLight, impactMedium, notifySuccess } from "@/lib/platformFeedback";
 
 export default function HomeScreen() {
+  const isFocused = useIsFocused();
   const insets = useSafeAreaInsets();
-  const colorScheme = useColorScheme();
-  const isDark = colorScheme === "dark";
-  const colors = isDark ? Colors.dark : Colors.light;
+  const { isDark, colors } = useThemeColors();
+  const { topPadding, bottomPadding } = useScreenPadding(insets);
 
   const buttonScale = useSharedValue(1);
   const pulseOpacity = useSharedValue(0.4);
   const searchPulse = useSharedValue(0.6);
   const navigatedRef = useRef(false);
+  const [isFriendsModalOpen, setIsFriendsModalOpen] = useState(false);
+  const [friendRoomInput, setFriendRoomInput] = useState("");
 
-  const ws = useGameWebSocket();
+  const {
+    setCallbacks,
+    matchStatus,
+    flowState,
+    retryDelayMs,
+    connect,
+    disconnect,
+    lastError,
+    queuePosition,
+    friendRoomStatus,
+    friendRoomCode,
+    friendRoomError,
+    createFriendRoom,
+    joinFriendRoom,
+    leaveFriendRoom,
+    clearFriendRoomError,
+    requestGameState,
+  } = useGameWebSocket();
+
+  const isSearching = matchStatus === "queueing" || matchStatus === "matched";
+  const isFriendFlowActive = friendRoomStatus !== "idle";
+  const showFriendsModal = isFriendsModalOpen || isFriendFlowActive;
 
   useEffect(() => {
-    ws.setCallbacks({
+    setCallbacks({
       onMatchFound: (info) => {
         if (navigatedRef.current) return;
         navigatedRef.current = true;
-        if (Platform.OS !== "web") {
-          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        setIsFriendsModalOpen(false);
+        setFriendRoomInput("");
+        if (info.matchType === "friend") {
+          requestGameState();
         }
+        notifySuccess();
         router.push({
           pathname: "/game",
           params: {
@@ -61,19 +84,21 @@ export default function HomeScreen() {
     });
 
     return () => {
-      ws.setCallbacks({});
+      setCallbacks({});
     };
-  }, []);
+  }, [requestGameState, setCallbacks]);
 
-  const isSearching = ws.matchStatus === "queueing" || ws.matchStatus === "matched";
-  const isErrorState = ws.flowState === "error_recoverable" || ws.flowState === "error_backoff" || ws.flowState === "error_fatal";
+  const isErrorState =
+    flowState === "error_recoverable" ||
+    flowState === "error_backoff" ||
+    flowState === "error_fatal";
   const showSearchModal = isSearching || isErrorState;
 
   const [backoffCountdown, setBackoffCountdown] = useState(0);
 
   useEffect(() => {
-    if (ws.flowState === "error_backoff" && ws.retryDelayMs > 0) {
-      setBackoffCountdown(Math.ceil(ws.retryDelayMs / 1000));
+    if (flowState === "error_backoff" && retryDelayMs > 0) {
+      setBackoffCountdown(Math.ceil(retryDelayMs / 1000));
       const interval = setInterval(() => {
         setBackoffCountdown((prev) => {
           if (prev <= 1) {
@@ -84,34 +109,28 @@ export default function HomeScreen() {
         });
       }, 1000);
       return () => clearInterval(interval);
-    } else {
-      setBackoffCountdown(0);
     }
-  }, [ws.flowState, ws.retryDelayMs]);
 
-  React.useEffect(() => {
+    setBackoffCountdown(0);
+  }, [flowState, retryDelayMs]);
+
+  useEffect(() => {
     pulseOpacity.value = withRepeat(
-      withSequence(
-        withTiming(0.8, { duration: 1500 }),
-        withTiming(0.4, { duration: 1500 })
-      ),
+      withSequence(withTiming(0.8, { duration: 1500 }), withTiming(0.4, { duration: 1500 })),
       -1,
       true
     );
-  }, []);
+  }, [pulseOpacity]);
 
   useEffect(() => {
     if (isSearching) {
       searchPulse.value = withRepeat(
-        withSequence(
-          withTiming(1, { duration: 1000 }),
-          withTiming(0.6, { duration: 1000 })
-        ),
+        withSequence(withTiming(1, { duration: 1000 }), withTiming(0.6, { duration: 1000 })),
         -1,
         true
       );
     }
-  }, [isSearching]);
+  }, [isSearching, searchPulse]);
 
   const pulseStyle = useAnimatedStyle(() => ({
     opacity: pulseOpacity.value,
@@ -133,45 +152,71 @@ export default function HomeScreen() {
     buttonScale.value = withSpring(1);
   };
 
-  const wantToJoinRef = useRef(false);
-
   const handleFindMatch = useCallback(() => {
-    if (Platform.OS !== "web") {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    }
+    impactMedium();
     navigatedRef.current = false;
-    wantToJoinRef.current = true;
-
-    if (ws.connectionStatus === "connected") {
-      ws.joinQueue();
-    } else {
-      ws.connect();
-    }
-  }, [ws.connectionStatus, ws.connect, ws.joinQueue]);
-
-  useEffect(() => {
-    if (ws.connectionStatus === "connected" && wantToJoinRef.current && ws.matchStatus === "idle") {
-      wantToJoinRef.current = false;
-      ws.joinQueue();
-    }
-  }, [ws.connectionStatus, ws.matchStatus, ws.joinQueue]);
+    setIsFriendsModalOpen(false);
+    setFriendRoomInput("");
+    clearFriendRoomError();
+    connect();
+  }, [clearFriendRoomError, connect]);
 
   const handleCancelSearch = useCallback(() => {
-    if (Platform.OS !== "web") {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    }
-    wantToJoinRef.current = false;
-    ws.leaveQueue();
-    if (ws.connectionStatus !== "disconnected") {
-      ws.disconnect();
-    }
-  }, [ws.leaveQueue, ws.disconnect, ws.connectionStatus]);
+    impactLight();
+    disconnect();
+  }, [disconnect]);
 
-  const topPadding = Platform.OS === "web" ? 67 : insets.top;
-  const bottomPadding = Platform.OS === "web" ? 34 : insets.bottom;
+  const handleOpenFriends = useCallback(() => {
+    impactLight();
+    if (isSearching || isErrorState) {
+      disconnect();
+    }
+    clearFriendRoomError();
+    setIsFriendsModalOpen(true);
+  }, [isSearching, isErrorState, disconnect, clearFriendRoomError]);
+
+  const handleCreateFriendRoom = useCallback(() => {
+    impactMedium();
+    setIsFriendsModalOpen(true);
+    const started = createFriendRoom();
+    if (!started) {
+      return;
+    }
+  }, [createFriendRoom]);
+
+  const handleJoinFriendRoom = useCallback(() => {
+    impactMedium();
+    setIsFriendsModalOpen(true);
+    const started = joinFriendRoom(friendRoomInput);
+    if (!started) {
+      return;
+    }
+  }, [friendRoomInput, joinFriendRoom]);
+
+  const handleCloseFriendsModal = useCallback(() => {
+    impactLight();
+    leaveFriendRoom();
+    clearFriendRoomError();
+    setIsFriendsModalOpen(false);
+    setFriendRoomInput("");
+  }, [leaveFriendRoom, clearFriendRoomError]);
+
+  const handleFriendRoomInput = useCallback(
+    (value: string) => {
+      const next = value
+        .toUpperCase()
+        .replace(/[^A-Z0-9]/g, "")
+        .slice(0, ROOM_CODE_LENGTH);
+      if (friendRoomError) {
+        clearFriendRoomError();
+      }
+      setFriendRoomInput(next);
+    },
+    [friendRoomError, clearFriendRoomError],
+  );
 
   return (
-    <View style={[styles.container, { backgroundColor: colors.background }]}>
+    <View style={[styles.container, { backgroundColor: colors.background }]}> 
       <LinearGradient
         colors={
           isDark
@@ -189,234 +234,54 @@ export default function HomeScreen() {
           { paddingTop: topPadding + 40, paddingBottom: bottomPadding + 20 },
         ]}
       >
-        <View style={styles.header}>
-          <View style={styles.logoContainer}>
-            <View
-              style={[styles.brushStroke, { backgroundColor: colors.tint }]}
-            />
-            <View
-              style={[
-                styles.brushStroke,
-                styles.brushStroke2,
-                { backgroundColor: colors.accent },
-              ]}
-            />
-          </View>
+        <HomeHero colors={colors} />
 
-          <Text
-            style={[styles.title, { color: colors.text }]}
-            accessibilityRole="header"
-          >
-            SketchDuel
-          </Text>
-
-        </View>
-
-        <View style={styles.centerContent}>
-          <View style={styles.gameInfo}>
-            <View style={styles.infoRow} accessible={true} accessibilityLabel="2 Players per game">
-              <View
-                style={[styles.iconContainer, { backgroundColor: colors.card }]}
-              >
-                <Ionicons name="people" size={24} color={colors.tint} />
-              </View>
-              <Text style={[styles.infoText, { color: colors.textSecondary }]}>
-                2 Players
-              </Text>
-            </View>
-
-            <View style={styles.infoRow} accessible={true} accessibilityLabel="1 Minute per Turn">
-              <View
-                style={[styles.iconContainer, { backgroundColor: colors.card }]}
-              >
-                <Ionicons name="timer" size={24} color={colors.accent} />
-              </View>
-              <Text style={[styles.infoText, { color: colors.textSecondary }]}>
-                1 Minute per Turn
-              </Text>
-            </View>
-
-            <View style={styles.infoRow} accessible={true} accessibilityLabel="3 Rounds per game">
-              <View
-                style={[styles.iconContainer, { backgroundColor: colors.card }]}
-              >
-                <Ionicons
-                  name="repeat"
-                  size={24}
-                  color={colors.accentSecondary}
-                />
-              </View>
-              <Text style={[styles.infoText, { color: colors.textSecondary }]}>
-                3 Rounds
-              </Text>
-            </View>
-          </View>
-        </View>
-
-        <Pressable
-          onPress={() => {
-            if (Platform.OS !== "web") {
-              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-            }
+        <HomePrimaryActions
+          colors={colors}
+          pulseStyle={pulseStyle}
+          buttonAnimatedStyle={buttonAnimatedStyle}
+          onOpenGallery={() => {
+            impactLight();
             router.push("/gallery");
           }}
-          style={[styles.galleryButton, { backgroundColor: colors.card }]}
-          accessibilityRole="button"
-          accessibilityLabel="View saved drawings gallery"
-        >
-          <Ionicons name="images" size={20} color={colors.tint} />
-          <Text style={[styles.galleryButtonText, { color: colors.text }]}>
-            Gallery
-          </Text>
-        </Pressable>
-
-        <View style={styles.footer}>
-          <Animated.View style={[styles.pulseRing, pulseStyle]}>
-            <LinearGradient
-              colors={[colors.tint, colors.accent]}
-              style={styles.pulseGradient}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-            />
-          </Animated.View>
-
-          <Animated.View style={buttonAnimatedStyle}>
-            <Pressable
-              onPress={handleFindMatch}
-              onPressIn={handlePressIn}
-              onPressOut={handlePressOut}
-              disabled={isSearching}
-              accessibilityRole="button"
-              accessibilityLabel="Find a match to play"
-              accessibilityHint="Searches for another player to start a drawing game"
-            >
-              <LinearGradient
-                colors={[colors.tint, colors.accent]}
-                style={[styles.findMatchButton, isSearching && styles.buttonDisabled]}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-              >
-                <Ionicons name="search" size={24} color="#fff" />
-                <Text style={styles.buttonText}>Find Match</Text>
-              </LinearGradient>
-            </Pressable>
-          </Animated.View>
-        </View>
+          onOpenFriends={handleOpenFriends}
+          onFindMatch={handleFindMatch}
+          onPressIn={handlePressIn}
+          onPressOut={handlePressOut}
+        />
       </View>
 
-      <Modal
-        visible={showSearchModal}
-        transparent
-        animationType="fade"
-        onRequestClose={handleCancelSearch}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={[styles.searchModal, { backgroundColor: colors.card }]}>
-            {ws.flowState === "error_fatal" ? (
-              <>
-                <Ionicons name="close-circle" size={48} color={colors.error} />
-                <Text style={[styles.searchTitle, { color: colors.text }]} accessibilityRole="alert">
-                  Connection Failed
-                </Text>
-                <Text style={[styles.searchHint, { color: colors.textSecondary }]}>
-                  {ws.lastError?.message || "Unable to connect to the server."}
-                </Text>
-                <Pressable
-                  onPress={() => {
-                    ws.disconnect();
-                    setTimeout(() => handleFindMatch(), 100);
-                  }}
-                  style={[styles.retryButton, { backgroundColor: colors.tint }]}
-                  accessibilityRole="button"
-                  accessibilityLabel="Try again"
-                >
-                  <Ionicons name="refresh" size={20} color="#fff" />
-                  <Text style={styles.retryButtonText}>Try Again</Text>
-                </Pressable>
-                <Pressable
-                  onPress={handleCancelSearch}
-                  style={[styles.cancelButton, { borderColor: colors.border }]}
-                  accessibilityRole="button"
-                  accessibilityLabel="Cancel"
-                >
-                  <Ionicons name="close" size={20} color={colors.error} />
-                  <Text style={[styles.cancelText, { color: colors.error }]}>Cancel</Text>
-                </Pressable>
-              </>
-            ) : ws.flowState === "error_backoff" ? (
-              <>
-                <Ionicons name="time-outline" size={48} color={colors.accent} />
-                <Text style={[styles.searchTitle, { color: colors.text }]} accessibilityRole="alert" accessibilityLiveRegion="polite">
-                  Reconnecting in {backoffCountdown}s...
-                </Text>
-                <Text style={[styles.searchHint, { color: colors.textSecondary }]}>
-                  Waiting before retrying connection
-                </Text>
-                <Pressable
-                  onPress={handleCancelSearch}
-                  style={[styles.cancelButton, { borderColor: colors.border }]}
-                  accessibilityRole="button"
-                  accessibilityLabel="Cancel"
-                >
-                  <Ionicons name="close" size={20} color={colors.error} />
-                  <Text style={[styles.cancelText, { color: colors.error }]}>Cancel</Text>
-                </Pressable>
-              </>
-            ) : ws.flowState === "error_recoverable" ? (
-              <>
-                <ActivityIndicator size="large" color={colors.accent} />
-                <Text style={[styles.searchTitle, { color: colors.text }]} accessibilityRole="alert" accessibilityLiveRegion="polite">
-                  Reconnecting...
-                </Text>
-                <Text style={[styles.searchHint, { color: colors.textSecondary }]}>
-                  Attempting to restore connection
-                </Text>
-                <Pressable
-                  onPress={handleCancelSearch}
-                  style={[styles.cancelButton, { borderColor: colors.border }]}
-                  accessibilityRole="button"
-                  accessibilityLabel="Cancel"
-                >
-                  <Ionicons name="close" size={20} color={colors.error} />
-                  <Text style={[styles.cancelText, { color: colors.error }]}>Cancel</Text>
-                </Pressable>
-              </>
-            ) : (
-              <>
-                <Animated.View style={searchPulseStyle}>
-                  <ActivityIndicator size="large" color={colors.tint} />
-                </Animated.View>
+      {isFocused && (
+        <MatchmakingModal
+          visible={showSearchModal}
+          colors={colors}
+          flowState={flowState}
+          lastErrorMessage={lastError?.message}
+          backoffCountdown={backoffCountdown}
+          queuePosition={queuePosition}
+          searchPulseStyle={searchPulseStyle}
+          onCancel={handleCancelSearch}
+          onRetry={() => {
+            disconnect();
+            setTimeout(() => handleFindMatch(), 100);
+          }}
+        />
+      )}
 
-                <Text style={[styles.searchTitle, { color: colors.text }]} accessibilityLiveRegion="polite" accessibilityRole="alert">
-                  Searching for opponent...
-                </Text>
-
-                {ws.queuePosition > 0 && (
-                  <Text style={[styles.queueText, { color: colors.textSecondary }]} accessibilityLiveRegion="polite">
-                    Queue position: {ws.queuePosition}
-                  </Text>
-                )}
-
-                <Text style={[styles.searchHint, { color: colors.textSecondary }]}>
-                  This may take a moment
-                </Text>
-
-                <Pressable
-                  onPress={handleCancelSearch}
-                  style={[styles.cancelButton, { borderColor: colors.border }]}
-                  accessibilityRole="button"
-                  accessibilityLabel="Cancel search"
-                >
-                  <Ionicons name="close" size={20} color={colors.error} />
-                  <Text style={[styles.cancelText, { color: colors.error }]}>
-                    Cancel
-                  </Text>
-                </Pressable>
-              </>
-            )}
-          </View>
-        </View>
-      </Modal>
+      {isFocused && (
+        <FriendsMatchModal
+          visible={showFriendsModal}
+          colors={colors}
+          status={friendRoomStatus}
+          roomCode={friendRoomCode}
+          roomError={friendRoomError}
+          roomInput={friendRoomInput}
+          onRoomInputChange={handleFriendRoomInput}
+          onCreateRoom={handleCreateFriendRoom}
+          onJoinRoom={handleJoinFriendRoom}
+          onClose={handleCloseFriendsModal}
+        />
+      )}
     </View>
   );
 }
@@ -428,161 +293,5 @@ const styles = StyleSheet.create({
   content: {
     flex: 1,
     paddingHorizontal: 24,
-  },
-  header: {
-    alignItems: "center",
-    gap: 16,
-  },
-  logoContainer: {
-    width: 80,
-    height: 80,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  brushStroke: {
-    position: "absolute",
-    width: 60,
-    height: 12,
-    borderRadius: 6,
-    transform: [{ rotate: "-45deg" }],
-  },
-  brushStroke2: {
-    transform: [{ rotate: "45deg" }],
-  },
-  title: {
-    fontSize: 42,
-    fontFamily: "Inter_700Bold",
-    letterSpacing: -1,
-  },
-  centerContent: {
-    flex: 1,
-    justifyContent: "center",
-  },
-  gameInfo: {
-    gap: 20,
-    alignItems: "center",
-  },
-  infoRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "flex-start",
-    gap: 16,
-    width: 220,
-  },
-  iconContainer: {
-    width: 52,
-    height: 52,
-    borderRadius: 16,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  infoText: {
-    fontSize: 17,
-    fontFamily: "Inter_500Medium",
-  },
-  galleryButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
-    alignSelf: "center",
-    paddingVertical: 10,
-    paddingHorizontal: 20,
-    borderRadius: 20,
-    marginBottom: 8,
-  },
-  galleryButtonText: {
-    fontSize: 15,
-    fontFamily: "Inter_500Medium",
-  },
-  footer: {
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 20,
-  },
-  pulseRing: {
-    position: "absolute",
-    width: 220,
-    height: 64,
-    borderRadius: 32,
-    overflow: "hidden",
-  },
-  pulseGradient: {
-    flex: 1,
-  },
-  findMatchButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 12,
-    paddingVertical: 18,
-    paddingHorizontal: 48,
-    borderRadius: 28,
-    minWidth: 200,
-  },
-  buttonDisabled: {
-    opacity: 0.6,
-  },
-  buttonText: {
-    color: "#fff",
-    fontSize: 18,
-    fontFamily: "Inter_600SemiBold",
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: "rgba(0, 0, 0, 0.6)",
-    justifyContent: "center",
-    alignItems: "center",
-    padding: 24,
-  },
-  searchModal: {
-    width: "100%",
-    maxWidth: 320,
-    borderRadius: 24,
-    padding: 32,
-    alignItems: "center",
-    gap: 16,
-  },
-  searchTitle: {
-    fontSize: 20,
-    fontFamily: "Inter_600SemiBold",
-    textAlign: "center",
-  },
-  queueText: {
-    fontSize: 14,
-    fontFamily: "Inter_500Medium",
-  },
-  searchHint: {
-    fontSize: 14,
-    fontFamily: "Inter_400Regular",
-    textAlign: "center",
-  },
-  cancelButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    paddingVertical: 12,
-    paddingHorizontal: 24,
-    borderRadius: 16,
-    borderWidth: 1,
-    marginTop: 8,
-  },
-  cancelText: {
-    fontSize: 16,
-    fontFamily: "Inter_500Medium",
-  },
-  retryButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    paddingVertical: 14,
-    paddingHorizontal: 28,
-    borderRadius: 16,
-    marginTop: 8,
-  },
-  retryButtonText: {
-    color: "#fff",
-    fontSize: 16,
-    fontFamily: "Inter_600SemiBold",
   },
 });

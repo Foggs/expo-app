@@ -1,784 +1,151 @@
-import { Ionicons } from "@expo/vector-icons";
-import { router, useLocalSearchParams } from "expo-router";
-import * as Haptics from "expo-haptics";
-import React, { useRef, useState, useCallback, useEffect } from "react";
-import {
-  ActivityIndicator,
-  Modal,
-  Platform,
-  Pressable,
-  StyleSheet,
-  Text,
-  View,
-  useColorScheme,
-  Alert,
-} from "react-native";
-import Animated, {
-  useSharedValue,
-  useAnimatedStyle,
-  withTiming,
-  withSequence,
-  withRepeat,
-  Easing,
-} from "react-native-reanimated";
+import { useLocalSearchParams } from "expo-router";
+import React, { useEffect } from "react";
+import { StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import Colors from "@/constants/colors";
-import DrawingCanvas, {
-  DrawingCanvasRef,
-  Stroke,
-} from "@/components/DrawingCanvas";
-import ColorPicker from "@/components/ColorPicker";
 import BrushSizePicker from "@/components/BrushSizePicker";
-import { useGameTimer } from "@/hooks/useGameTimer";
-import { useTurnFlow, PlayerId } from "@/hooks/useTurnFlow";
+import ColorPicker from "@/components/ColorPicker";
+import GameCanvasSection from "@/components/GameCanvasSection";
+import GameHeader from "@/components/GameHeader";
+import GameStatusOverlays from "@/components/GameStatusOverlays";
+import GameToolbar from "@/components/GameToolbar";
+import GameTurnIndicator from "@/components/GameTurnIndicator";
 import { useGameWebSocket } from "@/contexts/WebSocketContext";
-import { addRoundDrawing, clearRoundDrawings } from "@/lib/gameStore";
+import { useGameScreenController } from "@/hooks/useGameScreenController";
+import { useScreenPadding } from "@/hooks/useScreenPadding";
+import { useThemeColors } from "@/hooks/useThemeColors";
+import type { PlayerId } from "@/hooks/useTurnFlow";
 
-const DEFAULT_COLOR = "#6C5CE7";
-const DEFAULT_BRUSH_SIZE = 4;
+function firstParam(value: string | string[] | undefined): string | undefined {
+  if (Array.isArray(value)) return value[0];
+  return value;
+}
+
+function toPlayerId(value: string | undefined): PlayerId | null {
+  if (value === "player1" || value === "player2") {
+    return value;
+  }
+  return null;
+}
 
 export default function GameScreen() {
   const insets = useSafeAreaInsets();
-  const colorScheme = useColorScheme();
-  const isDark = colorScheme === "dark";
-  const colors = isDark ? Colors.dark : Colors.light;
+  const { colors } = useThemeColors();
+  const { topPadding, bottomPadding } = useScreenPadding(insets);
+  const { matchInfo, requestGameState } = useGameWebSocket();
 
   const params = useLocalSearchParams<{
-    gameId: string;
-    playerRole: string;
-    opponentName: string;
+    gameId?: string | string[];
+    playerRole?: string | string[];
+    opponentName?: string | string[];
   }>();
 
-  const gameId = params.gameId ?? "";
-  const playerRole = (params.playerRole as PlayerId) ?? "player1";
-  const opponentName = params.opponentName ?? "Opponent";
+  const routeGameId = firstParam(params.gameId);
+  const routePlayerRole = toPlayerId(firstParam(params.playerRole));
+  const routeOpponentName = firstParam(params.opponentName);
 
-  const canvasRef = useRef<DrawingCanvasRef>(null);
-  const navigatedRef = useRef(false);
-  const mountedRef = useRef(true);
+  const matchInfoForRoute =
+    matchInfo && (!routeGameId || matchInfo.gameId === routeGameId)
+      ? matchInfo
+      : null;
+  const playerRole = matchInfoForRoute?.playerRole ?? routePlayerRole ?? "player1";
+  const opponentName = matchInfoForRoute?.opponentName ?? routeOpponentName ?? "Opponent";
 
-  const [strokes, setStrokes] = useState<Stroke[]>([]);
-  const [opponentStrokes, setOpponentStrokes] = useState<Stroke[]>([]);
-  const [backgroundStrokes, setBackgroundStrokes] = useState<Stroke[]>([]);
-  const [strokeColor, setStrokeColor] = useState(DEFAULT_COLOR);
-  const [strokeWidth, setStrokeWidth] = useState(DEFAULT_BRUSH_SIZE);
-  const [isEraser, setIsEraser] = useState(false);
-  const [showColorPicker, setShowColorPicker] = useState(false);
-  const [showBrushPicker, setShowBrushPicker] = useState(false);
-
-  const timerPulse = useSharedValue(1);
-  const getReadyScale = useSharedValue(1);
-  const prevIsMyTurnRef = useRef<boolean | null>(null);
-  const lastStrokeSendRef = useRef<number>(0);
-  const opponentDrawingRoundRef = useRef<number>(1);
-  const opponentStrokesRef = useRef<Stroke[]>([]);
-  const backgroundStrokesRef = useRef<Stroke[]>([]);
-
-  const ws = useGameWebSocket();
-
-  const handleSubmitTurnRef = useRef<(() => void) | null>(null);
-
-  const timer = useGameTimer({
-    onTimeUp: () => handleSubmitTurnRef.current?.(),
-    autoStart: false,
-  });
-
-  const turnFlow = useTurnFlow({
+  const game = useGameScreenController({
     playerRole,
-    serverGameState: ws.gameState,
-    onTimerStart: timer.start,
-    onTimerPause: timer.pause,
-    onTimerRestart: timer.restart,
-    onSubmitStrokes: (_submissionId, flowStrokes) => {
-      return ws.submitTurn(flowStrokes as Array<{
-        points: Array<{ x: number; y: number }>;
-        color: string;
-        width: number;
-      }>);
-    },
-    onNavigateResults: () => {
-      if (!navigatedRef.current) {
-        navigatedRef.current = true;
-        if (opponentStrokesRef.current.length > 0) {
-          addRoundDrawing({
-            round: opponentDrawingRoundRef.current,
-            playerRole: playerRole === "player1" ? "player2" : "player1",
-            strokes: [...backgroundStrokesRef.current, ...opponentStrokesRef.current],
-          });
-        }
-        router.push({ pathname: "/results", params: { opponentName } });
-      }
-    },
-    onNavigateHome: () => {
-      if (navigatedRef.current) return;
-      navigatedRef.current = true;
-      ws.disconnect();
-      if (Platform.OS === "web") {
-        alert("Your opponent has disconnected. Returning to home.");
-        router.replace("/");
-      } else {
-        Alert.alert(
-          "Opponent Disconnected",
-          "Your opponent has left the game.",
-          [{ text: "OK", onPress: () => router.replace("/") }]
-        );
-      }
-    },
+    opponentName,
+    colors,
   });
 
-  const {
-    isMyTurn,
-    isSubmitting,
-    currentRound,
-    currentPlayer,
-    roundDisplay,
-    turnDisplay,
-    showGetReady,
-    getReadyCountdown,
-  } = turnFlow;
-
-  const handleSubmitTurn = useCallback(() => {
-    if (isSubmitting || !isMyTurn) return;
-
-    if (Platform.OS !== "web") {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    }
-
-    const wsStrokes = strokes.map((s) => ({
-      points: s.path
-        .split(/[ML]/)
-        .filter(Boolean)
-        .map((p) => {
-          const [x, y] = p.trim().split(",").map(Number);
-          return { x: x || 0, y: y || 0 };
-        }),
-      color: s.color,
-      width: s.strokeWidth,
-    }));
-
-    addRoundDrawing({
-      round: currentRound,
-      playerRole,
-      strokes: [...backgroundStrokes, ...strokes],
-    });
-    setBackgroundStrokes((prev) => [...prev, ...strokes]);
-    setStrokes([]);
-
-    turnFlow.submitTurn(wsStrokes);
-
-    const sent = ws.submitTurn(wsStrokes);
-    if (sent) {
-      turnFlow.dispatchTurn({ type: "SUBMIT_SEND_OK" });
-    } else {
-      turnFlow.dispatchTurn({
-        type: "SUBMIT_SEND_FAILED",
-        error: {
-          code: "SEND_FAILED",
-          source: "websocket",
-          retryable: true,
-          fatal: false,
-          message: "Failed to send turn data",
-          stateVersion: 0,
-          occurredAt: Date.now(),
-        },
-      });
-    }
-  }, [strokes, backgroundStrokes, isSubmitting, isMyTurn, ws.submitTurn, turnFlow, currentRound, playerRole]);
-
-  handleSubmitTurnRef.current = handleSubmitTurn;
-
   useEffect(() => {
-    clearRoundDrawings();
-
-    ws.setCallbacks({
-      onTurnSubmitted: () => {},
-      onOpponentStroke: (stroke) => {
-        setOpponentStrokes((prev) => {
-          const idx = prev.findIndex((s) => s.id === stroke.id);
-          if (idx >= 0) {
-            const updated = [...prev];
-            updated[idx] = { ...updated[idx], path: stroke.path };
-            return updated;
-          }
-          return [...prev, stroke];
-        });
-      },
-      onOpponentClear: () => {
-        setOpponentStrokes([]);
-      },
-      onOpponentUndo: () => {
-        setOpponentStrokes((prev) => prev.slice(0, -1));
-      },
-      onOpponentDisconnected: () => {
-        turnFlow.dispatchTurn({ type: "SERVER_OPPONENT_DISCONNECTED" });
-      },
-      onError: (message, code) => {
-        console.warn("Game WebSocket error:", message, code);
-      },
-    });
-
-    return () => {
-      ws.setCallbacks({});
-    };
-  }, []);
-
-  useEffect(() => {
-    const wasMyTurn = prevIsMyTurnRef.current;
-    prevIsMyTurnRef.current = isMyTurn;
-
-    if (isMyTurn && wasMyTurn !== null && wasMyTurn !== isMyTurn) {
-      if (Platform.OS !== "web") {
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
-      }
-      if (opponentStrokes.length > 0) {
-        addRoundDrawing({
-          round: opponentDrawingRoundRef.current,
-          playerRole: playerRole === "player1" ? "player2" : "player1",
-          strokes: [...backgroundStrokes, ...opponentStrokes],
-        });
-        setBackgroundStrokes((prev) => [...prev, ...opponentStrokes]);
-      }
-      setStrokes([]);
-      setOpponentStrokes([]);
-    }
-
-    if (!isMyTurn) {
-      opponentDrawingRoundRef.current = currentRound;
-    }
-  }, [isMyTurn]);
-
-  useEffect(() => {
-    opponentStrokesRef.current = opponentStrokes;
-  }, [opponentStrokes]);
-
-  useEffect(() => {
-    backgroundStrokesRef.current = backgroundStrokes;
-  }, [backgroundStrokes]);
-
-  useEffect(() => {
-    if (timer.timerColor === "critical") {
-      timerPulse.value = withRepeat(
-        withSequence(
-          withTiming(1.1, { duration: 300, easing: Easing.inOut(Easing.ease) }),
-          withTiming(1, { duration: 300, easing: Easing.inOut(Easing.ease) })
-        ),
-        -1
-      );
-    } else {
-      timerPulse.value = withTiming(1, { duration: 200 });
-    }
-  }, [timer.timerColor]);
-
-  useEffect(() => {
-    if (timer.timerColor === "warning" && timer.timeRemaining === 30) {
-      if (Platform.OS !== "web") {
-        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-      }
-    } else if (timer.timerColor === "critical" && timer.timeRemaining === 10) {
-      if (Platform.OS !== "web") {
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      }
-    }
-  }, [timer.timerColor, timer.timeRemaining]);
-
-  useEffect(() => {
-    if (showGetReady) {
-      if (Platform.OS !== "web") {
-        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
-      }
-      getReadyScale.value = withSequence(
-        withTiming(1.2, { duration: 200, easing: Easing.out(Easing.ease) }),
-        withTiming(1, { duration: 200, easing: Easing.inOut(Easing.ease) })
-      );
-    }
-  }, [getReadyCountdown]);
-
-  const getReadyAnimatedStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: getReadyScale.value }],
-  }));
-
-  const timerAnimatedStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: timerPulse.value }],
-  }));
-
-  const handleStrokesChange = useCallback((newStrokes: Stroke[]) => {
-    setStrokes(newStrokes);
-    if (newStrokes.length > 0) {
-      const latestStroke = newStrokes[newStrokes.length - 1];
-      const now = Date.now();
-      if (now - lastStrokeSendRef.current >= 50) {
-        lastStrokeSendRef.current = now;
-        ws.sendStroke({
-          id: latestStroke.id,
-          path: latestStroke.path,
-          color: latestStroke.color,
-          strokeWidth: latestStroke.strokeWidth,
-        });
-      }
-    }
-  }, [ws.sendStroke]);
-
-  const handleStrokeComplete = useCallback((stroke: Stroke) => {
-    lastStrokeSendRef.current = Date.now();
-    ws.sendStroke({
-      id: stroke.id,
-      path: stroke.path,
-      color: stroke.color,
-      strokeWidth: stroke.strokeWidth,
-    });
-  }, [ws.sendStroke]);
-
-  const topPadding = Platform.OS === "web" ? 67 : insets.top;
-  const bottomPadding = Platform.OS === "web" ? 34 : insets.bottom;
-
-  const handleBack = () => {
-    if (Platform.OS !== "web") {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    }
-    timer.pause();
-
-    const doLeave = () => {
-      setBackgroundStrokes([]);
-      ws.disconnect();
-      router.replace("/");
-    };
-
-    if (Platform.OS === "web") {
-      if (confirm("Leave Game?\nYour progress will be lost if you leave now.")) {
-        doLeave();
-      } else {
-        if (isMyTurn) timer.start();
-      }
-    } else {
-      Alert.alert(
-        "Leave Game?",
-        "Your progress will be lost if you leave now.",
-        [
-          { text: "Cancel", style: "cancel", onPress: () => { if (isMyTurn) timer.start(); } },
-          {
-            text: "Leave",
-            style: "destructive",
-            onPress: doLeave,
-          },
-        ]
-      );
-    }
-  };
-
-  const handleSubmit = () => {
-    if (Platform.OS !== "web") {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    }
-    handleSubmitTurn();
-  };
-
-  const handleUndo = useCallback(() => {
-    if (Platform.OS !== "web") {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    }
-    canvasRef.current?.undo();
-    ws.sendUndo();
-  }, [ws.sendUndo]);
-
-  const handleClear = useCallback(() => {
-    if (Platform.OS !== "web") {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    }
-    if (strokes.length > 0) {
-      if (Platform.OS === "web") {
-        if (confirm("Clear Canvas?\nThis will remove all your drawing.")) {
-          canvasRef.current?.clear();
-          ws.sendClear();
-        }
-      } else {
-        Alert.alert("Clear Canvas?", "This will remove all your drawing.", [
-          { text: "Cancel", style: "cancel" },
-          {
-            text: "Clear",
-            style: "destructive",
-            onPress: () => {
-              canvasRef.current?.clear();
-              ws.sendClear();
-            },
-          },
-        ]);
-      }
-    }
-  }, [strokes.length]);
-
-  const handleColorPress = () => {
-    if (Platform.OS !== "web") {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    }
-    setShowColorPicker(true);
-  };
-
-  const handleBrushPress = () => {
-    if (Platform.OS !== "web") {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    }
-    setShowBrushPicker(true);
-  };
-
-  const handleEraserToggle = () => {
-    if (Platform.OS !== "web") {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    }
-    setIsEraser(!isEraser);
-  };
-
-  const activeColor = isEraser ? "#FFFFFF" : strokeColor;
-
-  const getTimerColor = () => {
-    switch (timer.timerColor) {
-      case "critical":
-        return colors.timerCritical;
-      case "warning":
-        return colors.timerWarning;
-      default:
-        return colors.timerActive;
-    }
-  };
+    if (matchInfoForRoute?.matchType !== "friend") return;
+    requestGameState();
+    const retry = setTimeout(() => {
+      requestGameState();
+    }, 500);
+    return () => clearTimeout(retry);
+  }, [matchInfoForRoute?.matchType, requestGameState]);
 
   return (
-    <View style={[styles.container, { backgroundColor: colors.background }]}>
-      <View style={[styles.header, { paddingTop: topPadding + 8 }]}>
-        <Pressable
-          onPress={handleBack}
-          style={[styles.backButton, { backgroundColor: colors.card }]}
-          accessibilityRole="button"
-          accessibilityLabel="Go back to home"
-        >
-          <Ionicons name="arrow-back" size={24} color={colors.text} />
-        </Pressable>
+    <View style={[styles.container, { backgroundColor: colors.background }]}> 
+      <GameHeader
+        colors={colors}
+        topPadding={topPadding}
+        onBack={game.handleBack}
+        timerAnimatedStyle={game.timerAnimatedStyle}
+        timerColor={game.timerColor}
+        formattedTime={game.timer.formattedTime}
+        roundDisplay={game.roundDisplay}
+      />
 
-        <View style={styles.timerContainer}>
-          <Animated.View
-            style={[
-              styles.timerBadge,
-              { backgroundColor: colors.card },
-              timerAnimatedStyle,
-            ]}
-          >
-            <Ionicons name="timer" size={20} color={getTimerColor()} />
-            <Text
-              style={[
-                styles.timerText,
-                { color: getTimerColor() },
-              ]}
-              accessibilityLabel={`Time remaining: ${timer.formattedTime}`}
-              accessibilityRole="timer"
-            >
-              {timer.formattedTime}
-            </Text>
-          </Animated.View>
-        </View>
+      <GameTurnIndicator
+        colors={colors}
+        currentPlayer={game.currentPlayer}
+        turnDisplay={game.turnDisplay}
+        isMyTurn={game.isMyTurn}
+        opponentName={opponentName}
+      />
 
-        <View style={styles.roundBadge}>
-          <Text
-            style={[styles.roundText, { color: colors.textSecondary }]}
-            accessibilityLabel={roundDisplay}
-          >
-            {roundDisplay}
-          </Text>
-        </View>
-      </View>
+      <GameCanvasSection
+        canvasRef={game.canvasRef}
+        isMyTurn={game.isMyTurn}
+        canDraw={game.canDraw}
+        isSubmitting={game.isSubmitting}
+        activeColor={game.activeColor}
+        strokeWidth={game.strokeWidth}
+        strokes={game.strokes}
+        opponentStrokes={game.opponentStrokes}
+        backgroundStrokes={game.backgroundStrokes}
+        onStrokesChange={game.handleStrokesChange}
+        onStrokeComplete={game.handleStrokeComplete}
+      />
 
-      <View style={styles.turnIndicator}>
-        <View
-          style={[
-            styles.playerDot,
-            {
-              backgroundColor:
-                currentPlayer === "player1"
-                  ? colors.player1
-                  : colors.player2,
-            },
-          ]}
-        />
-        <Text
-          style={[styles.turnText, { color: colors.text }]}
-          accessibilityLabel={turnDisplay}
-          accessibilityLiveRegion="assertive"
-        >
-          {turnDisplay}
-        </Text>
-        {!isMyTurn && (
-          <Text style={[styles.opponentLabel, { color: colors.textSecondary }]}>
-            ({opponentName})
-          </Text>
-        )}
-      </View>
-
-      <View style={styles.canvasContainer} accessible={true} accessibilityLabel={isMyTurn ? "Drawing canvas. Touch and drag to draw." : "Opponent's drawing canvas. View only."}>
-        <DrawingCanvas
-          ref={canvasRef}
-          strokeColor={activeColor}
-          strokeWidth={strokeWidth}
-          strokes={isMyTurn ? strokes : opponentStrokes}
-          onStrokesChange={handleStrokesChange}
-          onStrokeComplete={handleStrokeComplete}
-          disabled={!isMyTurn || isSubmitting}
-          backgroundStrokes={backgroundStrokes}
-        />
-        {!isMyTurn && (
-          <View style={styles.canvasOverlay}>
-            <View style={styles.opponentDrawingLabel} accessible={true} accessibilityLiveRegion="polite" accessibilityLabel={opponentStrokes.length > 0 ? "Opponent is currently drawing" : "Waiting for opponent to draw"}>
-              <Ionicons name="pencil" size={14} color="#fff" />
-              <Text style={styles.opponentDrawingText}>
-                {opponentStrokes.length > 0
-                  ? "Opponent is drawing..."
-                  : "Waiting for opponent..."}
-              </Text>
-            </View>
-          </View>
-        )}
-      </View>
-
-      <View style={[styles.toolbar, { paddingBottom: bottomPadding + 8 }]}>
-        <View style={styles.toolGroup}>
-          <Pressable
-            onPress={handleBrushPress}
-            style={[
-              styles.toolButton,
-              { backgroundColor: colors.card },
-              !isEraser && styles.toolButtonActive,
-            ]}
-            disabled={!isMyTurn}
-            accessibilityRole="button"
-            accessibilityLabel="Select brush size"
-          >
-            <Ionicons
-              name="brush"
-              size={22}
-              color={!isEraser ? colors.tint : colors.textSecondary}
-            />
-          </Pressable>
-
-          <Pressable
-            onPress={handleColorPress}
-            style={[styles.toolButton, { backgroundColor: colors.card }]}
-            disabled={!isMyTurn}
-            accessibilityRole="button"
-            accessibilityLabel="Select brush color"
-          >
-            <View
-              style={[
-                styles.colorSwatch,
-                {
-                  backgroundColor: strokeColor,
-                  borderColor:
-                    strokeColor === "#FFFFFF" ? colors.border : "transparent",
-                },
-              ]}
-            />
-          </Pressable>
-
-          <Pressable
-            onPress={handleEraserToggle}
-            style={[
-              styles.toolButton,
-              { backgroundColor: colors.card },
-              isEraser && styles.toolButtonActive,
-            ]}
-            disabled={!isMyTurn}
-            accessibilityRole="button"
-            accessibilityLabel={isEraser ? "Switch to brush" : "Switch to eraser"}
-            accessibilityState={{ selected: isEraser }}
-          >
-            <Ionicons
-              name="remove-circle-outline"
-              size={22}
-              color={isEraser ? colors.tint : colors.textSecondary}
-            />
-          </Pressable>
-        </View>
-
-        <View style={styles.toolGroup}>
-          <Pressable
-            onPress={handleUndo}
-            style={[
-              styles.toolButton,
-              { backgroundColor: colors.card },
-              strokes.length === 0 && styles.toolButtonDisabled,
-            ]}
-            disabled={strokes.length === 0 || !isMyTurn}
-            accessibilityRole="button"
-            accessibilityLabel="Undo last stroke"
-          >
-            <Ionicons
-              name="arrow-undo"
-              size={22}
-              color={strokes.length > 0 ? colors.textSecondary : colors.border}
-            />
-          </Pressable>
-
-          <Pressable
-            onPress={handleClear}
-            style={[
-              styles.toolButton,
-              { backgroundColor: colors.card },
-              strokes.length === 0 && styles.toolButtonDisabled,
-            ]}
-            disabled={strokes.length === 0 || !isMyTurn}
-            accessibilityRole="button"
-            accessibilityLabel="Clear canvas"
-          >
-            <Ionicons
-              name="trash"
-              size={22}
-              color={strokes.length > 0 ? colors.error : colors.border}
-            />
-          </Pressable>
-        </View>
-
-        <Pressable
-          onPress={handleSubmit}
-          style={[
-            styles.submitButton,
-            { backgroundColor: colors.tint },
-            (!isMyTurn || isSubmitting) && styles.submitButtonDisabled,
-          ]}
-          disabled={!isMyTurn || isSubmitting}
-          accessibilityRole="button"
-          accessibilityLabel="Submit your drawing and end turn"
-        >
-          <Ionicons name="checkmark" size={24} color="#fff" />
-        </Pressable>
-      </View>
+      <GameToolbar
+        colors={colors}
+        bottomPadding={bottomPadding}
+        canDraw={game.canDraw}
+        isSubmitting={game.isSubmitting}
+        isEraser={game.isEraser}
+        strokeColor={game.strokeColor}
+        strokeCount={game.strokes.length}
+        onBrushPress={game.handleBrushPress}
+        onColorPress={game.handleColorPress}
+        onEraserToggle={game.handleEraserToggle}
+        onUndo={game.handleUndo}
+        onClear={game.handleClear}
+        onSubmit={game.handleSubmit}
+      />
 
       <ColorPicker
-        selectedColor={strokeColor}
+        selectedColor={game.strokeColor}
         onColorChange={(color) => {
-          setStrokeColor(color);
-          setIsEraser(false);
+          game.setStrokeColor(color);
+          game.setIsEraser(false);
         }}
-        visible={showColorPicker}
-        onClose={() => setShowColorPicker(false)}
+        visible={game.showColorPicker}
+        onClose={() => game.setShowColorPicker(false)}
       />
 
       <BrushSizePicker
-        selectedSize={strokeWidth}
-        onSizeChange={setStrokeWidth}
-        visible={showBrushPicker}
-        onClose={() => setShowBrushPicker(false)}
-        currentColor={strokeColor}
+        selectedSize={game.strokeWidth}
+        onSizeChange={game.setStrokeWidth}
+        visible={game.showBrushPicker}
+        onClose={() => game.setShowBrushPicker(false)}
+        currentColor={game.strokeColor}
       />
 
-      <Modal
-        visible={showGetReady}
-        transparent
-        animationType="fade"
-        statusBarTranslucent
-      >
-        <View style={styles.getReadyOverlay}>
-          <Animated.View
-            style={[styles.getReadyModal, getReadyAnimatedStyle]}
-            accessible={true}
-            accessibilityRole="alert"
-            accessibilityLabel={`Get ready! Your turn starts in ${getReadyCountdown} seconds`}
-            accessibilityLiveRegion="assertive"
-          >
-            <Ionicons name="brush" size={40} color={colors.tint} />
-            <Text style={[styles.getReadyTitle, { color: colors.text }]}>
-              Get Ready!
-            </Text>
-            <Text style={[styles.getReadySubtitle, { color: colors.textSecondary }]}>
-              Your turn starts in
-            </Text>
-            <Animated.Text
-              style={[
-                styles.getReadyCountdown,
-                { color: getReadyCountdown <= 3 ? colors.timerCritical : colors.tint },
-              ]}
-            >
-              {getReadyCountdown}
-            </Animated.Text>
-          </Animated.View>
-        </View>
-      </Modal>
-
-      {turnFlow.turnState === "submit_retrying" && (
-        <View style={styles.retryingBanner} pointerEvents="none">
-          <View style={styles.retryingContent}>
-            <ActivityIndicator size="small" color="#fff" />
-            <Text style={styles.retryingText}>Retrying...</Text>
-          </View>
-        </View>
-      )}
-
-      <Modal
-        visible={turnFlow.turnState === "submit_failed"}
-        transparent
-        animationType="fade"
-        statusBarTranslucent
-      >
-        <View style={styles.errorOverlay}>
-          <View style={[styles.errorModal, { backgroundColor: colors.card }]}>
-            <Ionicons name="alert-circle" size={40} color={colors.error} />
-            <Text style={[styles.errorTitle, { color: colors.text }]}>
-              Submission Failed
-            </Text>
-            <Text style={[styles.errorMessage, { color: colors.textSecondary }]}>
-              {turnFlow.lastError?.message || "Your drawing could not be sent. Please try again."}
-            </Text>
-            <View style={styles.errorActions}>
-              <Pressable
-                onPress={() => turnFlow.retrySubmit()}
-                style={[styles.errorButton, { backgroundColor: colors.tint }]}
-                accessibilityRole="button"
-                accessibilityLabel="Retry submission"
-              >
-                <Ionicons name="refresh" size={18} color="#fff" />
-                <Text style={styles.errorButtonText}>Retry</Text>
-              </Pressable>
-              <Pressable
-                onPress={() => {
-                  ws.disconnect();
-                  router.replace("/");
-                }}
-                style={[styles.errorButtonOutline, { borderColor: colors.border }]}
-                accessibilityRole="button"
-                accessibilityLabel="Exit game"
-              >
-                <Ionicons name="exit-outline" size={18} color={colors.error} />
-                <Text style={[styles.errorButtonOutlineText, { color: colors.error }]}>Exit</Text>
-              </Pressable>
-            </View>
-          </View>
-        </View>
-      </Modal>
-
-      <Modal
-        visible={turnFlow.turnState === "sync_error_fatal"}
-        transparent
-        animationType="fade"
-        statusBarTranslucent
-      >
-        <View style={styles.errorOverlay}>
-          <View style={[styles.errorModal, { backgroundColor: colors.card }]}>
-            <Ionicons name="close-circle" size={40} color={colors.error} />
-            <Text style={[styles.errorTitle, { color: colors.text }]}>
-              Connection Lost
-            </Text>
-            <Text style={[styles.errorMessage, { color: colors.textSecondary }]}>
-              {turnFlow.lastError?.message || "The game session could not be recovered."}
-            </Text>
-            <Pressable
-              onPress={() => {
-                ws.disconnect();
-                router.replace("/");
-              }}
-              style={[styles.errorButton, { backgroundColor: colors.error }]}
-              accessibilityRole="button"
-              accessibilityLabel="Return home"
-            >
-              <Ionicons name="home" size={18} color="#fff" />
-              <Text style={styles.errorButtonText}>Return Home</Text>
-            </Pressable>
-          </View>
-        </View>
-      </Modal>
+      <GameStatusOverlays
+        colors={colors}
+        showGetReady={game.showGetReady}
+        getReadyCountdown={game.getReadyCountdown}
+        getReadyAnimatedStyle={game.getReadyAnimatedStyle}
+        isRetrying={game.turnState === "submit_retrying"}
+        showSubmitFailed={game.turnState === "submit_failed"}
+        showSyncFatal={game.turnState === "sync_error_fatal"}
+        lastErrorMessage={game.lastError?.message}
+        onRetrySubmit={game.retrySubmit}
+        onExitGame={game.handleExitToHome}
+        onReturnHome={game.handleExitToHome}
+      />
     </View>
   );
 }
@@ -786,243 +153,5 @@ export default function GameScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-  },
-  header: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 16,
-    paddingBottom: 8,
-  },
-  backButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 12,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  timerContainer: {
-    flex: 1,
-    alignItems: "center",
-  },
-  timerBadge: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 20,
-  },
-  timerText: {
-    fontSize: 20,
-    fontFamily: "Inter_600SemiBold",
-  },
-  roundBadge: {
-    width: 70,
-    alignItems: "flex-end",
-  },
-  roundText: {
-    fontSize: 13,
-    fontFamily: "Inter_500Medium",
-  },
-  turnIndicator: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
-    paddingVertical: 12,
-  },
-  playerDot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-  },
-  turnText: {
-    fontSize: 15,
-    fontFamily: "Inter_500Medium",
-  },
-  opponentLabel: {
-    fontSize: 13,
-    fontFamily: "Inter_400Regular",
-  },
-  canvasContainer: {
-    flex: 1,
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    position: "relative",
-  },
-  canvasOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(0, 0, 0, 0.15)",
-    marginHorizontal: 16,
-    marginVertical: 8,
-    borderRadius: 16,
-  },
-  opponentDrawingLabel: {
-    flexDirection: "row",
-    alignItems: "center",
-    alignSelf: "center",
-    gap: 6,
-    marginTop: 12,
-    backgroundColor: "rgba(0, 0, 0, 0.55)",
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 12,
-  },
-  opponentDrawingText: {
-    color: "#fff",
-    fontSize: 13,
-    fontFamily: "Inter_500Medium",
-  },
-  toolbar: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 16,
-    paddingTop: 12,
-    gap: 12,
-  },
-  toolGroup: {
-    flexDirection: "row",
-    gap: 8,
-  },
-  toolButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 12,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  toolButtonActive: {
-    borderWidth: 2,
-    borderColor: "#6C5CE7",
-  },
-  toolButtonDisabled: {
-    opacity: 0.5,
-  },
-  colorSwatch: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    borderWidth: 2,
-  },
-  submitButton: {
-    width: 56,
-    height: 56,
-    borderRadius: 16,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  submitButtonDisabled: {
-    opacity: 0.6,
-  },
-  getReadyOverlay: {
-    flex: 1,
-    backgroundColor: "rgba(0, 0, 0, 0.6)",
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  getReadyModal: {
-    backgroundColor: "#1a1a2e",
-    borderRadius: 28,
-    padding: 36,
-    alignItems: "center",
-    gap: 8,
-    minWidth: 240,
-    borderWidth: 2,
-    borderColor: "rgba(108, 92, 231, 0.3)",
-  },
-  getReadyTitle: {
-    fontSize: 28,
-    fontFamily: "Inter_700Bold",
-    marginTop: 8,
-  },
-  getReadySubtitle: {
-    fontSize: 15,
-    fontFamily: "Inter_400Regular",
-  },
-  getReadyCountdown: {
-    fontSize: 56,
-    fontFamily: "Inter_700Bold",
-    marginTop: 4,
-  },
-  retryingBanner: {
-    position: "absolute",
-    top: 0,
-    left: 0,
-    right: 0,
-    alignItems: "center",
-    paddingTop: 100,
-  },
-  retryingContent: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    backgroundColor: "rgba(0, 0, 0, 0.7)",
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
-  },
-  retryingText: {
-    color: "#fff",
-    fontSize: 14,
-    fontFamily: "Inter_500Medium",
-  },
-  errorOverlay: {
-    flex: 1,
-    backgroundColor: "rgba(0, 0, 0, 0.6)",
-    justifyContent: "center",
-    alignItems: "center",
-    padding: 24,
-  },
-  errorModal: {
-    width: "100%",
-    maxWidth: 320,
-    borderRadius: 24,
-    padding: 32,
-    alignItems: "center",
-    gap: 12,
-  },
-  errorTitle: {
-    fontSize: 20,
-    fontFamily: "Inter_600SemiBold",
-    textAlign: "center",
-  },
-  errorMessage: {
-    fontSize: 14,
-    fontFamily: "Inter_400Regular",
-    textAlign: "center",
-    lineHeight: 20,
-  },
-  errorActions: {
-    flexDirection: "row",
-    gap: 12,
-    marginTop: 8,
-  },
-  errorButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    paddingVertical: 12,
-    paddingHorizontal: 20,
-    borderRadius: 16,
-  },
-  errorButtonText: {
-    color: "#fff",
-    fontSize: 15,
-    fontFamily: "Inter_600SemiBold",
-  },
-  errorButtonOutline: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    paddingVertical: 12,
-    paddingHorizontal: 20,
-    borderRadius: 16,
-    borderWidth: 1,
-  },
-  errorButtonOutlineText: {
-    fontSize: 15,
-    fontFamily: "Inter_500Medium",
   },
 });
