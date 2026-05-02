@@ -1,0 +1,50 @@
+uploads = []
+generated = []
+
+[[outputs]]
+id = "u_CDuCfpioBq4s1jU54GP"
+uri = "file://attached_assets/app-store/INDEX.md"
+type = "text"
+title = "App Store Screenshots — README"
+
+[[outputs]]
+id = "sAWTOPErlmZyEJO21OVfB"
+uri = "file://attached_assets/app-store/raw/01-home.png"
+type = "image"
+title = "Raw 01 — Home"
+
+[[outputs]]
+id = "yW1bjy85LlhOwb-yu41hK"
+uri = "file://attached_assets/app-store/raw/05-your-turn.png"
+type = "image"
+title = "Raw 05 — Your Turn"
+
+[[outputs]]
+id = "Pr7g60BSa5OwiYJJqua6Z"
+uri = "file://attached_assets/app-store/raw/08-results.png"
+type = "image"
+title = "Raw 08 — Results"
+
+[[outputs]]
+id = "c8z6Wj6XJuGF4gnBkNDMU"
+uri = "file://attached_assets/app-store/marketing/1320x2868-portrait/01-home.png"
+type = "image"
+title = "Marketing 1320×2868 — Home"
+
+[[outputs]]
+id = "t4kH8RHPaFKGdc1djqCga"
+uri = "file://attached_assets/app-store/marketing/1320x2868-portrait/05-your-turn.png"
+type = "image"
+title = "Marketing 1320×2868 — Your Turn"
+
+[[outputs]]
+id = "Z_ODyCR2eM6fkWNwhHCgR"
+uri = "file://attached_assets/app-store/marketing/2868x1320-landscape/08-results.png"
+type = "image"
+title = "Marketing 2868×1320 landscape — Results"
+
+[[outputs]]
+id = "AZA3zR5MBup8X9ZZXzgWB"
+uri = "file://attached_assets/app-store/marketing/2736x1260-landscape/09-gallery.png"
+type = "image"
+title = "Marketing 2736×1260 landscape — Gallery"
