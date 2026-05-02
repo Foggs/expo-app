@@ -338,11 +338,13 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
     try {
       parsed = JSON.parse(data);
     } catch {
+      if (__DEV__) console.warn("[WS] Failed to parse message:", data.slice(0, 200));
       return;
     }
 
     const result = wsServerMessageSchema.safeParse(parsed);
     if (!result.success) {
+      if (__DEV__) console.warn("[WS] Unknown message schema:", result.error.message);
       return;
     }
 
@@ -498,9 +500,10 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
         }, PING_INTERVAL);
         machineRef.current?.dispatch({ type: "WS_OPENED" });
         if (pendingRoomActionRef.current) {
+          const action = pendingRoomActionRef.current;
+          pendingRoomActionRef.current = null;
           try {
-            ws.send(JSON.stringify(pendingRoomActionRef.current));
-            pendingRoomActionRef.current = null;
+            ws.send(JSON.stringify(action));
           } catch {
             setFriendRoomStatus("idle");
             setFriendRoomCode(null);

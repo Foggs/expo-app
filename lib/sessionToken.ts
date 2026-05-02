@@ -8,11 +8,11 @@ const ASYNC_STORAGE_FALLBACK_KEY = "sketchduel_session_token_fallback";
 let cachedToken: string | null = null;
 
 function generateToken(): string {
-  return (
-    Date.now().toString(36) +
-    Math.random().toString(36).substr(2, 9) +
-    Math.random().toString(36).substr(2, 9)
-  );
+  const bytes = new Uint8Array(32);
+  crypto.getRandomValues(bytes);
+  return Array.from(bytes)
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
 }
 
 export async function getSessionToken(): Promise<string> {
