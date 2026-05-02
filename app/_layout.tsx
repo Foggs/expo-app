@@ -52,6 +52,13 @@ function RootLayoutNav() {
         options={{
           gestureEnabled: false,
           animation: "slide_from_bottom",
+          headerBackVisible: false,
+        }}
+      />
+      <Stack.Screen
+        name="gallery"
+        options={{
+          animation: "slide_from_right",
         }}
       />
     </Stack>

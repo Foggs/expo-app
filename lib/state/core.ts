@@ -88,7 +88,14 @@ export function createMachine<TModel, TEvent extends { type: string }, TEffect>(
 
     if (effectRunner) {
       for (const effect of allEffects) {
-        effectRunner(effect, dispatch);
+        try {
+          effectRunner(effect, dispatch);
+        } catch (err) {
+          console.error(
+            `[${machineName}] Effect "${(effect as { type?: string }).type ?? "unknown"}" threw:`,
+            err instanceof Error ? err.message : err,
+          );
+        }
       }
     }
   }
@@ -132,7 +139,14 @@ export function createMachine<TModel, TEvent extends { type: string }, TEffect>(
     notify(enterEffects);
     if (effectRunner) {
       for (const effect of enterEffects) {
-        effectRunner(effect, dispatch);
+        try {
+          effectRunner(effect, dispatch);
+        } catch (err) {
+          console.error(
+            `[${machineName}] Initial effect "${(effect as { type?: string }).type ?? "unknown"}" threw:`,
+            err instanceof Error ? err.message : err,
+          );
+        }
       }
     }
   }

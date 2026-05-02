@@ -47,6 +47,8 @@ function generateId(): string {
   return Date.now().toString() + Math.random().toString(36).substr(2, 9);
 }
 
+const MAX_STROKES = 500;
+
 const DrawingCanvas = forwardRef<DrawingCanvasRef, DrawingCanvasProps>(
   ({ strokeColor, strokeWidth, strokes, onStrokesChange, onStrokeComplete, disabled = false, backgroundStrokes = [] }, ref) => {
     const { colors } = useThemeColors();
@@ -95,6 +97,7 @@ const DrawingCanvas = forwardRef<DrawingCanvasRef, DrawingCanvasProps>(
 
     const beginStrokeAtPoint = useCallback((x: number, y: number) => {
       if (disabledRef.current) return;
+      if (strokesRef.current.length >= MAX_STROKES) return;
       currentStrokeIdRef.current = generateId();
       currentPathRef.current = `M${Math.max(0, x).toFixed(2)},${Math.max(0, y).toFixed(2)}`;
 

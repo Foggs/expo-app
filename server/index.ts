@@ -4,6 +4,7 @@ import helmet from "helmet";
 import rateLimit from "express-rate-limit";
 import { registerRoutes } from "./routes";
 import { setupWebSocket } from "./websocket";
+import { pool } from "./db";
 import * as fs from "fs";
 import * as path from "path";
 
@@ -287,7 +288,7 @@ function setupSecurity(app: express.Application) {
 
   const server = await registerRoutes(app);
 
-  setupWebSocket(server);
+  const wss = setupWebSocket(server);
 
   setupErrorHandler(app);
 
@@ -301,4 +302,26 @@ function setupSecurity(app: express.Application) {
       log(`express server serving on port ${port}`);
     },
   );
+
+  function gracefulShutdown(signal: string) {
+    log(`[shutdown] ${signal} received — closing server`);
+    server.close(() => {
+      wss.close(() => {
+        pool.end().then(() => {
+          log("[shutdown] DB pool closed");
+          process.exit(0);
+        }).catch((err) => {
+          console.error("[shutdown] DB pool close error:", err);
+          process.exit(1);
+        });
+      });
+    });
+    setTimeout(() => {
+      console.error("[shutdown] Forced exit after 10s");
+      process.exit(1);
+    }, 10_000).unref();
+  }
+
+  process.on("SIGTERM", () => gracefulShutdown("SIGTERM"));
+  process.on("SIGINT", () => gracefulShutdown("SIGINT"));
 })();

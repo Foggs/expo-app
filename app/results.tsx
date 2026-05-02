@@ -1,5 +1,5 @@
 import { LinearGradient } from "expo-linear-gradient";
-import { router, useLocalSearchParams } from "expo-router";
+import { router, useLocalSearchParams, useNavigation } from "expo-router";
 import React, { useEffect, useState } from "react";
 import { ScrollView, StyleSheet, Text, View } from "react-native";
 import {
@@ -27,6 +27,7 @@ import { getSessionToken } from "@/lib/sessionToken";
 
 export default function ResultsScreen() {
   const { opponentName } = useLocalSearchParams<{ opponentName?: string }>();
+  const navigation = useNavigation();
   const insets = useSafeAreaInsets();
   const { isDark, colors } = useThemeColors();
   const { topPadding, bottomPadding } = useScreenPadding(insets);
@@ -39,7 +40,18 @@ export default function ResultsScreen() {
   const cardOpacity = useSharedValue(0);
 
   useEffect(() => {
+    return navigation.addListener("beforeRemove", (e) => {
+      // Block hardware back button and any programmatic pop on Android.
+      e.preventDefault();
+    });
+  }, [navigation]);
+
+  useEffect(() => {
     const saved = getRoundDrawings();
+    if (saved.length === 0 && !opponentName) {
+      router.replace("/");
+      return;
+    }
     setDrawings(saved);
     cardScale.value = withDelay(200, withSpring(1, { damping: 12 }));
     cardOpacity.value = withDelay(200, withSpring(1));
@@ -47,7 +59,7 @@ export default function ResultsScreen() {
     return () => {
       clearRoundDrawings();
     };
-  }, [cardScale, cardOpacity]);
+  }, [cardScale, cardOpacity, opponentName]);
 
   const cardStyle = useAnimatedStyle(() => ({
     transform: [{ scale: cardScale.value }],

@@ -405,29 +405,43 @@ async function startGameForPlayers(
   removeFromQueue(player1.id);
   removeFromQueue(player2.id);
 
-  const game = await storage.createGame();
-  const gameId = game.id;
+  let gameId: string | null = null;
 
-  const room: GameRoom = {
-    gameId,
-    player1,
-    player2,
-    matchType,
-    currentRound: 1,
-    currentPlayer: "player1",
-    totalRounds: 3,
-    status: "active",
-    completedAt: null,
-  };
+  try {
+    const game = await storage.createGame();
+    gameId = game.id;
 
-  gameRooms.set(gameId, room);
+    const room: GameRoom = {
+      gameId,
+      player1,
+      player2,
+      matchType,
+      currentRound: 1,
+      currentPlayer: "player1",
+      totalRounds: 3,
+      status: "active",
+      completedAt: null,
+    };
 
-  player1.gameId = gameId;
-  player1.playerRole = "player1";
-  player2.gameId = gameId;
-  player2.playerRole = "player2";
+    gameRooms.set(gameId, room);
 
-  await storage.updateGame(gameId, { status: "active" });
+    player1.gameId = gameId;
+    player1.playerRole = "player1";
+    player2.gameId = gameId;
+    player2.playerRole = "player2";
+
+    await storage.updateGame(gameId, { status: "active" });
+  } catch (err) {
+    // Roll back in-memory state so players are not left in a ghost game.
+    if (gameId) {
+      gameRooms.delete(gameId);
+    }
+    player1.gameId = null;
+    player1.playerRole = null;
+    player2.gameId = null;
+    player2.playerRole = null;
+    throw err;
+  }
 
   sendMessage(player1, {
     type: "match_found",
@@ -997,7 +1011,7 @@ function handleMessage(conn: PlayerConnection, data: Buffer | ArrayBuffer | Buff
   }
 }
 
-export function setupWebSocket(server: Server): void {
+export function setupWebSocket(server: Server): WebSocketServer {
   const wss = new WebSocketServer({
     server,
     path: "/ws",
@@ -1168,4 +1182,5 @@ export function setupWebSocket(server: Server): void {
   });
 
   console.log("WebSocket server ready on /ws");
+  return wss;
 }

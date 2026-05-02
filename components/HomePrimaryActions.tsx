@@ -9,6 +9,7 @@ interface HomePrimaryActionsProps {
   colors: ThemeColors;
   pulseStyle: any;
   buttonAnimatedStyle: any;
+  isSearching: boolean;
   onOpenGallery: () => void;
   onOpenFriends: () => void;
   onFindMatch: () => void;
@@ -20,6 +21,7 @@ export default function HomePrimaryActions({
   colors,
   pulseStyle,
   buttonAnimatedStyle,
+  isSearching,
   onOpenGallery,
   onOpenFriends,
   onFindMatch,
@@ -64,12 +66,15 @@ export default function HomePrimaryActions({
 
         <Animated.View style={buttonAnimatedStyle}>
           <Pressable
-            onPress={onFindMatch}
-            onPressIn={onPressIn}
-            onPressOut={onPressOut}
+            onPress={isSearching ? undefined : onFindMatch}
+            onPressIn={isSearching ? undefined : onPressIn}
+            onPressOut={isSearching ? undefined : onPressOut}
+            disabled={isSearching}
             accessibilityRole="button"
             accessibilityLabel="Find a match to play"
             accessibilityHint="Searches for another player to start a drawing game"
+            accessibilityState={{ disabled: isSearching }}
+            style={{ opacity: isSearching ? 0.6 : 1 }}
           >
             <LinearGradient
               colors={[colors.tint, colors.accent]}

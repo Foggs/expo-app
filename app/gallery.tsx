@@ -34,7 +34,7 @@ export default function GalleryScreen() {
   const { colors } = useThemeColors();
   const { topPadding, bottomPadding } = useScreenPadding(insets);
 
-  const { data: drawings = [], isLoading } = useQuery<GalleryDrawing[]>({
+  const { data: drawings = [], isLoading, isError, refetch } = useQuery<GalleryDrawing[]>({
     queryKey: ["/api/gallery"],
   });
 
@@ -46,6 +46,9 @@ export default function GalleryScreen() {
       });
     },
     onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/gallery"] });
+    },
+    onError: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/gallery"] });
     },
   });
@@ -100,6 +103,14 @@ export default function GalleryScreen() {
       {isLoading ? (
         <View style={styles.centered}>
           <ActivityIndicator size="large" color={colors.tint} />
+        </View>
+      ) : isError ? (
+        <View style={styles.centered}>
+          <Ionicons name="cloud-offline-outline" size={48} color={colors.border} />
+          <Text style={[styles.emptyText, { color: colors.textSecondary }]}>Couldn't load gallery</Text>
+          <Pressable onPress={() => refetch()} accessibilityRole="button">
+            <Text style={[styles.emptyHint, { color: colors.tint }]}>Tap to retry</Text>
+          </Pressable>
         </View>
       ) : drawings.length === 0 ? (
         <View style={styles.centered}>

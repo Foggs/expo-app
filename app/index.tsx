@@ -240,6 +240,7 @@ export default function HomeScreen() {
           colors={colors}
           pulseStyle={pulseStyle}
           buttonAnimatedStyle={buttonAnimatedStyle}
+          isSearching={isSearching}
           onOpenGallery={() => {
             impactLight();
             router.push("/gallery");

@@ -21,7 +21,7 @@ function isLocalDatabaseUrl(databaseUrl: string): boolean {
 const connectionString = process.env.DATABASE_URL;
 const useLocalPg = isLocalDatabaseUrl(connectionString);
 
-const pool = useLocalPg
+export const pool = useLocalPg
   ? new PgPool({ connectionString })
   : new NeonPool({ connectionString });
 

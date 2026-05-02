@@ -65,10 +65,10 @@ export const insertGalleryDrawingSchema = z.object({
     path: z.string().max(50000),
     color: z.string().max(20),
     strokeWidth: z.number().min(1).max(50),
-  })).max(500),
+  }).strict()).max(500),
   roundCount: z.number().min(1).max(10).optional(),
   sessionToken: z.string().max(100).optional(),
-});
+}).strict();
 
 export const insertUserSchema = createInsertSchema(users).pick({
   username: true,
@@ -77,7 +77,7 @@ export const insertUserSchema = createInsertSchema(users).pick({
 
 export const createGameSchema = z.object({
   player1Id: z.string().optional(),
-});
+}).strict();
 
 export const submitTurnSchema = z.object({
   playerRole: z.enum(["player1", "player2"]),
@@ -86,31 +86,25 @@ export const submitTurnSchema = z.object({
     points: z.array(z.object({
       x: z.number(),
       y: z.number(),
-    })),
+    }).strict()),
     color: z.string().max(20),
     width: z.number().min(1).max(50),
-  })),
-});
+  }).strict()),
+}).strict();
 
 export const strokeSchema = z.object({
   points: z.array(z.object({
     x: z.number(),
     y: z.number(),
-  })).max(5000),
+  }).strict()).max(5000),
   color: z.string().max(20),
   width: z.number().min(1).max(50),
-});
+}).strict();
 
 export const wsClientMessageSchema = z.discriminatedUnion("type", [
-  z.object({
-    type: z.literal("join_queue"),
-  }),
-  z.object({
-    type: z.literal("leave_queue"),
-  }),
-  z.object({
-    type: z.literal("create_room"),
-  }),
+  z.object({ type: z.literal("join_queue") }).strict(),
+  z.object({ type: z.literal("leave_queue") }).strict(),
+  z.object({ type: z.literal("create_room") }).strict(),
   z.object({
     type: z.literal("join_room"),
     roomCode: z
@@ -119,10 +113,8 @@ export const wsClientMessageSchema = z.discriminatedUnion("type", [
       .refine((value) => isValidRoomCode(value), {
         message: "Invalid room code",
       }),
-  }),
-  z.object({
-    type: z.literal("leave_room"),
-  }),
+  }).strict(),
+  z.object({ type: z.literal("leave_room") }).strict(),
   z.object({
     type: z.literal("draw_stroke"),
     stroke: z.object({
@@ -130,24 +122,16 @@ export const wsClientMessageSchema = z.discriminatedUnion("type", [
       path: z.string().max(50000),
       color: z.string().max(20),
       strokeWidth: z.number().min(1).max(50),
-    }),
-  }),
-  z.object({
-    type: z.literal("draw_clear"),
-  }),
-  z.object({
-    type: z.literal("draw_undo"),
-  }),
+    }).strict(),
+  }).strict(),
+  z.object({ type: z.literal("draw_clear") }).strict(),
+  z.object({ type: z.literal("draw_undo") }).strict(),
   z.object({
     type: z.literal("submit_turn"),
     strokes: z.array(strokeSchema).max(500),
-  }),
-  z.object({
-    type: z.literal("ping"),
-  }),
-  z.object({
-    type: z.literal("request_game_state"),
-  }),
+  }).strict(),
+  z.object({ type: z.literal("ping") }).strict(),
+  z.object({ type: z.literal("request_game_state") }).strict(),
 ]);
 
 export type WsClientMessage = z.infer<typeof wsClientMessageSchema>;
