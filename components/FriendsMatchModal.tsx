@@ -136,7 +136,7 @@ export default function FriendsMatchModal({
 
 const styles = StyleSheet.create({
   card: {
-    gap: 14,
+    gap: 20,
   },
   title: {
     fontSize: 24,

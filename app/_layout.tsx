@@ -13,6 +13,7 @@ import { useColorScheme } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { KeyboardProvider } from "react-native-keyboard-controller";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
+import { LoadingScreen } from "@/components/LoadingScreen";
 import { queryClient } from "@/lib/query-client";
 import { WebSocketProvider } from "@/contexts/WebSocketContext";
 import Colors from "@/constants/colors";
@@ -66,7 +67,7 @@ export default function RootLayout() {
   }, [fontsLoaded]);
 
   if (!fontsLoaded) {
-    return null;
+    return <LoadingScreen />;
   }
 
   return (
