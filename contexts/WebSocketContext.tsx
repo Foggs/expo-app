@@ -19,7 +19,7 @@ import {
   useMemo,
   type ReactNode,
 } from "react";
-import { Platform } from "react-native";
+import { Platform, AppState } from "react-native";
 import { z } from "zod";
 import {
   ROOM_CODE_LENGTH,
@@ -301,6 +301,7 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
   const friendRoomCodeRef = useRef<string | null>(null);
   const mountedRef = useRef(true);
   const callbacksRef = useRef<WebSocketCallbacks>({});
+  const backgroundedAtRef = useRef<number | null>(null);
   const machineRef = useRef<ReturnType<typeof createMachine<MatchFlowModel, MatchFlowEvent, MatchFlowEffect>> | null>(null);
 
   const clearPingTimer = useCallback(() => {
@@ -616,6 +617,9 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
           }
           break;
         }
+        case "SEND_REQUEST_GAME_STATE":
+          sendRaw({ type: "request_game_state" });
+          break;
         case "CLEAR_SESSION":
           setMatchInfo(null);
           setGameState(null);
@@ -673,6 +677,20 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
       }
     };
   }, [clearPingTimer, clearReconnectTimer, clearBackoffTimer]);
+
+  useEffect(() => {
+    const subscription = AppState.addEventListener("change", (nextState) => {
+      if (nextState === "background" || nextState === "inactive") {
+        backgroundedAtRef.current = Date.now();
+      } else if (nextState === "active") {
+        if (backgroundedAtRef.current !== null && machineRef.current?.currentStateId === "playing") {
+          sendRaw({ type: "request_game_state" });
+        }
+        backgroundedAtRef.current = null;
+      }
+    });
+    return () => subscription.remove();
+  }, [sendRaw]);
 
   const connectionStatus = flowStateToConnectionStatus(flowSnapshot.stateId);
   const matchStatus = flowStateToMatchStatus(flowSnapshot.stateId);

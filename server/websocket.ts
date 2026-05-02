@@ -68,6 +68,19 @@ const connections = new Map<string, PlayerConnection>();
 const matchmakingQueue: string[] = [];
 const gameRooms = new Map<string, GameRoom>();
 const friendRooms = new Map<string, FriendRoom>();
+const gameLocks = new Map<string, Promise<void>>();
+const roomLocks = new Map<string, Promise<void>>();
+
+function withLock(locks: Map<string, Promise<void>>, key: string, fn: () => Promise<void>): void {
+  const prev = locks.get(key) ?? Promise.resolve();
+  const next = prev.then(fn).catch((err) => {
+    console.error(`[Lock] Error for key ${key}:`, err instanceof Error ? err.message : err);
+  });
+  locks.set(key, next);
+  next.finally(() => {
+    if (locks.get(key) === next) locks.delete(key);
+  });
+}
 let heartbeatTimer: ReturnType<typeof setInterval> | null = null;
 let matchmakingTimer: ReturnType<typeof setInterval> | null = null;
 let roomCleanupTimer: ReturnType<typeof setInterval> | null = null;
@@ -898,7 +911,7 @@ function handleMessage(conn: PlayerConnection, data: Buffer | ArrayBuffer | Buff
       break;
 
     case "join_room":
-      handleJoinRoom(conn, msg.roomCode);
+      withLock(roomLocks, msg.roomCode, () => handleJoinRoom(conn, msg.roomCode));
       break;
 
     case "leave_room":
@@ -972,7 +985,11 @@ function handleMessage(conn: PlayerConnection, data: Buffer | ArrayBuffer | Buff
     }
 
     case "submit_turn":
-      handleSubmitTurn(conn, msg.strokes);
+      if (conn.gameId) {
+        withLock(gameLocks, conn.gameId, () => handleSubmitTurn(conn, msg.strokes));
+      } else {
+        handleSubmitTurn(conn, msg.strokes);
+      }
       break;
     case "request_game_state":
       handleRequestGameState(conn);

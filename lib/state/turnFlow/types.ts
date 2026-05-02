@@ -38,7 +38,9 @@ export type TurnFlowEvent =
   | { type: "USER_RETRY_SUBMIT" }
   | { type: "SERVER_STATE_RESYNC"; currentPlayer: "player1" | "player2"; currentRound: number; totalRounds: number }
   | { type: "NAVIGATE_HOME" }
-  | { type: "ERROR_RAISED"; error: FlowError };
+  | { type: "ERROR_RAISED"; error: FlowError }
+  | { type: "ACK_TIMEOUT_EXPIRED" }
+  | { type: "RETRY_ESCAPE_TIMEOUT_EXPIRED" };
 
 export type TurnFlowEffect =
   | { type: "START_PLAYER_TIMER" }
@@ -51,4 +53,8 @@ export type TurnFlowEffect =
   | { type: "COMMIT_ROUND_DRAWING"; round: number; strokes: unknown[] }
   | { type: "NAVIGATE_RESULTS" }
   | { type: "NAVIGATE_HOME" }
-  | { type: "EMIT_ERROR_UI"; error: FlowError };
+  | { type: "EMIT_ERROR_UI"; error: FlowError }
+  | { type: "QUEUE_ACK_TIMEOUT" }
+  | { type: "CLEAR_ACK_TIMEOUT" }
+  | { type: "QUEUE_RETRY_ESCAPE_TIMEOUT" }
+  | { type: "CLEAR_RETRY_ESCAPE_TIMEOUT" };

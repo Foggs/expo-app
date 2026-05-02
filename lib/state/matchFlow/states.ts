@@ -330,6 +330,13 @@ export const reconnectingState: MState = {
   exit: () => [{ type: "CLEAR_RECONNECT" } as MatchFlowEffect],
   handle: (model, event): MResult => {
     if (event.type === "WS_OPENED") {
+      if (model.gameId) {
+        return {
+          nextStateId: "playing",
+          modelPatch: { reconnectAttempt: 0, lastError: null, retryDelayMs: 0 },
+          effects: [{ type: "SEND_REQUEST_GAME_STATE" }],
+        };
+      }
       return {
         nextStateId: "queueing",
         modelPatch: { reconnectAttempt: 0, lastError: null, retryDelayMs: 0, matchType: null },

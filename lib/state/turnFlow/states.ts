@@ -131,6 +131,18 @@ export const drawingTurnState: TState = {
         effects: [],
       };
     }
+    if (event.type === "SERVER_TURN_CHANGED" && event.currentPlayer === model.playerRole) {
+      // Round advanced but it's still this player's turn — update round, keep drawing.
+      return {
+        nextStateId: "drawing_turn",
+        modelPatch: {
+          currentRound: event.currentRound,
+          totalRounds: event.totalRounds,
+          stateVersion: model.stateVersion + 1,
+        },
+        effects: [],
+      };
+    }
     return handleTerminalEvents(event);
   },
 };
@@ -183,8 +195,8 @@ export const submittingTurnState: TState = {
 
 export const awaitingServerAckState: TState = {
   id: "awaiting_server_ack",
-  enter: () => [],
-  exit: () => [],
+  enter: () => [{ type: "QUEUE_ACK_TIMEOUT" } as TurnFlowEffect],
+  exit: () => [{ type: "CLEAR_ACK_TIMEOUT" } as TurnFlowEffect],
   handle: (model, event): TResult => {
     if (event.type === "SERVER_GAME_STATE_ACK") {
       if (event.currentPlayer === model.playerRole) {
@@ -246,6 +258,23 @@ export const awaitingServerAckState: TState = {
         effects: [{ type: "CLEAR_TRANSIENT_STROKES" }],
       };
     }
+    if (event.type === "ACK_TIMEOUT_EXPIRED") {
+      return {
+        nextStateId: "submit_retrying",
+        modelPatch: {
+          lastError: {
+            code: "ACK_TIMEOUT",
+            source: "runtime",
+            retryable: true,
+            fatal: false,
+            message: "Server did not acknowledge the submission in time.",
+            stateVersion: model.stateVersion,
+            occurredAt: Date.now(),
+          },
+        },
+        effects: [],
+      };
+    }
     if (event.type === "ERROR_RAISED" && !event.error.fatal) {
       return {
         nextStateId: "submit_retrying",
@@ -260,7 +289,10 @@ export const awaitingServerAckState: TState = {
 export const submitRetryingState: TState = {
   id: "submit_retrying",
   enter: (model) => {
-    const effects: TurnFlowEffect[] = [{ type: "PAUSE_PLAYER_TIMER" }];
+    const effects: TurnFlowEffect[] = [
+      { type: "PAUSE_PLAYER_TIMER" },
+      { type: "QUEUE_RETRY_ESCAPE_TIMEOUT" },
+    ];
     if (model.submissionId && model.pendingStrokes) {
       effects.push({
         type: "QUEUE_SUBMIT_RETRY",
@@ -270,7 +302,10 @@ export const submitRetryingState: TState = {
     }
     return effects;
   },
-  exit: () => [{ type: "CLEAR_SUBMIT_RETRY" } as TurnFlowEffect],
+  exit: () => [
+    { type: "CLEAR_SUBMIT_RETRY" } as TurnFlowEffect,
+    { type: "CLEAR_RETRY_ESCAPE_TIMEOUT" } as TurnFlowEffect,
+  ],
   handle: (model, event): TResult => {
     if (event.type === "RETRY_BUDGET_REMAINING") {
       const nextRetry = model.retryCount + 1;
@@ -287,7 +322,7 @@ export const submitRetryingState: TState = {
         effects: [],
       };
     }
-    if (event.type === "RETRY_BUDGET_EXHAUSTED") {
+    if (event.type === "RETRY_BUDGET_EXHAUSTED" || event.type === "RETRY_ESCAPE_TIMEOUT_EXPIRED") {
       return {
         nextStateId: "submit_failed",
         modelPatch: {},

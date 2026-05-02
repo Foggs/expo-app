@@ -15,7 +15,13 @@
     },
     "ios": {
       "supportsTablet": false,
-      "bundleIdentifier": "com.sketchduel.app"
+      "bundleIdentifier": "com.sketchduel.app",
+      "buildNumber": "1",
+      "infoPlist": {
+        "NSPhotoLibraryUsageDescription": "Save your drawings to your photo library.",
+        "NSPhotoLibraryAddOnlyUsageDescription": "Save your drawings to your photo library.",
+        "NSLocalNetworkUsageDescription": "Required for real-time multiplayer connections."
+      }
     },
     "android": {
       "package": "com.sketchduel.app",
@@ -39,6 +45,7 @@
       "expo-font",
       "expo-web-browser"
     ],
+    "privacyPolicyUrl": "https://sketchduel.app/privacy",
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true

@@ -112,7 +112,6 @@ export function useGameScreenController({
       }
     },
     onNavigateHome: () => {
-      if (navigatedRef.current) return;
       navigatedRef.current = true;
       disconnect();
       showPlatformAlert(
@@ -236,6 +235,9 @@ export function useGameScreenController({
       },
       onOpponentUndo: () => {
         setOpponentStrokes((prev) => prev.slice(0, -1));
+      },
+      onRoundComplete: () => {
+        setOpponentStrokes([]);
       },
       onOpponentDisconnected: () => {
         dispatchTurn({ type: "SERVER_OPPONENT_DISCONNECTED" });

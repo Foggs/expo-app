@@ -78,6 +78,8 @@ export function useTurnFlow(options: UseTurnFlowOptions): UseTurnFlowReturn {
   const opponentTimerRef = useRef<ReturnType<typeof setInterval> | null>(null); // TIMER-KEY: waiting_for_turn
   const opponentTimeRef = useRef(OPPONENT_TURN_DURATION);
   const submitRetryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null); // TIMER-KEY: submit_retrying
+  const ackTimeoutTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null); // TIMER-KEY: awaiting_server_ack
+  const retryEscapeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null); // TIMER-KEY: submit_retrying_escape
 
   const callbackRefs = useRef(options);
   callbackRefs.current = options;
@@ -119,6 +121,20 @@ export function useTurnFlow(options: UseTurnFlowOptions): UseTurnFlowReturn {
     }
   }, []);
 
+  const clearAckTimer = useCallback(() => {
+    if (ackTimeoutTimerRef.current) {
+      clearTimeout(ackTimeoutTimerRef.current);
+      ackTimeoutTimerRef.current = null;
+    }
+  }, []);
+
+  const clearRetryEscapeTimer = useCallback(() => {
+    if (retryEscapeTimerRef.current) {
+      clearTimeout(retryEscapeTimerRef.current);
+      retryEscapeTimerRef.current = null;
+    }
+  }, []);
+
   const effectRunner = useCallback(
     (effect: TurnFlowEffect, dispatch: (event: TurnFlowEvent) => void) => {
       switch (effect.type) {
@@ -146,7 +162,7 @@ export function useTurnFlow(options: UseTurnFlowOptions): UseTurnFlowReturn {
             if (sent) {
               dispatch({ type: "RETRY_BUDGET_REMAINING" });
             } else {
-              dispatch({ type: "RETRY_BUDGET_REMAINING" });
+              dispatch({ type: "RETRY_BUDGET_EXHAUSTED" });
             }
           }, SUBMIT_RETRY_DELAY_MS);
           break;
@@ -165,9 +181,29 @@ export function useTurnFlow(options: UseTurnFlowOptions): UseTurnFlowReturn {
           break;
         case "EMIT_ERROR_UI":
           break;
+        case "QUEUE_ACK_TIMEOUT":
+          clearAckTimer();
+          ackTimeoutTimerRef.current = setTimeout(() => { // TIMER-KEY: awaiting_server_ack
+            if (!mountedRef.current) return;
+            dispatch({ type: "ACK_TIMEOUT_EXPIRED" });
+          }, 15000);
+          break;
+        case "CLEAR_ACK_TIMEOUT":
+          clearAckTimer();
+          break;
+        case "QUEUE_RETRY_ESCAPE_TIMEOUT":
+          clearRetryEscapeTimer();
+          retryEscapeTimerRef.current = setTimeout(() => { // TIMER-KEY: submit_retrying_escape
+            if (!mountedRef.current) return;
+            dispatch({ type: "RETRY_ESCAPE_TIMEOUT_EXPIRED" });
+          }, 30000);
+          break;
+        case "CLEAR_RETRY_ESCAPE_TIMEOUT":
+          clearRetryEscapeTimer();
+          break;
       }
     },
-    [startOpponentTimer, clearOpponentTimer, clearSubmitRetryTimer],
+    [startOpponentTimer, clearOpponentTimer, clearSubmitRetryTimer, clearAckTimer, clearRetryEscapeTimer],
   );
 
   useEffect(() => {
@@ -239,8 +275,10 @@ export function useTurnFlow(options: UseTurnFlowOptions): UseTurnFlowReturn {
       mountedRef.current = false;
       clearOpponentTimer();
       clearSubmitRetryTimer();
+      clearAckTimer();
+      clearRetryEscapeTimer();
     };
-  }, [clearOpponentTimer, clearSubmitRetryTimer]);
+  }, [clearOpponentTimer, clearSubmitRetryTimer, clearAckTimer, clearRetryEscapeTimer]);
 
   const dispatchTurn = useCallback((event: TurnFlowEvent) => {
     machineRef.current?.dispatch(event);

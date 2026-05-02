@@ -71,4 +71,5 @@ export type MatchFlowEffect =
       payload: unknown;
     }
   | { type: "CLEAR_SESSION" }
-  | { type: "EMIT_ERROR_UI"; error: FlowError };
+  | { type: "EMIT_ERROR_UI"; error: FlowError }
+  | { type: "SEND_REQUEST_GAME_STATE" };

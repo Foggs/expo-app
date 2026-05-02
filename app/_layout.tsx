@@ -20,6 +20,12 @@ import Colors from "@/constants/colors";
 
 SplashScreen.preventAutoHideAsync();
 
+if (typeof window !== "undefined") {
+  window.addEventListener("unhandledrejection", (event) => {
+    console.error("[UnhandledRejection]", event.reason);
+  });
+}
+
 function RootLayoutNav() {
   const colorScheme = useColorScheme();
   const isDark = colorScheme === "dark";
