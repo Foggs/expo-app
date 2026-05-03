@@ -22,18 +22,64 @@ const VIEWPORT_W = 440;
 const VIEWPORT_H = 956;
 const DPR = 3;
 
-const CHROMIUM_PATHS = [
-  "/nix/store/43y6k6fj85l4kcd1yan43hpdld6nmjmp-ungoogled-chromium-131.0.6778.204/bin/chromium",
+const STATIC_PATHS = [
+  "/usr/bin/chromium",
+  "/usr/bin/chromium-browser",
+  "/usr/bin/google-chrome",
 ];
 
-async function findChromium(): Promise<string> {
-  for (const p of CHROMIUM_PATHS) {
+const PATH_BIN_NAMES = ["chromium", "chromium-browser", "google-chrome", "chrome"];
+
+async function which(bin: string): Promise<string | null> {
+  const dirs = (process.env.PATH ?? "").split(":").filter(Boolean);
+  for (const d of dirs) {
+    const p = path.join(d, bin);
     try {
       await fs.access(p);
       return p;
     } catch {}
   }
-  throw new Error("No chromium binary found. Searched: " + CHROMIUM_PATHS.join(", "));
+  return null;
+}
+
+async function findInNixStore(): Promise<string | null> {
+  try {
+    const entries = await fs.readdir("/nix/store");
+    const matches = entries.filter((e) => e.includes("chromium")).sort().reverse();
+    for (const m of matches) {
+      const candidate = path.join("/nix/store", m, "bin/chromium");
+      try {
+        await fs.access(candidate);
+        return candidate;
+      } catch {}
+    }
+  } catch {}
+  return null;
+}
+
+async function findChromium(): Promise<string> {
+  const fromEnv = process.env.PUPPETEER_EXECUTABLE_PATH ?? process.env.CHROMIUM_PATH;
+  if (fromEnv) {
+    try {
+      await fs.access(fromEnv);
+      return fromEnv;
+    } catch {}
+  }
+  for (const p of STATIC_PATHS) {
+    try {
+      await fs.access(p);
+      return p;
+    } catch {}
+  }
+  for (const bin of PATH_BIN_NAMES) {
+    const found = await which(bin);
+    if (found) return found;
+  }
+  const nix = await findInNixStore();
+  if (nix) return nix;
+  throw new Error(
+    "No chromium binary found. Set PUPPETEER_EXECUTABLE_PATH or install chromium.",
+  );
 }
 
 async function waitMs(ms: number): Promise<void> {
