@@ -42,8 +42,9 @@ export default function MatchmakingModal({
       dismissOnOverlay={false}
       cardStyle={styles.card}
     >
+      <View style={styles.content}>
       {flowState === "error_fatal" ? (
-        <>
+        <View style={styles.contentGroup}>
           <Ionicons name="close-circle" size={48} color={colors.error} />
           <Text style={[styles.searchTitle, { color: colors.text }]} accessibilityRole="alert">
             Connection Failed
@@ -69,9 +70,9 @@ export default function MatchmakingModal({
             <Ionicons name="close" size={20} color={colors.error} />
             <Text style={[styles.cancelText, { color: colors.error }]}>Cancel</Text>
           </Pressable>
-        </>
+        </View>
       ) : flowState === "error_backoff" ? (
-        <>
+        <View style={styles.contentGroup}>
           <Ionicons name="time-outline" size={48} color={colors.accent} />
           <Text
             style={[styles.searchTitle, { color: colors.text }]}
@@ -90,9 +91,9 @@ export default function MatchmakingModal({
             <Ionicons name="close" size={20} color={colors.error} />
             <Text style={[styles.cancelText, { color: colors.error }]}>Cancel</Text>
           </Pressable>
-        </>
+        </View>
       ) : flowState === "error_recoverable" ? (
-        <>
+        <View style={styles.contentGroup}>
           <ActivityIndicator size="large" color={colors.accent} />
           <Text
             style={[styles.searchTitle, { color: colors.text }]}
@@ -111,9 +112,9 @@ export default function MatchmakingModal({
             <Ionicons name="close" size={20} color={colors.error} />
             <Text style={[styles.cancelText, { color: colors.error }]}>Cancel</Text>
           </Pressable>
-        </>
+        </View>
       ) : (
-        <>
+        <View style={styles.contentGroup}>
           <Animated.View style={searchPulseStyle}>
             <ActivityIndicator size="large" color={colors.tint} />
           </Animated.View>
@@ -143,8 +144,9 @@ export default function MatchmakingModal({
             <Ionicons name="close" size={20} color={colors.error} />
             <Text style={[styles.cancelText, { color: colors.error }]}>Cancel</Text>
           </Pressable>
-        </>
+        </View>
       )}
+      </View>
     </BaseModal>
   );
 }
@@ -152,6 +154,11 @@ export default function MatchmakingModal({
 const styles = StyleSheet.create({
   card: {
     padding: 32,
+  },
+  content: {
+    width: "100%",
+  },
+  contentGroup: {
     alignItems: "center" as const,
     gap: 20,
   },

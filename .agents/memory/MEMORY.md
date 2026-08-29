@@ -1,0 +1,1 @@
+- [Expo deep-link routing](expo-deep-link-routing.md) — custom-scheme links need a matching validated route for reliable cold-start handling.

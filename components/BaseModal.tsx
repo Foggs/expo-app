@@ -106,6 +106,7 @@ export default function BaseModal({
             cardStyle,
             animatedCardStyle,
           ]}
+          accessibilityViewIsModal
         >
           <Pressable onPress={(e) => e.stopPropagation()}>
             {title && (
@@ -167,15 +168,15 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: 16,
+    marginBottom: 20,
   },
   title: {
     fontSize: 18,
     fontFamily: "Inter_600SemiBold",
   },
   closeButton: {
-    width: 32,
-    height: 32,
+    width: 44,
+    height: 44,
     justifyContent: "center",
     alignItems: "center",
   },

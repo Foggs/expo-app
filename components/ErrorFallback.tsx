@@ -96,6 +96,8 @@ export function ErrorFallback({ error, resetError }: ErrorFallbackProps) {
               transform: [{ scale: pressed ? 0.98 : 1 }],
             },
           ]}
+          accessibilityRole="button"
+          accessibilityLabel="Try again"
         >
           <Text style={[styles.buttonText, { color: theme.buttonText }]}>
             Try Again
@@ -191,7 +193,7 @@ const styles = StyleSheet.create({
   content: {
     alignItems: "center",
     justifyContent: "center",
-    gap: 16,
+    gap: 20,
     width: "100%",
     maxWidth: 600,
   },
@@ -264,7 +266,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   modalScrollContent: {
-    padding: 16,
+    padding: 20,
   },
   errorContainer: {
     width: "100%",

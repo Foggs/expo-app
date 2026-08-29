@@ -164,7 +164,8 @@ export type WsServerMessage =
         | "ROOM_NOT_FOUND"
         | "ROOM_FULL"
         | "ROOM_EXPIRED"
-        | "STATE_BLOCKED";
+        | "STATE_BLOCKED"
+        | "RATE_LIMITED";
     }
   | { type: "error"; message: string; code?: string }
   | { type: "pong" };

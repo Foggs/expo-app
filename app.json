@@ -20,7 +20,8 @@
       "infoPlist": {
         "NSPhotoLibraryUsageDescription": "Save your drawings to your photo library.",
         "NSPhotoLibraryAddOnlyUsageDescription": "Save your drawings to your photo library.",
-        "NSLocalNetworkUsageDescription": "Required for real-time multiplayer connections."
+        "NSLocalNetworkUsageDescription": "Required for real-time multiplayer connections.",
+        "LSApplicationQueriesSchemes": ["fb-messenger", "sms"]
       }
     },
     "android": {

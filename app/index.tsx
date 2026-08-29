@@ -1,5 +1,6 @@
 import { LinearGradient } from "expo-linear-gradient";
-import { router } from "expo-router";
+import * as Linking from "expo-linking";
+import { router, useLocalSearchParams } from "expo-router";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { useIsFocused } from "@react-navigation/native";
 import { StyleSheet, View } from "react-native";
@@ -21,8 +22,13 @@ import { useGameWebSocket } from "@/contexts/WebSocketContext";
 import { useScreenPadding } from "@/hooks/useScreenPadding";
 import { useThemeColors } from "@/hooks/useThemeColors";
 import { impactLight, impactMedium, notifySuccess } from "@/lib/platformFeedback";
+import {
+  parseFriendInviteCode,
+  parseFriendInviteUrl,
+} from "@/lib/friendInvite";
 
 export default function HomeScreen() {
+  const { inviteCode } = useLocalSearchParams<{ inviteCode?: string }>();
   const isFocused = useIsFocused();
   const insets = useSafeAreaInsets();
   const { isDark, colors } = useThemeColors();
@@ -214,6 +220,57 @@ export default function HomeScreen() {
     },
     [friendRoomError, clearFriendRoomError],
   );
+
+  const handleIncomingInvite = useCallback(
+    (url: string) => {
+      const roomCode = parseFriendInviteUrl(url);
+      if (!roomCode) return;
+
+      setFriendRoomInput(roomCode);
+      clearFriendRoomError();
+      setIsFriendsModalOpen(true);
+    },
+    [clearFriendRoomError],
+  );
+
+  const handleIncomingInviteCode = useCallback(
+    (rawCode: unknown) => {
+      const roomCode = parseFriendInviteCode(rawCode);
+      if (!roomCode) return;
+
+      setFriendRoomInput(roomCode);
+      clearFriendRoomError();
+      setIsFriendsModalOpen(true);
+    },
+    [clearFriendRoomError],
+  );
+
+  useEffect(() => {
+    let mounted = true;
+
+    Linking.getInitialURL()
+      .then((url) => {
+        if (mounted && url) {
+          handleIncomingInvite(url);
+        }
+      })
+      .catch(() => {
+        // Ignore malformed or unavailable initial deep-link data.
+      });
+
+    const subscription = Linking.addEventListener("url", ({ url }) => {
+      handleIncomingInvite(url);
+    });
+
+    return () => {
+      mounted = false;
+      subscription.remove();
+    };
+  }, [handleIncomingInvite]);
+
+  useEffect(() => {
+    handleIncomingInviteCode(inviteCode);
+  }, [handleIncomingInviteCode, inviteCode]);
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}> 

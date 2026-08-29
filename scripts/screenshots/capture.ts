@@ -115,7 +115,12 @@ async function main(): Promise<void> {
     await page.setViewport({ width: VIEWPORT_W, height: VIEWPORT_H, deviceScaleFactor: DPR });
     await page.emulateMediaFeatures([{ name: "prefers-color-scheme", value: "dark" }]);
 
-    page.on("pageerror", (err) => console.warn(`[pageerror]`, err.message));
+    page.on("pageerror", (err) =>
+      console.warn(
+        `[pageerror]`,
+        err instanceof Error ? err.message : String(err),
+      ),
+    );
     page.on("console", (msg) => {
       const t = msg.type();
       if (t === "error" || t === "warn") {

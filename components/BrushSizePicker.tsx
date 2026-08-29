@@ -100,7 +100,7 @@ export default function BrushSizePicker({
 
 const styles = StyleSheet.create({
   sizesContainer: {
-    gap: 8,
+    gap: 20,
   },
   sizeRow: {
     flexDirection: "row",

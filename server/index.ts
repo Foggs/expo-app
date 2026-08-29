@@ -319,7 +319,7 @@ function setupSecurity(app: express.Application) {
     setTimeout(() => {
       console.error("[shutdown] Forced exit after 10s");
       process.exit(1);
-    }, 10_000).unref();
+    }, 10_000);
   }
 
   process.on("SIGTERM", () => gracefulShutdown("SIGTERM"));
