@@ -245,11 +245,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return;
       }
 
-      if (drawing.sessionToken && drawing.sessionToken !== sessionToken) {
-        res.status(403).json({ message: "Not authorized to delete this drawing" });
-        return;
-      }
-
       const deleted = await storage.deleteGalleryDrawing(id);
       if (!deleted) {
         res.status(404).json({ message: "Drawing not found" });

@@ -57,11 +57,9 @@ export default function GalleryScreen() {
       const errorMessage = error instanceof Error ? error.message : "";
       const message = errorMessage.startsWith("401")
         ? "Your session has expired. Please try again."
-        : errorMessage.startsWith("403")
-          ? "This drawing belongs to another session and cannot be deleted."
-          : errorMessage.startsWith("404")
-            ? "That drawing is no longer in your gallery."
-            : "We couldn't delete this drawing. Check your connection and try again.";
+        : errorMessage.startsWith("404")
+          ? "That drawing is no longer in the gallery."
+          : "We couldn't delete this drawing. Check your connection and try again.";
 
       showPlatformAlert(
         "Couldn't Delete Drawing",
