@@ -16,7 +16,7 @@ import type { StrokeLike } from "@/components/DrawingThumbnail";
 import { useScreenPadding } from "@/hooks/useScreenPadding";
 import { useThemeColors } from "@/hooks/useThemeColors";
 import { impactLight, impactMedium } from "@/lib/platformFeedback";
-import { confirmAction } from "@/lib/platformDialogs";
+import { confirmAction, showPlatformAlert } from "@/lib/platformDialogs";
 import { apiRequest, queryClient } from "@/lib/query-client";
 import { getSessionToken } from "@/lib/sessionToken";
 
@@ -45,15 +45,36 @@ export default function GalleryScreen() {
         "x-session-token": token,
       });
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/gallery"] });
+    onSuccess: (_, deletedId) => {
+      queryClient.setQueryData<GalleryDrawing[]>(
+        ["/api/gallery"],
+        (currentDrawings) =>
+          currentDrawings?.filter((drawing) => drawing.id !== deletedId) ?? [],
+      );
+      void queryClient.invalidateQueries({ queryKey: ["/api/gallery"] });
     },
-    onError: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/gallery"] });
+    onError: (error) => {
+      const errorMessage = error instanceof Error ? error.message : "";
+      const message = errorMessage.startsWith("401")
+        ? "Your session has expired. Please try again."
+        : errorMessage.startsWith("403")
+          ? "This drawing belongs to another session and cannot be deleted."
+          : errorMessage.startsWith("404")
+            ? "That drawing is no longer in your gallery."
+            : "We couldn't delete this drawing. Check your connection and try again.";
+
+      showPlatformAlert(
+        "Couldn't Delete Drawing",
+        message,
+        undefined,
+        message,
+      );
     },
   });
 
   const handleDelete = (id: string) => {
+    if (deleteMutation.isPending) return;
+
     impactMedium();
 
     const doDelete = () => deleteMutation.mutate(id);
@@ -107,7 +128,7 @@ export default function GalleryScreen() {
       ) : isError ? (
         <View style={styles.centered}>
           <Ionicons name="cloud-offline-outline" size={48} color={colors.border} />
-          <Text style={[styles.emptyText, { color: colors.textSecondary }]}>Couldn't load gallery</Text>
+          <Text style={[styles.emptyText, { color: colors.textSecondary }]}>Couldn&apos;t load gallery</Text>
           <Pressable onPress={() => refetch()} accessibilityRole="button">
             <Text style={[styles.emptyHint, { color: colors.tint }]}>Tap to retry</Text>
           </Pressable>
@@ -129,6 +150,7 @@ export default function GalleryScreen() {
               colors={colors}
               formattedDate={formatDate(item.createdAt)}
               onDelete={handleDelete}
+              isDeleting={deleteMutation.isPending}
             />
           )}
           keyExtractor={(item) => item.id}

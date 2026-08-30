@@ -17,6 +17,7 @@ export interface GalleryCardProps {
   colors: ThemeColors;
   formattedDate: string;
   onDelete: (id: string) => void;
+  isDeleting?: boolean;
 }
 
 export default function GalleryCard({
@@ -24,12 +25,11 @@ export default function GalleryCard({
   colors,
   formattedDate,
   onDelete,
+  isDeleting = false,
 }: GalleryCardProps) {
   return (
     <View
       style={[styles.card, { backgroundColor: colors.card }]}
-      accessible={true}
-      accessibilityLabel={`Drawing from ${formattedDate}, played with ${drawing.opponentName}`}
     >
       <View style={styles.cardContent}>
         <DrawingThumbnail strokes={drawing.strokes} size={160} borderRadius={16} />
@@ -45,9 +45,14 @@ export default function GalleryCard({
           </View>
           <Pressable
             onPress={() => onDelete(drawing.id)}
-            style={styles.deleteButton}
+            disabled={isDeleting}
+            style={({ pressed }) => [
+              styles.deleteButton,
+              { opacity: isDeleting ? 0.45 : pressed ? 0.7 : 1 },
+            ]}
             accessibilityRole="button"
             accessibilityLabel="Delete this drawing"
+            accessibilityHint="Opens a confirmation before removing this drawing"
           >
             <Ionicons name="trash-outline" size={18} color={colors.error} />
           </Pressable>
@@ -87,6 +92,9 @@ const styles = StyleSheet.create({
   deleteButton: {
     marginTop: 4,
     alignSelf: "flex-start",
-    padding: 4,
+    width: 44,
+    height: 44,
+    justifyContent: "center",
+    alignItems: "center",
   },
 });
