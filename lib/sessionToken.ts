@@ -1,5 +1,6 @@
 import * as SecureStore from "expo-secure-store";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { getRandomBytes } from "expo-crypto";
 import { Platform } from "react-native";
 
 const SESSION_TOKEN_KEY = "sketchduel_session_token";
@@ -8,8 +9,7 @@ const ASYNC_STORAGE_FALLBACK_KEY = "sketchduel_session_token_fallback";
 let cachedToken: string | null = null;
 
 function generateToken(): string {
-  const bytes = new Uint8Array(32);
-  crypto.getRandomValues(bytes);
+  const bytes = getRandomBytes(32);
   return Array.from(bytes)
     .map((b) => b.toString(16).padStart(2, "0"))
     .join("");
