@@ -1,1 +1,2 @@
 - [Expo deep-link routing](expo-deep-link-routing.md) — custom-scheme links need a matching validated route for reliable cold-start handling.
+- [React Native window capabilities](react-native-window-capabilities.md) — native may define window without browser event APIs; capability-check methods inside effects.

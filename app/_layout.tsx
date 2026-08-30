@@ -20,12 +20,6 @@ import Colors from "@/constants/colors";
 
 SplashScreen.preventAutoHideAsync();
 
-if (typeof window !== "undefined") {
-  window.addEventListener("unhandledrejection", (event) => {
-    console.error("[UnhandledRejection]", event.reason);
-  });
-}
-
 function RootLayoutNav() {
   const colorScheme = useColorScheme();
   const isDark = colorScheme === "dark";
@@ -78,6 +72,33 @@ export default function RootLayout() {
       SplashScreen.hideAsync();
     }
   }, [fontsLoaded]);
+
+  useEffect(() => {
+    const globalWindow =
+      typeof window !== "undefined" ? window : null;
+    if (
+      !globalWindow ||
+      typeof globalWindow.addEventListener !== "function"
+    ) {
+      return;
+    }
+
+    const handleUnhandledRejection = (event: PromiseRejectionEvent) => {
+      console.error("[UnhandledRejection]", event.reason);
+    };
+
+    globalWindow.addEventListener(
+      "unhandledrejection",
+      handleUnhandledRejection,
+    );
+
+    return () => {
+      globalWindow.removeEventListener(
+        "unhandledrejection",
+        handleUnhandledRejection,
+      );
+    };
+  }, []);
 
   if (!fontsLoaded) {
     return <LoadingScreen />;
