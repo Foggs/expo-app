@@ -4,6 +4,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import Animated from "react-native-reanimated";
 import type { ThemeColors } from "@/hooks/useThemeColors";
+import { openPrivacyPolicy } from "@/lib/privacyPolicy";
 
 interface HomePrimaryActionsProps {
   colors: ThemeColors;
@@ -88,6 +89,19 @@ export default function HomePrimaryActions({
           </Pressable>
         </Animated.View>
       </View>
+
+      <Pressable
+        onPress={openPrivacyPolicy}
+        style={styles.privacyLink}
+        accessibilityRole="link"
+        accessibilityLabel="Privacy Policy"
+        accessibilityHint="Opens the SketchDuel privacy policy"
+        hitSlop={8}
+      >
+        <Text style={[styles.privacyLinkText, { color: colors.textSecondary }]}>
+          Privacy Policy
+        </Text>
+      </Pressable>
     </>
   );
 }
@@ -153,5 +167,15 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontSize: 18,
     fontFamily: "Inter_600SemiBold",
+  },
+  privacyLink: {
+    alignSelf: "center",
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+  },
+  privacyLinkText: {
+    fontSize: 13,
+    fontFamily: "Inter_500Medium",
+    textDecorationLine: "underline",
   },
 });

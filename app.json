@@ -18,10 +18,44 @@
       "bundleIdentifier": "com.sketchduel.app",
       "buildNumber": "1",
       "infoPlist": {
-        "NSPhotoLibraryUsageDescription": "Save your drawings to your photo library.",
-        "NSPhotoLibraryAddOnlyUsageDescription": "Save your drawings to your photo library.",
-        "NSLocalNetworkUsageDescription": "Required for real-time multiplayer connections.",
-        "LSApplicationQueriesSchemes": ["fb-messenger", "sms"]
+        "LSApplicationQueriesSchemes": ["fb-messenger", "sms"],
+        "ITSAppUsesNonExemptEncryption": false
+      },
+      "privacyManifests": {
+        "NSPrivacyTracking": false,
+        "NSPrivacyTrackingDomains": [],
+        "NSPrivacyCollectedDataTypes": [
+          {
+            "NSPrivacyCollectedDataType": "NSPrivacyCollectedDataTypeOtherUserContent",
+            "NSPrivacyCollectedDataTypeLinked": false,
+            "NSPrivacyCollectedDataTypeTracking": false,
+            "NSPrivacyCollectedDataTypePurposes": [
+              "NSPrivacyCollectedDataTypePurposeAppFunctionality"
+            ]
+          },
+          {
+            "NSPrivacyCollectedDataType": "NSPrivacyCollectedDataTypeDeviceID",
+            "NSPrivacyCollectedDataTypeLinked": false,
+            "NSPrivacyCollectedDataTypeTracking": false,
+            "NSPrivacyCollectedDataTypePurposes": [
+              "NSPrivacyCollectedDataTypePurposeAppFunctionality"
+            ]
+          }
+        ],
+        "NSPrivacyAccessedAPITypes": [
+          {
+            "NSPrivacyAccessedAPIType": "NSPrivacyAccessedAPICategoryUserDefaults",
+            "NSPrivacyAccessedAPITypeReasons": ["CA92.1"]
+          },
+          {
+            "NSPrivacyAccessedAPIType": "NSPrivacyAccessedAPICategoryFileTimestamp",
+            "NSPrivacyAccessedAPITypeReasons": ["C617.1", "0A2A.1", "3B52.1"]
+          },
+          {
+            "NSPrivacyAccessedAPIType": "NSPrivacyAccessedAPICategoryDiskSpace",
+            "NSPrivacyAccessedAPITypeReasons": ["E174.1", "85F4.1"]
+          }
+        ]
       }
     },
     "android": {
@@ -46,7 +80,9 @@
       "expo-font",
       "expo-web-browser"
     ],
-    "privacyPolicyUrl": "https://sketchduel.app/privacy",
+    "extra": {
+      "privacyPolicyUrl": "https://sketchduel.app/privacy"
+    },
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
