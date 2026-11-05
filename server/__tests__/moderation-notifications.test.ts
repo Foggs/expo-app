@@ -1,6 +1,10 @@
 import { createHmac } from "node:crypto";
+import { type AddressInfo } from "node:net";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { verifySketchDuelSignature } from "../../docs/moderation-webhook-receiver.mjs";
+import {
+  createWebhookServer,
+  verifySketchDuelSignature,
+} from "../../docs/moderation-webhook-receiver.mjs";
 import {
   getModerationNotificationStatus,
   ModerationNotificationError,
@@ -25,6 +29,93 @@ describe("moderation notifications", () => {
       nowSeconds,
     });
   }
+
+  function signReceiverRequest(body: string, timestamp: string): string {
+    return `v1=${createHmac("sha256", signingSecret)
+      .update(timestamp)
+      .update(".")
+      .update(body)
+      .digest("hex")}`;
+  }
+
+  it("handles signed requests safely through the example HTTP server", async () => {
+    const server = createWebhookServer([signingSecret]);
+    await new Promise<void>((resolve, reject) => {
+      server.once("error", reject);
+      server.listen(0, "127.0.0.1", resolve);
+    });
+
+    const address = server.address() as AddressInfo;
+    const endpoint = `http://127.0.0.1:${address.port}/webhook`;
+    const closeServer = () => new Promise<void>((resolve, reject) => {
+      server.close((error) => error ? reject(error) : resolve());
+    });
+    const timestamp = Math.floor(Date.now() / 1000).toString();
+    const validBody = JSON.stringify({
+      event: "moderation.report.created",
+      idempotencyKey: "report-http-route-test",
+    });
+    const validSignature = signReceiverRequest(validBody, timestamp);
+    const request = (body: string, headers: Record<string, string> = {}) => fetch(endpoint, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...headers },
+      body,
+    });
+
+    try {
+      const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+      const accepted = await request(validBody, {
+        "X-SketchDuel-Timestamp": timestamp,
+        "X-SketchDuel-Signature": validSignature,
+      });
+      expect(accepted.status).toBe(204);
+      expect(logSpy).toHaveBeenCalledWith(
+        "Verified SketchDuel report alert:",
+        "report-http-route-test",
+      );
+
+      const alteredBody = validBody.replace("report-http-route-test", "altered-report-id");
+      const altered = await request(alteredBody, {
+        "X-SketchDuel-Timestamp": timestamp,
+        "X-SketchDuel-Signature": validSignature,
+      });
+      expect(altered.status).toBe(401);
+
+      const missingSignature = await request(validBody, {
+        "X-SketchDuel-Timestamp": timestamp,
+      });
+      expect(missingSignature.status).toBe(401);
+
+      const missingTimestamp = await request(validBody, {
+        "X-SketchDuel-Signature": validSignature,
+      });
+      expect(missingTimestamp.status).toBe(401);
+
+      const staleTimestamp = (Number(timestamp) - 301).toString();
+      const stale = await request(validBody, {
+        "X-SketchDuel-Timestamp": staleTimestamp,
+        "X-SketchDuel-Signature": signReceiverRequest(validBody, staleTimestamp),
+      });
+      expect(stale.status).toBe(401);
+
+      const malformedBody = "{";
+      const invalidSignatureBeforeJsonParsing = await request(malformedBody, {
+        "X-SketchDuel-Timestamp": timestamp,
+        // This is well-formed but signs different bytes. A 401 proves auth runs first.
+        "X-SketchDuel-Signature": signReceiverRequest("{}", timestamp),
+      });
+      expect(invalidSignatureBeforeJsonParsing.status).toBe(401);
+
+      const signedMalformedJson = await request(malformedBody, {
+        "X-SketchDuel-Timestamp": timestamp,
+        "X-SketchDuel-Signature": signReceiverRequest(malformedBody, timestamp),
+      });
+      expect(signedMalformedJson.status).toBe(400);
+      expect(logSpy).toHaveBeenCalledTimes(1);
+    } finally {
+      await closeServer();
+    }
+  });
 
   it("reports when no webhook is configured", () => {
     vi.stubEnv("MODERATION_NOTIFICATION_WEBHOOK_URL", "");
