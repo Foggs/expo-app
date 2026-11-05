@@ -13,6 +13,7 @@ const MODERATOR_TOKEN = "restart-test-moderator-token";
 const WEBHOOK_SIGNING_SECRET = "restart-test-webhook-signing-secret";
 const REPORTER_TOKEN = "a".repeat(64);
 const GALLERY_DRAWING_ID = "restart-test-drawing";
+const MODERATOR_RETRY_REPORT_ID = "moderator-retry-restart-report";
 const TEST_TIMEOUT_MS = 60_000;
 
 type PersistedReport = {
@@ -253,6 +254,78 @@ describe("moderation alert recovery after a real server restart", () => {
     await stopServer(thirdServer.process);
   }, TEST_TIMEOUT_MS);
 
+  it("recovers a moderator-requested retry after its delivery process crashes", async () => {
+    await db.query(
+      `INSERT INTO moderation_reports (
+         id, report_type, reason, reporter_session_key, target_name, status,
+         alert_delivery_status, alert_delivery_attempts, alert_delivery_next_attempt_at
+       ) VALUES ($1, 'gallery', 'spam', 'restart-test-reporter', 'Restart target', 'pending', 'failed', 3, NULL)`,
+      [MODERATOR_RETRY_REPORT_ID],
+    );
+
+    const firstServer = await startServer();
+    const initialWebhookCount = webhookRequests.length;
+    holdWebhookResponses = true;
+    const retrySubmission = fetch(
+      `${firstServer.baseUrl}/api/moderation/reports/${MODERATOR_RETRY_REPORT_ID}/notification-retry`,
+      {
+        method: "POST",
+        headers: { "x-moderation-admin-token": MODERATOR_TOKEN },
+      },
+    ).then((response) => response.status, () => undefined);
+
+    await poll(
+      () => Promise.resolve(webhookRequests.length === initialWebhookCount + 1),
+      "moderator-requested webhook attempt",
+    );
+    const firstAttempt = await waitForReport((report) => (
+      report.id === MODERATOR_RETRY_REPORT_ID &&
+      report.alert_delivery_status === "pending" &&
+      report.alert_delivery_attempts === 1
+    ));
+    expect(firstAttempt.alert_delivery_next_attempt_at).toBeInstanceOf(Date);
+    expect(heldWebhookResponses.size).toBe(1);
+    expect(webhookRequests[initialWebhookCount]).toMatchObject({
+      event: "moderation.report.created",
+      idempotencyKey: MODERATOR_RETRY_REPORT_ID,
+    });
+
+    await crashServer(firstServer.process);
+    for (const response of heldWebhookResponses) response.destroy();
+    heldWebhookResponses.clear();
+    await retrySubmission;
+    await waitUntilDue(firstAttempt.alert_delivery_next_attempt_at);
+
+    const secondServer = await startServer();
+    await poll(
+      () => Promise.resolve(webhookRequests.length === initialWebhookCount + 2),
+      "recovered moderator-requested webhook attempt",
+    );
+    await poll(() => Promise.resolve(heldWebhookResponses.size === 1), "recovered webhook response to be held");
+    const recoveredAttempt = await waitForReport((report) => (
+      report.id === MODERATOR_RETRY_REPORT_ID &&
+      report.alert_delivery_status === "pending" &&
+      report.alert_delivery_attempts === 2
+    ));
+
+    expect(recoveredAttempt.alert_delivery_next_attempt_at).toBeInstanceOf(Date);
+    expect(recoveredAttempt.alert_delivery_next_attempt_at!.getTime()).toBeGreaterThan(Date.now());
+    expect(webhookRequests[initialWebhookCount + 1]).toMatchObject({
+      event: "moderation.report.created",
+      idempotencyKey: MODERATOR_RETRY_REPORT_ID,
+    });
+    const [{ count }] = (await db.query<{ count: string }>(
+      "SELECT count(*)::text AS count FROM moderation_reports WHERE id = $1",
+      [MODERATOR_RETRY_REPORT_ID],
+    )).rows;
+    expect(count).toBe("1");
+
+    await crashServer(secondServer.process);
+    for (const response of heldWebhookResponses) response.destroy();
+    heldWebhookResponses.clear();
+    holdWebhookResponses = false;
+  }, TEST_TIMEOUT_MS);
+
   async function startServer(): Promise<{ process: ChildProcess; baseUrl: string; logs: () => string }> {
     const port = await findFreePort();
     const serverProcess = spawn(process.execPath, [
@@ -304,7 +377,7 @@ describe("moderation alert recovery after a real server restart", () => {
           `SELECT id, alert_delivery_status, alert_delivery_attempts, alert_delivery_next_attempt_at
            FROM moderation_reports`,
         );
-        latest = result.rows[0];
+        latest = result.rows.find(predicate);
         return Boolean(latest && predicate(latest));
       }, "expected persisted report delivery state");
     } catch (error) {
