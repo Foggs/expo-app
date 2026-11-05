@@ -38,9 +38,11 @@ export const moderationPage = `<!doctype html>
         ? "Owner notifications are configured."
         : result.status === "invalid"
           ? "Owner notification destination is invalid. Set a valid HTTPS webhook URL."
-          : "Owner notifications are not configured.";
+          : result.status === "signing_secret_missing"
+            ? "Report alerts need MODERATION_NOTIFICATION_WEBHOOK_SECRET. Test notifications remain available."
+            : "Owner notifications are not configured.";
       notificationStatus.className = result.status === "configured" ? "" : "error";
-      testNotification.disabled = result.status !== "configured";
+      testNotification.disabled = result.status !== "configured" && result.status !== "signing_secret_missing";
       notifications.hidden = false;
     }
     async function loadReports() {

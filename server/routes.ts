@@ -511,7 +511,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       } catch {
         const status = getModerationNotificationStatus();
         res.status(status === "configured" ? 502 : 503).json({
-          message: status === "configured"
+          message: status === "configured" || status === "signing_secret_missing"
             ? "The notification destination did not accept the test."
             : "Owner notifications are not configured with a valid HTTPS destination.",
         });

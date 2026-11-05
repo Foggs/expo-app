@@ -10,6 +10,7 @@ import { Pool } from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 const MODERATOR_TOKEN = "restart-test-moderator-token";
+const WEBHOOK_SIGNING_SECRET = "restart-test-webhook-signing-secret";
 const REPORTER_TOKEN = "a".repeat(64);
 const GALLERY_DRAWING_ID = "restart-test-drawing";
 const TEST_TIMEOUT_MS = 60_000;
@@ -263,6 +264,7 @@ describe("moderation alert recovery after a real server restart", () => {
         ...process.env,
         DATABASE_URL: databaseUrl,
         MODERATION_NOTIFICATION_WEBHOOK_URL: webhookUrl,
+        MODERATION_NOTIFICATION_WEBHOOK_SECRET: WEBHOOK_SIGNING_SECRET,
         NODE_TLS_REJECT_UNAUTHORIZED: "0",
         NODE_ENV: "test",
         PORT: String(port),
