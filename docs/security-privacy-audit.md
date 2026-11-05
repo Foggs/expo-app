@@ -7,7 +7,7 @@ This audit lowers rejection and incident risk; it does **not** guarantee App Sto
 
 | Area | Status |
 |---|---|
-| Dependency vulnerabilities | Reduced from 195 (2 critical / 106 high) to 40 (1 critical / 20 high). Remaining are dev/build-only or need major upgrades (see §3). |
+| Dependency vulnerabilities | `npm audit` reports 49 remaining (0 critical / 19 high / 29 moderate / 1 low); see §3 for the current scope and unresolved items. |
 | Static analysis (SAST) | 1 HIGH, verified false positive, hardened anyway. |
 | Privacy dataflow scan | 0 findings. |
 | App-owned high-risk issues | 2 fixed (unauthenticated game API in production, response bodies in logs). |
@@ -25,8 +25,8 @@ This audit lowers rejection and incident risk; it does **not** guarantee App Sto
 ## 2. Method & evidence
 - Scanners: dependency audit (osv), SAST, HoundDog privacy dataflow. All three were run before and after the fixes.
 - Manual review: `server/index.ts`, `server/routes.ts`, `server/websocket.ts`, `server/storage.ts`, `shared/schema.ts`, `lib/sessionToken.ts`, client API usage, `app.json`, and the SDK `PrivacyInfo.xcprivacy` files in `node_modules`.
-- Verification: `tsc --noEmit` clean; `expo lint` 0 errors (2 unused-import warnings in `app/screenshot.tsx`); vitest 39/39 passing; `expo export --platform ios` succeeded; `expo config --type introspect` shows no permission usage strings. A production-mode server returned 404 for `/api/games*`, 200 for `/api/health` and `/api/gallery`, and 404 for a traversal attempt via `expo-platform: ../../etc`.
-- Lockfile: every `resolved` URL in `package-lock.json` points to `https://registry.npmjs.org/`. A clean `npm ci` against the public registry, outside the workspace config, installed all 1,159 packages with the patched versions.
+- Verification: `tsc --noEmit` clean; `npm run lint` 0 errors (2 unused-import warnings in `app/screenshot.tsx`); `npx vitest run` 39/39 passing; `npx expo export --platform ios` succeeded; `npx expo install --check` reports all dependencies up to date; `expo config --type introspect` shows no permission usage strings. A production-mode server returned 404 for `/api/games*`, 200 for `/api/health` and `/api/gallery`, and 404 for a traversal attempt via `expo-platform: ../../etc`.
+- Lockfile: every `resolved` URL in `package-lock.json` points to `https://registry.npmjs.org/`. A clean install in a temporary copy with `npm ci --legacy-peer-deps --registry=https://registry.npmjs.org/ --userconfig=/dev/null` installed 1,161 packages and applied the local expo-asset patch. The peer-resolution flag works around npm's `edgesOut` resolver error for the Vitest/Puppeteer peer tree.
 
 ## 3. Findings
 
@@ -45,9 +45,16 @@ This audit lowers rejection and incident risk; it does **not** guarantee App Sto
 | F11 | Low | `app/screenshot.tsx` is a mock route bundled into the production app (reachable via the `sketchduel://screenshot` deep link). | Residual; covered by the pre-publish cleanup task. |
 
 ### Remaining dependency findings (not fixed, with reason)
-- `vitest@4.0.18` (critical): the issue applies only while the Vitest UI server runs, which is never in prod. The upgrade is blocked by an npm resolver error with `puppeteer-core`'s peer range. Dev-only.
-- `zod@3.25.76` (high): memory exhaustion on oversized collections. The fix needs zod 4 (a major upgrade). Mitigated by the 2 MB JSON body limit, the 512 KB WebSocket cap, and `.max()` limits on every array.
-- `decode-uri-component` (via expo-router), `ws@6/7`, `postcss`, `image-size`, `uuid@7` (Expo CLI/Metro/xcode), `sharp`, `extract-zip`, `basic-ftp`, `uuid@3` (dev tools: ngrok, puppeteer), `brace-expansion@1` (eslint). These are build-time or pinned by Expo SDK 54. Expo reports newer patch releases (`expo ~54.0.37`, `expo-router ~6.0.24`, and others) that should be applied with `npx expo install --fix` during release prep.
+- Current scan: `npm audit --json` reports 49 findings (0 critical, 19 high, 29 moderate, 1 low). `npm audit --omit=dev` reports 26 (0 critical, 10 high, 14 moderate, 2 low); that includes Expo CLI/Metro build tooling declared through Expo packages and does not mean all 26 are shipped app runtime code.
+- Expo SDK 54 patch updates are applied and verified: `expo@54.0.38`, `expo-router@6.0.24`, `expo-constants@18.0.14`, `expo-font@14.0.12`, `expo-glass-effect@0.1.10`, `expo-linking@8.0.12`, and `expo-web-browser@15.0.11`. `npx expo install --check` reports no mismatches.
+- `vitest@4.1.12` is now a development dependency; its earlier critical advisory is cleared. The project also declares `vite` and `babel-preset-expo` directly as development dependencies so clean installs include the tools required by tests and the Expo export. npm's normal peer resolver failed with `edgesOut` while resolving the Puppeteer/Vitest peers; the lockfile installs cleanly with `--legacy-peer-deps`.
+- High findings still reported:
+  - `expo-router@6.0.24` and `query-string` include vulnerable `decode-uri-component` versions. npm's suggested Expo Router fix is a major jump beyond SDK 54, so this needs a compatible upstream SDK update or a separately tested dependency change.
+  - Expo/Metro/React Native trees include vulnerable `ws` 6/7, `postcss`, and `image-size` versions; npm also reports `brace-expansion` in the dependency tree.
+  - `zod@3.25.76` is vulnerable to memory exhaustion on oversized constrained collections. The fix is zod 4 (a major upgrade); existing request-body/WebSocket limits and array `.max()` checks mitigate exposure. `zod-validation-error@3.5.4` also needs a compatible major upgrade to clear its related finding.
+  - `@react-navigation/core` is flagged through `query-string`.
+  - `puppeteer-core@24.42.0` and `sharp@0.34.5` are development tools and still have high advisories; Puppeteer is used by `scripts/screenshots/capture.ts`, so it was retained.
+- Remaining moderate and low findings include Expo CLI/build transitive packages, `@expo/ngrok`, ESLint/TypeScript tooling, `drizzle-kit`, `uuid`, `yaml`, and `deepmerge`. Review them again when compatible SDK/tooling patches are available.
 
 ## 4. Data inventory
 
