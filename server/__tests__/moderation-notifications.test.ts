@@ -120,6 +120,48 @@ describe("moderation notifications", () => {
     }
   });
 
+  it("rejects a correctly signed unsupported event without logging it as a report alert", async () => {
+    const processAlert = vi.fn((payload: { idempotencyKey: string }) => {
+      console.log("Verified SketchDuel report alert:", payload.idempotencyKey);
+    });
+    const server = createWebhookServer([signingSecret], processAlert);
+    await new Promise<void>((resolve, reject) => {
+      server.once("error", reject);
+      server.listen(0, "127.0.0.1", resolve);
+    });
+
+    const address = server.address() as AddressInfo;
+    const endpoint = `http://127.0.0.1:${address.port}/webhook`;
+    const timestamp = Math.floor(Date.now() / 1000).toString();
+    const body = JSON.stringify({
+      event: "moderation.notification.test",
+      idempotencyKey: "unsupported-event-route-test",
+    });
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+
+    try {
+      const response = await fetch(endpoint, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-SketchDuel-Timestamp": timestamp,
+          "X-SketchDuel-Signature": signReceiverRequest(body, timestamp),
+        },
+        body,
+      });
+
+      expect(response.status).toBe(400);
+      expect(await response.text()).toBe("Unexpected webhook event");
+      expect(processAlert).not.toHaveBeenCalled();
+      expect(logSpy).not.toHaveBeenCalled();
+    } finally {
+      await new Promise<void>((resolve, reject) => {
+        server.close((error) => error ? reject(error) : resolve());
+      });
+      logSpy.mockRestore();
+    }
+  });
+
   it("returns HTTP 413 for oversized requests without processing the alert", async () => {
     const processAlert = vi.fn();
     const server = createWebhookServer([signingSecret], processAlert);
