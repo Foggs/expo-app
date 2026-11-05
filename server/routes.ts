@@ -17,7 +17,9 @@ import { filterDisplayName } from "@shared/contentFilter";
 import { moderationPage } from "./moderation-page";
 import {
   getModerationNotificationStatus,
+  ModerationNotificationError,
   sendModerationNotification,
+  sendReportCreatedNotificationWithRetry,
 } from "./moderation-notifications";
 
 const GALLERY_MAX_BODY_SIZE = 2 * 1024 * 1024; // 2MB
@@ -364,8 +366,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
 
-      void sendModerationNotification("report_created").catch(() => {
-        console.warn("Moderation report notification delivery failed.");
+      void sendReportCreatedNotificationWithRetry().catch((error: unknown) => {
+        const failureKind = error instanceof ModerationNotificationError ? error.kind : "permanent";
+        console.warn(`Moderation report notification delivery failed (${failureKind}).`);
       });
 
       res.status(201).json({ message: "Report received. Thank you for helping keep SketchDuel safe." });

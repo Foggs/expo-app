@@ -1,9 +1,22 @@
 const WEBHOOK_ENV_KEY = "MODERATION_NOTIFICATION_WEBHOOK_URL";
 const DELIVERY_TIMEOUT_MS = 5_000;
+const REPORT_NOTIFICATION_MAX_ATTEMPTS = 3;
+const REPORT_NOTIFICATION_RETRY_DELAYS_MS = [500, 1_500] as const;
 
 type NotificationKind = "report_created" | "test";
 
 export type ModerationNotificationStatus = "configured" | "not_configured" | "invalid";
+type NotificationFailureKind = "configuration" | "transient" | "permanent";
+
+export class ModerationNotificationError extends Error {
+  constructor(
+    message: string,
+    readonly kind: NotificationFailureKind,
+  ) {
+    super(message);
+    this.name = "ModerationNotificationError";
+  }
+}
 
 function getWebhookUrl(): { status: ModerationNotificationStatus; url?: URL } {
   const configuredUrl = process.env[WEBHOOK_ENV_KEY]?.trim();
@@ -27,25 +40,58 @@ export function getModerationNotificationStatus(): ModerationNotificationStatus 
 export async function sendModerationNotification(kind: NotificationKind): Promise<void> {
   const config = getWebhookUrl();
   if (!config.url) {
-    throw new Error(config.status === "invalid" ? "Notification webhook URL is invalid" : "Notification webhook is not configured");
+    throw new ModerationNotificationError(
+      config.status === "invalid" ? "Notification webhook URL is invalid" : "Notification webhook is not configured",
+      "configuration",
+    );
   }
 
   const isTest = kind === "test";
-  const response = await fetch(config.url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      event: isTest ? "moderation.notification.test" : "moderation.report.created",
-      message: isTest
-        ? "Test notification from SketchDuel moderation."
-        : "A new SketchDuel content report needs review.",
-      reviewPath: "/moderation/reports",
-    }),
-    redirect: "error",
-    signal: AbortSignal.timeout(DELIVERY_TIMEOUT_MS),
-  });
+  let response: Response;
+  try {
+    response = await fetch(config.url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        event: isTest ? "moderation.notification.test" : "moderation.report.created",
+        message: isTest
+          ? "Test notification from SketchDuel moderation."
+          : "A new SketchDuel content report needs review.",
+        reviewPath: "/moderation/reports",
+      }),
+      redirect: "error",
+      signal: AbortSignal.timeout(DELIVERY_TIMEOUT_MS),
+    });
+  } catch {
+    throw new ModerationNotificationError("Notification webhook request failed", "transient");
+  }
 
   if (!response.ok) {
-    throw new Error(`Notification webhook returned HTTP ${response.status}`);
+    const kind = response.status === 408 || response.status === 425 || response.status === 429 || response.status >= 500
+      ? "transient"
+      : "permanent";
+    throw new ModerationNotificationError(`Notification webhook returned HTTP ${response.status}`, kind);
+  }
+}
+
+/**
+ * Retries only temporary delivery failures. A retry sends the same generic alert;
+ * it never creates or resubmits the moderation report.
+ */
+export async function sendReportCreatedNotificationWithRetry(): Promise<void> {
+  for (let attempt = 1; attempt <= REPORT_NOTIFICATION_MAX_ATTEMPTS; attempt += 1) {
+    try {
+      await sendModerationNotification("report_created");
+      return;
+    } catch (error) {
+      if (
+        !(error instanceof ModerationNotificationError) ||
+        error.kind !== "transient" ||
+        attempt === REPORT_NOTIFICATION_MAX_ATTEMPTS
+      ) {
+        throw error;
+      }
+      await new Promise((resolve) => setTimeout(resolve, REPORT_NOTIFICATION_RETRY_DELAYS_MS[attempt - 1]));
+    }
   }
 }
