@@ -1,6 +1,7 @@
 import { execFileSync } from "node:child_process";
 import { mkdir, mkdtemp, readFile, rm } from "node:fs/promises";
 import { createServer as createHttpsServer } from "node:https";
+import type { ServerResponse } from "node:http";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
@@ -27,12 +28,16 @@ describe("moderation alert recovery after a real server restart", () => {
   let webhook: ReturnType<typeof createHttpsServer>;
   let webhookUrl: string;
   let webhookRequests: Array<{ event?: string }>;
+  let holdWebhookResponses: boolean;
+  let heldWebhookResponses: Set<ServerResponse>;
   let childProcesses: Set<ChildProcess>;
 
   beforeAll(async () => {
     tempDir = await mkdtemp(join(tmpdir(), "moderation-alert-restart-"));
     childProcesses = new Set();
     webhookRequests = [];
+    holdWebhookResponses = false;
+    heldWebhookResponses = new Set();
 
     const databaseDir = join(tempDir, "postgres");
     const socketDir = join(tempDir, "socket");
@@ -115,6 +120,11 @@ describe("moderation alert recovery after a real server restart", () => {
         } catch {
           webhookRequests.push({});
         }
+        if (holdWebhookResponses) {
+          heldWebhookResponses.add(response);
+          response.once("close", () => heldWebhookResponses.delete(response));
+          return;
+        }
         response.writeHead(503);
         response.end("temporary test failure");
       });
@@ -131,6 +141,7 @@ describe("moderation alert recovery after a real server restart", () => {
     for (const child of childProcesses) {
       await stopServer(child);
     }
+    for (const response of heldWebhookResponses) response.destroy();
     if (webhook) {
       await new Promise<void>((resolveClose, reject) => {
         webhook.close((error) => error ? reject(error) : resolveClose());
@@ -151,7 +162,8 @@ describe("moderation alert recovery after a real server restart", () => {
 
   it("resumes a stored report across restarts and exhausts its persisted attempt limit", async () => {
     const firstServer = await startServer();
-    const reportResponse = await fetch(`${firstServer.baseUrl}/api/reports`, {
+    holdWebhookResponses = true;
+    const reportSubmission = fetch(`${firstServer.baseUrl}/api/reports`, {
       method: "POST",
       headers: {
         "content-type": "application/json",
@@ -162,8 +174,7 @@ describe("moderation alert recovery after a real server restart", () => {
         galleryDrawingId: GALLERY_DRAWING_ID,
         reason: "spam",
       }),
-    });
-    expect(reportResponse.status).toBe(201);
+    }).then((response) => response.status, () => undefined);
 
     await poll(() => Promise.resolve(webhookRequests.length === 1), "first webhook attempt");
     const created = await waitForReport((report) => (
@@ -172,19 +183,38 @@ describe("moderation alert recovery after a real server restart", () => {
     const reportId = created.id;
     expect(created.alert_delivery_next_attempt_at).toBeInstanceOf(Date);
     expect(webhookRequests).toHaveLength(1);
+    expect(heldWebhookResponses.size).toBe(1);
 
-    await stopServer(firstServer.process);
+    await crashServer(firstServer.process);
+    for (const response of heldWebhookResponses) response.destroy();
+    heldWebhookResponses.clear();
+    expect(await reportSubmission).toBe(201);
     await waitUntilDue(created.alert_delivery_next_attempt_at);
 
     const secondServer = await startServer();
-    await poll(() => Promise.resolve(webhookRequests.length === 2), "second webhook attempt after restart");
-    const secondAttempt = await waitForReport((report) => (
+    await poll(() => Promise.resolve(webhookRequests.length >= 2), "second webhook attempt after restart");
+    const secondLease = await waitForReport((report) => (
       report.id === reportId &&
       report.alert_delivery_status === "pending" &&
       report.alert_delivery_attempts === 2
     ));
+    await poll(() => Promise.resolve(heldWebhookResponses.size === 1), "second webhook response to be held");
+    holdWebhookResponses = false;
     expect(webhookRequests).toHaveLength(2);
     expect(webhookRequests.every((request) => request.event === "moderation.report.created")).toBe(true);
+
+    for (const response of heldWebhookResponses) {
+      response.writeHead(503);
+      response.end("temporary test failure");
+    }
+    const secondAttempt = await waitForReport((report) => (
+      report.id === reportId &&
+      report.alert_delivery_status === "pending" &&
+      report.alert_delivery_attempts === 2 &&
+      report.alert_delivery_next_attempt_at !== null &&
+      secondLease.alert_delivery_next_attempt_at !== null &&
+      report.alert_delivery_next_attempt_at.getTime() < secondLease.alert_delivery_next_attempt_at.getTime()
+    ));
 
     await stopServer(secondServer.process);
     await waitUntilDue(secondAttempt.alert_delivery_next_attempt_at);
@@ -266,14 +296,19 @@ describe("moderation alert recovery after a real server restart", () => {
 
   async function waitForReport(predicate: (report: PersistedReport) => boolean): Promise<PersistedReport> {
     let latest: PersistedReport | undefined;
-    await poll(async () => {
-      const result = await db.query<PersistedReport>(
-        `SELECT id, alert_delivery_status, alert_delivery_attempts, alert_delivery_next_attempt_at
-         FROM moderation_reports`,
-      );
-      latest = result.rows[0];
-      return Boolean(latest && predicate(latest));
-    }, "expected persisted report delivery state");
+    try {
+      await poll(async () => {
+        const result = await db.query<PersistedReport>(
+          `SELECT id, alert_delivery_status, alert_delivery_attempts, alert_delivery_next_attempt_at
+           FROM moderation_reports`,
+        );
+        latest = result.rows[0];
+        return Boolean(latest && predicate(latest));
+      }, "expected persisted report delivery state");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      throw new Error(`${message}; latest report: ${JSON.stringify(latest)}`);
+    }
     if (!latest) throw new Error("Report row was not found");
     return latest;
   }
@@ -314,6 +349,14 @@ async function listen(server: ReturnType<typeof createHttpsServer>): Promise<voi
   await new Promise<void>((resolveListen, reject) => {
     server.once("error", reject);
     server.listen(0, "127.0.0.1", resolveListen);
+  });
+}
+
+async function crashServer(serverProcess: ChildProcess): Promise<void> {
+  if (serverProcess.exitCode !== null || serverProcess.signalCode !== null) return;
+  await new Promise<void>((resolveExit) => {
+    serverProcess.once("exit", () => resolveExit());
+    serverProcess.kill("SIGKILL");
   });
 }
 
