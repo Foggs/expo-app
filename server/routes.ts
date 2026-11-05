@@ -24,6 +24,29 @@ import {
 
 const GALLERY_MAX_BODY_SIZE = 2 * 1024 * 1024; // 2MB
 
+async function deliverReportAlert(reportId: string): Promise<"delivered" | "failed" | "unknown"> {
+  try {
+    await sendReportCreatedNotificationWithRetry();
+  } catch (error) {
+    const failureKind = error instanceof ModerationNotificationError ? error.kind : "permanent";
+    try {
+      await storage.updateModerationReportAlertDeliveryStatus(reportId, "failed");
+    } catch {
+      console.error("Could not record failed moderation report notification delivery.");
+    }
+    console.warn(`Moderation report notification delivery failed (${failureKind}).`);
+    return "failed";
+  }
+  try {
+    await storage.updateModerationReportAlertDeliveryStatus(reportId, "delivered");
+    return "delivered";
+  } catch {
+    // Do not mark a successfully sent alert as failed; that could invite a duplicate retry.
+    console.error("Could not record successful moderation report notification delivery.");
+    return "unknown";
+  }
+}
+
 function asyncHandler(fn: (req: Request, res: Response, next: NextFunction) => Promise<void>) {
   return (req: Request, res: Response, next: NextFunction) => {
     fn(req, res, next).catch(next);
@@ -310,13 +333,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return;
       }
 
+      let reportId: string;
       if (parsed.data.reportType === "gallery") {
         const drawing = await storage.getGalleryDrawing(parsed.data.galleryDrawingId);
         if (!drawing) {
           res.status(404).json({ message: "Drawing not found" });
           return;
         }
-        await storage.createModerationReport({
+        reportId = await storage.createModerationReport({
           reportType: "gallery",
           reason: parsed.data.reason,
           reporterSessionKey,
@@ -350,7 +374,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const opponentRole =
           game.player1SessionKey === reporterSessionKey ? "player2" : "player1";
         const matchTurns = await storage.getTurnsByGame(parsed.data.gameId);
-        await storage.createModerationReport({
+        reportId = await storage.createModerationReport({
           reportType: "match",
           reason: parsed.data.reason,
           reporterSessionKey,
@@ -366,10 +390,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
 
-      void sendReportCreatedNotificationWithRetry().catch((error: unknown) => {
-        const failureKind = error instanceof ModerationNotificationError ? error.kind : "permanent";
-        console.warn(`Moderation report notification delivery failed (${failureKind}).`);
-      });
+      void deliverReportAlert(reportId);
 
       res.status(201).json({ message: "Report received. Thank you for helping keep SketchDuel safe." });
     }),
@@ -447,6 +468,37 @@ export async function registerRoutes(app: Express): Promise<Server> {
             : "Owner notifications are not configured with a valid HTTPS destination.",
         });
       }
+    }),
+  );
+
+  app.post(
+    "/api/moderation/reports/:id/notification-retry",
+    asyncHandler(async (req: Request, res: Response) => {
+      if (!isValidAdminToken(req.header("x-moderation-admin-token"))) {
+        res.status(process.env.SESSION_SECRET ? 401 : 503).json({ message: "Moderation access unavailable" });
+        return;
+      }
+      const reportId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+      const claimed = await storage.claimFailedModerationReportAlertRetry(reportId);
+      if (!claimed) {
+        const currentStatus = await storage.getModerationReportAlertDeliveryStatus(reportId);
+        if (currentStatus === undefined) {
+          res.status(404).json({ message: "Report not found" });
+          return;
+        }
+        res.status(409).json({ message: "Only failed report alerts can be retried." });
+        return;
+      }
+      const deliveryResult = await deliverReportAlert(reportId);
+      if (deliveryResult === "failed") {
+        res.status(502).json({ message: "Report alert delivery failed. You can try again." });
+        return;
+      }
+      if (deliveryResult === "unknown") {
+        res.status(503).json({ message: "The alert was sent, but its delivery status could not be recorded." });
+        return;
+      }
+      res.json({ message: "Report alert delivered." });
     }),
   );
 

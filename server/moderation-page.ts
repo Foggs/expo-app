@@ -10,6 +10,7 @@ export const moderationPage = `<!doctype html>
     button.secondary{background:#555}article{background:white;border-radius:12px;padding:18px;margin:16px 0;box-shadow:0 2px 12px #18204a12}
     pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#f2f3f8;padding:12px;border-radius:8px;font-size:13px}
     .meta{color:#5d5d70;font-size:14px}.error{color:#a12135}
+    .delivery{font-weight:600}
   </style>
 </head>
 <body>
@@ -61,9 +62,34 @@ export const moderationPage = `<!doctype html>
           const meta = document.createElement("p");
           meta.className = "meta";
           meta.textContent = "Reported " + new Date(report.createdAt).toLocaleString() + " · " + report.reportType + " · " + report.targetName;
+          const delivery = document.createElement("p");
+          delivery.className = "delivery";
+          const deliveryState = report.alertDeliveryStatus || "pending";
+          delivery.textContent = "Owner alert: " + deliveryState;
           const evidence = document.createElement("pre");
           evidence.textContent = JSON.stringify(report.evidence, null, 2);
-          card.append(heading, meta, evidence);
+          card.append(heading, meta, delivery, evidence);
+          if (deliveryState === "failed") {
+            const retry = document.createElement("button");
+            retry.textContent = "Retry alert";
+            retry.addEventListener("click", async () => {
+              retry.disabled = true;
+              retry.textContent = "Retrying…";
+              try {
+                const response = await fetch("/api/moderation/reports/" + encodeURIComponent(report.id) + "/notification-retry", {
+                  method: "POST", headers: authHeaders(),
+                });
+                const result = await response.json();
+                status.textContent = response.ok ? result.message : result.message || "Could not retry alert.";
+                status.className = response.ok ? "" : "error";
+              } catch {
+                status.textContent = "Could not retry alert.";
+                status.className = "error";
+              }
+              await loadReports();
+            });
+            card.append(retry);
+          }
           for (const [state, label] of [["reviewed", "Mark reviewed"], ["actioned", "Take action"], ["dismissed", "Dismiss"]]) {
             const button = document.createElement("button");
             button.textContent = label;

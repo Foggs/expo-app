@@ -57,8 +57,11 @@ export interface IStorage {
     galleryDrawingId?: string | null;
     gameId?: string | null;
     evidence: unknown;
-  }): Promise<void>;
+  }): Promise<string>;
   getModerationReports(limit?: number): Promise<(typeof moderationReports.$inferSelect)[]>;
+  getModerationReportAlertDeliveryStatus(id: string): Promise<string | undefined>;
+  claimFailedModerationReportAlertRetry(id: string): Promise<boolean>;
+  updateModerationReportAlertDeliveryStatus(id: string, status: "pending" | "delivered" | "failed"): Promise<boolean>;
   reviewModerationReport(id: string, status: string, reviewNote?: string): Promise<boolean>;
 }
 
@@ -271,19 +274,49 @@ export class DatabaseStorage implements IStorage {
     galleryDrawingId?: string | null;
     gameId?: string | null;
     evidence: unknown;
-  }): Promise<void> {
-    await db.insert(moderationReports).values({
+  }): Promise<string> {
+    const [report] = await db.insert(moderationReports).values({
       ...data,
       targetPlayerKey: data.targetPlayerKey || null,
       galleryDrawingId: data.galleryDrawingId || null,
       gameId: data.gameId || null,
-    });
+    }).returning({ id: moderationReports.id });
+    return report.id;
   }
 
   async getModerationReports(limit = 100): Promise<(typeof moderationReports.$inferSelect)[]> {
     return db.select().from(moderationReports)
       .orderBy(desc(moderationReports.createdAt))
       .limit(limit);
+  }
+
+  async getModerationReportAlertDeliveryStatus(id: string): Promise<string | undefined> {
+    const [report] = await db.select({ status: moderationReports.alertDeliveryStatus })
+      .from(moderationReports)
+      .where(eq(moderationReports.id, id));
+    return report?.status;
+  }
+
+  async claimFailedModerationReportAlertRetry(id: string): Promise<boolean> {
+    const rows = await db.update(moderationReports)
+      .set({ alertDeliveryStatus: "pending" })
+      .where(and(
+        eq(moderationReports.id, id),
+        eq(moderationReports.alertDeliveryStatus, "failed"),
+      ))
+      .returning({ id: moderationReports.id });
+    return rows.length > 0;
+  }
+
+  async updateModerationReportAlertDeliveryStatus(
+    id: string,
+    status: "pending" | "delivered" | "failed",
+  ): Promise<boolean> {
+    const rows = await db.update(moderationReports)
+      .set({ alertDeliveryStatus: status })
+      .where(eq(moderationReports.id, id))
+      .returning({ id: moderationReports.id });
+    return rows.length > 0;
   }
 
   async reviewModerationReport(id: string, status: string, reviewNote?: string): Promise<boolean> {

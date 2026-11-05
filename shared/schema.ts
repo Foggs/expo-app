@@ -77,6 +77,7 @@ export const moderationReports = pgTable("moderation_reports", {
   gameId: varchar("game_id").references(() => games.id, { onDelete: "set null" }),
   evidence: jsonb("evidence").notNull().default({}),
   status: text("status").notNull().default("pending"),
+  alertDeliveryStatus: text("alert_delivery_status").notNull().default("pending"),
   reviewNote: text("review_note"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   reviewedAt: timestamp("reviewed_at"),
