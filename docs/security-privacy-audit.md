@@ -1,13 +1,13 @@
 # SketchDuel — iOS Security & Privacy Readiness Audit
 
-Date: 2026-11-04 · Scope: Expo SDK 54 iOS app (managed workflow), Express/WebSocket backend, Postgres schema, `app.json` iOS config.
+Date: 2026-11-05 · Scope: Expo SDK 54 iOS app (managed workflow), Express/WebSocket backend, Postgres schema, `app.json` iOS config.
 This audit lowers rejection and incident risk; it does **not** guarantee App Store approval.
 
 ## 1. Summary
 
 | Area | Status |
 |---|---|
-| Dependency vulnerabilities | `npm audit` reports 49 remaining (0 critical / 19 high / 29 moderate / 1 low); see §3 for the current scope and unresolved items. |
+| Dependency vulnerabilities | `npm audit` reports 39 remaining (0 critical / 10 high / 28 moderate / 1 low); see §3 for the current scope and unresolved items. |
 | Static analysis (SAST) | 1 HIGH, verified false positive, hardened anyway. |
 | Privacy dataflow scan | 0 findings. |
 | App-owned high-risk issues | 2 fixed (unauthenticated game API in production, response bodies in logs). |
@@ -50,15 +50,15 @@ This audit lowers rejection and incident risk; it does **not** guarantee App Sto
 | F11 | Low | `app/screenshot.tsx` is a mock route bundled into the production app (reachable via the `sketchduel://screenshot` deep link). | Residual; covered by the pre-publish cleanup task. |
 
 ### Remaining dependency findings (not fixed, with reason)
-- Current scan: `npm audit --json` reports 49 findings (0 critical, 19 high, 29 moderate, 1 low). `npm audit --omit=dev` reports 26 (0 critical, 10 high, 14 moderate, 2 low); that includes Expo CLI/Metro build tooling declared through Expo packages and does not mean all 26 are shipped app runtime code.
+- Current scan (2026-11-05): `npm audit --json` reports 39 findings (0 critical, 10 high, 28 moderate, 1 low). `npm audit --omit=dev` reports 25 (0 critical, 10 high, 13 moderate, 2 low); that includes Expo CLI/Metro build tooling declared through Expo packages and does not mean all 25 are shipped app runtime code.
 - Expo SDK 54 patch updates are applied and verified: `expo@54.0.38`, `expo-router@6.0.24`, `expo-constants@18.0.14`, `expo-font@14.0.12`, `expo-glass-effect@0.1.10`, `expo-linking@8.0.12`, and `expo-web-browser@15.0.11`. `npx expo install --check` reports no mismatches.
 - `vitest@4.1.12` is now a development dependency; its earlier critical advisory is cleared. The project also declares `vite` and `babel-preset-expo` directly as development dependencies so clean installs include the tools required by tests and the Expo export. npm's normal peer resolver failed with `edgesOut` while resolving the Puppeteer/Vitest peers; the lockfile installs cleanly with `--legacy-peer-deps`.
+- Screenshot tooling updated: `puppeteer-core@25.16.0` and `sharp@0.35.5` are no longer flagged. The capture script remains at `scripts/screenshots/capture.ts`; it uses the installed Chromium binary and screenshot route.
 - High findings still reported:
   - `expo-router@6.0.24` and `query-string` include vulnerable `decode-uri-component` versions. npm's suggested Expo Router fix is a major jump beyond SDK 54, so this needs a compatible upstream SDK update or a separately tested dependency change.
   - Expo/Metro/React Native trees include vulnerable `ws` 6/7, `postcss`, and `image-size` versions; npm also reports `brace-expansion` in the dependency tree.
   - `zod@3.25.76` is vulnerable to memory exhaustion on oversized constrained collections. The fix is zod 4 (a major upgrade); existing request-body/WebSocket limits and array `.max()` checks mitigate exposure. `zod-validation-error@3.5.4` also needs a compatible major upgrade to clear its related finding.
   - `@react-navigation/core` is flagged through `query-string`.
-  - `puppeteer-core@24.42.0` and `sharp@0.34.5` are development tools and still have high advisories; Puppeteer is used by `scripts/screenshots/capture.ts`, so it was retained.
 - Remaining moderate and low findings include Expo CLI/build transitive packages, `@expo/ngrok`, ESLint/TypeScript tooling, `drizzle-kit`, `uuid`, `yaml`, and `deepmerge`. Review them again when compatible SDK/tooling patches are available.
 
 ## 4. Data inventory
