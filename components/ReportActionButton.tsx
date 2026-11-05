@@ -1,6 +1,7 @@
 import React, { useState } from "react";
-import { Modal, Pressable, StyleSheet, Text, View } from "react-native";
+import { Pressable, StyleSheet, Text, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import BaseModal from "@/components/BaseModal";
 import type { ThemeColors } from "@/hooks/useThemeColors";
 
 export const REPORT_REASONS = [
@@ -29,6 +30,7 @@ export default function ReportActionButton({
 }: ReportActionButtonProps) {
   const [pickerVisible, setPickerVisible] = useState(false);
   const handlePress = () => setPickerVisible(true);
+  const closePicker = () => setPickerVisible(false);
 
   return (
     <>
@@ -45,41 +47,38 @@ export default function ReportActionButton({
         <Ionicons name="flag-outline" size={16} color={colors.error} />
         <Text style={[styles.label, { color: colors.error }]}>{label}</Text>
       </Pressable>
-      <Modal
+      <BaseModal
         visible={pickerVisible}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setPickerVisible(false)}
+        onClose={closePicker}
+        title="Report content"
+        closeLabel="Close report options"
       >
-        <View style={styles.scrim}>
-          <View style={[styles.reasonPanel, { backgroundColor: colors.card }]}>
-            <Text style={[styles.reasonTitle, { color: colors.text }]}>Report content</Text>
-            <Text style={[styles.reasonHint, { color: colors.textSecondary }]}>
-              Choose the reason that best describes the issue.
-            </Text>
-            {REPORT_REASONS.map(({ label: reasonLabel, value }) => (
-              <Pressable
-                key={value}
-                onPress={() => {
-                  setPickerVisible(false);
-                  onSelectReason(value);
-                }}
-                style={[styles.reasonOption, { borderColor: colors.border }]}
-                accessibilityRole="button"
-              >
-                <Text style={[styles.reasonOptionText, { color: colors.text }]}>{reasonLabel}</Text>
-              </Pressable>
-            ))}
+        <View style={styles.reasonList}>
+          <Text style={[styles.reasonHint, { color: colors.textSecondary }]}>
+            Choose the reason that best describes the issue.
+          </Text>
+          {REPORT_REASONS.map(({ label: reasonLabel, value }) => (
             <Pressable
-              onPress={() => setPickerVisible(false)}
-              style={styles.cancelOption}
+              key={value}
+              onPress={() => {
+                closePicker();
+                onSelectReason(value);
+              }}
+              style={[styles.reasonOption, { borderColor: colors.border }]}
               accessibilityRole="button"
             >
-              <Text style={[styles.cancelText, { color: colors.textSecondary }]}>Cancel</Text>
+              <Text style={[styles.reasonOptionText, { color: colors.text }]}>{reasonLabel}</Text>
             </Pressable>
-          </View>
+          ))}
+          <Pressable
+            onPress={closePicker}
+            style={styles.cancelOption}
+            accessibilityRole="button"
+          >
+            <Text style={[styles.cancelText, { color: colors.textSecondary }]}>Cancel</Text>
+          </Pressable>
         </View>
-      </Modal>
+      </BaseModal>
     </>
   );
 }
@@ -99,20 +98,8 @@ const styles = StyleSheet.create({
     fontFamily: "Inter_500Medium",
     fontSize: 12,
   },
-  scrim: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.48)",
-    justifyContent: "center",
-    paddingHorizontal: 24,
-  },
-  reasonPanel: {
-    borderRadius: 18,
-    padding: 20,
+  reasonList: {
     gap: 8,
-  },
-  reasonTitle: {
-    fontFamily: "Inter_600SemiBold",
-    fontSize: 18,
   },
   reasonHint: {
     fontFamily: "Inter_400Regular",

@@ -18,6 +18,13 @@ import Animated, {
 } from "react-native-reanimated";
 import { Ionicons } from "@expo/vector-icons";
 import { useThemeColors } from "@/hooks/useThemeColors";
+import {
+  MODAL_CARD_PADDING,
+  MODAL_CARD_RADIUS,
+  MODAL_DEFAULT_MAX_WIDTH,
+  MODAL_OVERLAY_COLOR,
+  MODAL_OVERLAY_PADDING,
+} from "@/constants/modal";
 
 const ANIM_DURATION = 280;
 const SLIDE_OFFSET = 30;
@@ -45,7 +52,7 @@ export default function BaseModal({
   title,
   closeLabel = "Close",
   dismissOnOverlay = true,
-  maxWidth = 320,
+  maxWidth = MODAL_DEFAULT_MAX_WIDTH,
   statusBarTranslucent,
   cardStyle,
   overlayStyle,
@@ -135,15 +142,15 @@ export default function BaseModal({
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: "rgba(0, 0, 0, 0.6)",
+    backgroundColor: MODAL_OVERLAY_COLOR,
     justifyContent: "center",
     alignItems: "center",
-    padding: 24,
+    padding: MODAL_OVERLAY_PADDING,
   },
   card: {
     width: "100%",
-    borderRadius: 24,
-    padding: 24,
+    borderRadius: MODAL_CARD_RADIUS,
+    padding: MODAL_CARD_PADDING,
   },
   shadow: {
     ...Platform.select({

@@ -2,7 +2,6 @@ import React from "react";
 import { Ionicons } from "@expo/vector-icons";
 import {
   ActivityIndicator,
-  Modal,
   Pressable,
   StyleSheet,
   Text,
@@ -11,6 +10,10 @@ import {
 import Animated from "react-native-reanimated";
 import BaseModal from "@/components/BaseModal";
 import type { ThemeColors } from "@/hooks/useThemeColors";
+
+// The countdown cannot be dismissed; it closes itself when the turn starts.
+const NOOP = () => undefined;
+const GET_READY_MAX_WIDTH = 280;
 
 export interface GameStatusOverlaysProps {
   colors: ThemeColors;
@@ -41,34 +44,34 @@ export default function GameStatusOverlays({
 }: GameStatusOverlaysProps) {
   return (
     <>
-      <Modal
+      <BaseModal
         visible={showGetReady}
-        transparent
-        animationType="fade"
+        onClose={NOOP}
+        dismissOnOverlay={false}
         statusBarTranslucent
+        maxWidth={GET_READY_MAX_WIDTH}
+        cardStyle={styles.getReadyCard}
       >
-        <View style={styles.getReadyOverlay}>
-          <Animated.View
-            style={[styles.getReadyModal, getReadyAnimatedStyle]}
-            accessible={true}
-            accessibilityRole="alert"
-            accessibilityLabel={`Get ready! Your turn starts in ${getReadyCountdown} seconds`}
-            accessibilityLiveRegion="assertive"
+        <Animated.View
+          style={[styles.getReadyContent, getReadyAnimatedStyle]}
+          accessible={true}
+          accessibilityRole="alert"
+          accessibilityLabel={`Get ready! Your turn starts in ${getReadyCountdown} seconds`}
+          accessibilityLiveRegion="assertive"
+        >
+          <Ionicons name="brush" size={40} color={colors.tint} />
+          <Text style={styles.getReadyTitle}>Get Ready!</Text>
+          <Text style={styles.getReadySubtitle}>Your turn starts in</Text>
+          <Animated.Text
+            style={[
+              styles.getReadyCountdown,
+              { color: getReadyCountdown <= 3 ? colors.timerCritical : colors.tint },
+            ]}
           >
-            <Ionicons name="brush" size={40} color={colors.tint} />
-            <Text style={[styles.getReadyTitle, { color: colors.text }]}>Get Ready!</Text>
-            <Text style={[styles.getReadySubtitle, { color: colors.textSecondary }]}>Your turn starts in</Text>
-            <Animated.Text
-              style={[
-                styles.getReadyCountdown,
-                { color: getReadyCountdown <= 3 ? colors.timerCritical : colors.tint },
-              ]}
-            >
-              {getReadyCountdown}
-            </Animated.Text>
-          </Animated.View>
-        </View>
-      </Modal>
+            {getReadyCountdown}
+          </Animated.Text>
+        </Animated.View>
+      </BaseModal>
 
       {isRetrying && (
         <View style={styles.retryingBanner} pointerEvents="none">
@@ -144,27 +147,25 @@ export default function GameStatusOverlays({
 }
 
 const styles = StyleSheet.create({
-  getReadyOverlay: {
-    flex: 1,
-    backgroundColor: "rgba(0, 0, 0, 0.6)",
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  getReadyModal: {
+  getReadyCard: {
     backgroundColor: "#1a1a2e",
     borderRadius: 28,
     padding: 36,
-    alignItems: "center",
-    gap: 20,
-    minWidth: 240,
     borderWidth: 2,
     borderColor: "rgba(108, 92, 231, 0.3)",
   },
+  getReadyContent: {
+    alignItems: "center",
+    gap: 20,
+  },
+  // The countdown card is always dark, so its text uses fixed light colors.
   getReadyTitle: {
+    color: "#ffffff",
     fontSize: 28,
     fontFamily: "Inter_700Bold",
   },
   getReadySubtitle: {
+    color: "rgba(255, 255, 255, 0.72)",
     fontSize: 15,
     fontFamily: "Inter_400Regular",
   },
