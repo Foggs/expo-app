@@ -170,6 +170,29 @@ describe("moderation alert retry route", () => {
     expect(mocks.storage.createModerationReport).not.toHaveBeenCalled();
   });
 
+  it("marks permanent moderator retry failures as failed without scheduling another attempt", async () => {
+    const { ModerationNotificationError } = await import("../moderation-notifications");
+    mocks.sendModerationNotification.mockRejectedValueOnce(
+      new ModerationNotificationError("destination rejected delivery", "permanent"),
+    );
+
+    const response = await retryAlert(ADMIN_TOKEN);
+
+    expect(response.status).toBe(502);
+    expect(await response.json()).toEqual({
+      message: "Report alert delivery failed. You can try again.",
+    });
+    expect(mocks.state()).toEqual({ status: "failed", attempts: 1, nextAttemptAt: null });
+    expect(mocks.storage.updateModerationReportAlertDeliveryStatus).toHaveBeenCalledWith(
+      REPORT_ID,
+      "failed",
+      null,
+    );
+    expect(mocks.sendModerationNotification).toHaveBeenCalledOnce();
+    expect(mocks.sendModerationNotification).toHaveBeenCalledWith("report_created", REPORT_ID);
+    expect(mocks.storage.createModerationReport).not.toHaveBeenCalled();
+  });
+
   it("queues a delayed retry after moderator delivery fails transiently, then resumes the same report", async () => {
     let now = Date.now();
     const dateNowSpy = vi.spyOn(Date, "now").mockImplementation(() => now);
