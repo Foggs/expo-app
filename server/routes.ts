@@ -15,6 +15,10 @@ import {
 import { getRequestSessionKey, getSessionKey } from "./sessionIdentity";
 import { filterDisplayName } from "@shared/contentFilter";
 import { moderationPage } from "./moderation-page";
+import {
+  getModerationNotificationStatus,
+  sendModerationNotification,
+} from "./moderation-notifications";
 
 const GALLERY_MAX_BODY_SIZE = 2 * 1024 * 1024; // 2MB
 
@@ -360,6 +364,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
 
+      void sendModerationNotification("report_created").catch(() => {
+        console.warn("Moderation report notification delivery failed.");
+      });
+
       res.status(201).json({ message: "Report received. Thank you for helping keep SketchDuel safe." });
     }),
   );
@@ -403,6 +411,39 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const reports = await storage.getModerationReports();
       res.setHeader("Cache-Control", "no-store");
       res.json(reports.map(({ reporterSessionKey, targetPlayerKey, ...report }) => report));
+    }),
+  );
+
+  app.get(
+    "/api/moderation/notification-status",
+    (req: Request, res: Response) => {
+      if (!isValidAdminToken(req.header("x-moderation-admin-token"))) {
+        res.status(process.env.SESSION_SECRET ? 401 : 503).json({ message: "Moderation access unavailable" });
+        return;
+      }
+      res.setHeader("Cache-Control", "no-store");
+      res.json({ status: getModerationNotificationStatus() });
+    },
+  );
+
+  app.post(
+    "/api/moderation/notification-test",
+    asyncHandler(async (req: Request, res: Response) => {
+      if (!isValidAdminToken(req.header("x-moderation-admin-token"))) {
+        res.status(process.env.SESSION_SECRET ? 401 : 503).json({ message: "Moderation access unavailable" });
+        return;
+      }
+      try {
+        await sendModerationNotification("test");
+        res.json({ message: "Test notification delivered." });
+      } catch {
+        const status = getModerationNotificationStatus();
+        res.status(status === "configured" ? 502 : 503).json({
+          message: status === "configured"
+            ? "The notification destination did not accept the test."
+            : "Owner notifications are not configured with a valid HTTPS destination.",
+        });
+      }
     }),
   );
 

@@ -16,12 +16,32 @@ export const moderationPage = `<!doctype html>
   <h1>SketchDuel content reports</h1>
   <p>Enter the server access key to review reports. The key stays in this page's memory and is not saved.</p>
   <button id="login">Load reports</button><button id="reload" class="secondary" hidden>Reload</button>
+  <section id="notifications" hidden>
+    <p id="notificationStatus" role="status"></p>
+    <button id="testNotification" class="secondary" type="button">Send test notification</button>
+  </section>
   <p id="status" role="status"></p><main id="reports"></main>
   <script>
     let accessKey = "";
     const status = document.getElementById("status");
     const reportList = document.getElementById("reports");
+    const notifications = document.getElementById("notifications");
+    const notificationStatus = document.getElementById("notificationStatus");
+    const testNotification = document.getElementById("testNotification");
     const authHeaders = () => ({ "X-Moderation-Admin-Token": accessKey, "Content-Type": "application/json" });
+    async function loadNotificationStatus() {
+      const response = await fetch("/api/moderation/notification-status", { headers: authHeaders() });
+      if (!response.ok) throw new Error("Could not check owner notification settings.");
+      const result = await response.json();
+      notificationStatus.textContent = result.status === "configured"
+        ? "Owner notifications are configured."
+        : result.status === "invalid"
+          ? "Owner notification destination is invalid. Set a valid HTTPS webhook URL."
+          : "Owner notifications are not configured.";
+      notificationStatus.className = result.status === "configured" ? "" : "error";
+      testNotification.disabled = result.status !== "configured";
+      notifications.hidden = false;
+    }
     async function loadReports() {
       if (!accessKey) accessKey = window.prompt("Server access key") || "";
       if (!accessKey) return;
@@ -33,6 +53,7 @@ export const moderationPage = `<!doctype html>
         const reports = await response.json();
         status.textContent = reports.length ? reports.length + " report(s)" : "No reports yet.";
         document.getElementById("reload").hidden = false;
+        await loadNotificationStatus();
         for (const report of reports) {
           const card = document.createElement("article");
           const heading = document.createElement("h2");
@@ -67,6 +88,23 @@ export const moderationPage = `<!doctype html>
         accessKey = "";
       }
     }
+    testNotification.addEventListener("click", async () => {
+      testNotification.disabled = true;
+      notificationStatus.textContent = "Sending test notification…";
+      try {
+        const response = await fetch("/api/moderation/notification-test", {
+          method: "POST", headers: authHeaders(),
+        });
+        const result = await response.json();
+        notificationStatus.textContent = response.ok ? result.message : result.message || "Test notification failed.";
+        notificationStatus.className = response.ok ? "" : "error";
+      } catch {
+        notificationStatus.textContent = "Could not send the test notification.";
+        notificationStatus.className = "error";
+      } finally {
+        testNotification.disabled = false;
+      }
+    });
     document.getElementById("login").addEventListener("click", loadReports);
     document.getElementById("reload").addEventListener("click", loadReports);
   </script>
