@@ -41,6 +41,31 @@ export function verifySketchDuelSignature({
   return verified;
 }
 
+/**
+ * Build a processor around the receiver owner's durable storage adapter.
+ *
+ * runTransaction(callback) must run callback in a durable transaction.
+ * tx.recordIdempotencyKeyIfAbsent(key) must atomically insert a
+ * unique key and return true only when this transaction inserted it.
+ * performBusinessAction must use the same transaction for database changes.
+ *
+ * If the key already exists, skip the action and return normally: the webhook
+ * will be acknowledged as a successful duplicate.
+ */
+export function createIdempotentAlertProcessor({ runTransaction, performBusinessAction }) {
+  if (typeof runTransaction !== "function" || typeof performBusinessAction !== "function") {
+    throw new TypeError("Provide a transaction adapter and business action");
+  }
+
+  return async (payload) => {
+    await runTransaction(async (tx) => {
+      const isFirstDelivery = await tx.recordIdempotencyKeyIfAbsent(payload.idempotencyKey);
+      if (!isFirstDelivery) return;
+      await performBusinessAction(payload, tx);
+    });
+  };
+}
+
 async function readRawBody(request) {
   const chunks = [];
   let size = 0;
@@ -52,7 +77,12 @@ async function readRawBody(request) {
   return Buffer.concat(chunks);
 }
 
-export function createWebhookServer(secrets) {
+export function createWebhookServer(secrets, processAlert = async () => {
+  throw new Error("Configure a durable report-alert processor before accepting alerts");
+}) {
+  if (typeof processAlert !== "function") {
+    throw new TypeError("processAlert must be a function");
+  }
   return createServer(async (request, response) => {
     if (request.method !== "POST" || request.url !== "/webhook") {
       response.writeHead(404).end("Not found");
@@ -87,8 +117,13 @@ export function createWebhookServer(secrets) {
       return;
     }
 
-    // Process the report alert here. Use idempotencyKey to ignore redeliveries.
-    console.log("Verified SketchDuel report alert:", payload.idempotencyKey);
+    try {
+      await processAlert(payload);
+    } catch (error) {
+      console.error("Could not durably process SketchDuel report alert:", error);
+      response.writeHead(500).end("Alert processing failed");
+      return;
+    }
     response.writeHead(204).end();
   });
 }
