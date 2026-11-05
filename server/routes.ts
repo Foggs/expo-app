@@ -38,7 +38,7 @@ async function deliverReportAlert(reportId: string): Promise<"delivered" | "fail
   if (attempt === undefined) return "pending";
 
   try {
-    await sendModerationNotification("report_created");
+    await sendModerationNotification("report_created", reportId);
   } catch (error) {
     const failureKind = error instanceof ModerationNotificationError ? error.kind : "permanent";
     const exhausted = attempt !== undefined && attempt >= REPORT_NOTIFICATION_MAX_ATTEMPTS;

@@ -34,7 +34,9 @@ export function getModerationNotificationStatus(): ModerationNotificationStatus 
   return getWebhookUrl().status;
 }
 
-export async function sendModerationNotification(kind: NotificationKind): Promise<void> {
+export function sendModerationNotification(kind: "report_created", reportId: string): Promise<void>;
+export function sendModerationNotification(kind: "test"): Promise<void>;
+export async function sendModerationNotification(kind: NotificationKind, reportId?: string): Promise<void> {
   const config = getWebhookUrl();
   if (!config.url) {
     throw new ModerationNotificationError(
@@ -44,6 +46,9 @@ export async function sendModerationNotification(kind: NotificationKind): Promis
   }
 
   const isTest = kind === "test";
+  if (!isTest && !reportId) {
+    throw new TypeError("A report ID is required for report notifications");
+  }
   let response: Response;
   try {
     response = await fetch(config.url, {
@@ -55,6 +60,7 @@ export async function sendModerationNotification(kind: NotificationKind): Promis
           ? "Test notification from SketchDuel moderation."
           : "A new SketchDuel content report needs review.",
         reviewPath: "/moderation/reports",
+        ...(isTest ? {} : { idempotencyKey: reportId }),
       }),
       redirect: "error",
       signal: AbortSignal.timeout(DELIVERY_TIMEOUT_MS),
