@@ -242,6 +242,52 @@ describe("moderation alert retry route", () => {
     }
   });
 
+  it("stops scheduling moderator alerts after repeated transient failures reach the attempt limit", async () => {
+    let now = Date.now();
+    const dateNowSpy = vi.spyOn(Date, "now").mockImplementation(() => now);
+    try {
+      const { ModerationNotificationError } = await import("../moderation-notifications");
+      mocks.sendModerationNotification.mockRejectedValue(
+        new ModerationNotificationError("temporary failure", "transient"),
+      );
+
+      const response = await retryAlert(ADMIN_TOKEN);
+
+      expect(response.status).toBe(202);
+      expect(mocks.state()).toMatchObject({ status: "pending", attempts: 1 });
+      expect(mocks.state().nextAttemptAt).toBeInstanceOf(Date);
+
+      now = mocks.state().nextAttemptAt!.getTime();
+      await resumePendingModerationReportAlerts();
+      expect(mocks.state()).toMatchObject({ status: "pending", attempts: 2 });
+      expect(mocks.state().nextAttemptAt).toBeInstanceOf(Date);
+
+      now = mocks.state().nextAttemptAt!.getTime();
+      await resumePendingModerationReportAlerts();
+
+      expect(mocks.state()).toEqual({ status: "failed", attempts: 3, nextAttemptAt: null });
+      expect(mocks.storage.updateModerationReportAlertDeliveryStatus).toHaveBeenLastCalledWith(
+        REPORT_ID,
+        "failed",
+        null,
+      );
+      expect(mocks.sendModerationNotification).toHaveBeenCalledTimes(3);
+      expect(mocks.sendModerationNotification).toHaveBeenNthCalledWith(1, "report_created", REPORT_ID);
+      expect(mocks.sendModerationNotification).toHaveBeenNthCalledWith(2, "report_created", REPORT_ID);
+      expect(mocks.sendModerationNotification).toHaveBeenNthCalledWith(3, "report_created", REPORT_ID);
+      expect(mocks.storage.createModerationReport).not.toHaveBeenCalled();
+
+      await resumePendingModerationReportAlerts();
+
+      expect(mocks.sendModerationNotification).toHaveBeenCalledTimes(3);
+      expect(mocks.storage.claimPendingModerationReportAlertAttempt).toHaveBeenCalledTimes(3);
+      expect(mocks.state()).toEqual({ status: "failed", attempts: 3, nextAttemptAt: null });
+      expect(mocks.storage.createModerationReport).not.toHaveBeenCalled();
+    } finally {
+      dateNowSpy.mockRestore();
+    }
+  });
+
   it("resumes due pending alerts and records a delayed retry after transient failure", async () => {
     mocks.reset("pending", 1);
     const { ModerationNotificationError } = await import("../moderation-notifications");
