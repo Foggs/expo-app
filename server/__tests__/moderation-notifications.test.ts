@@ -2,6 +2,7 @@ import { createHmac } from "node:crypto";
 import { type AddressInfo } from "node:net";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  createIdempotentAlertProcessor,
   createWebhookServer,
   verifySketchDuelSignature,
 } from "../../docs/moderation-webhook-receiver.mjs";
@@ -39,7 +40,9 @@ describe("moderation notifications", () => {
   }
 
   it("handles signed requests safely through the example HTTP server", async () => {
-    const server = createWebhookServer([signingSecret]);
+    const server = createWebhookServer([signingSecret], async (payload: { idempotencyKey: string }) => {
+      console.log("Verified SketchDuel report alert:", payload.idempotencyKey);
+    });
     await new Promise<void>((resolve, reject) => {
       server.once("error", reject);
       server.listen(0, "127.0.0.1", resolve);
@@ -114,6 +117,107 @@ describe("moderation notifications", () => {
       expect(logSpy).toHaveBeenCalledTimes(1);
     } finally {
       await closeServer();
+    }
+  });
+
+  it("rolls back a failed action and accepts its later retry exactly once", async () => {
+    const idempotencyKeys = new Set<string>();
+    const committedActions: string[] = [];
+    let shouldFail = true;
+    let releaseSuccessfulAction: (() => void) | undefined;
+    let markSuccessfulActionStarted: (() => void) | undefined;
+    const successfulActionStarted = new Promise<void>((resolve) => {
+      markSuccessfulActionStarted = resolve;
+    });
+    const runTransaction = async (
+      callback: (tx: {
+        stagedKeys: Set<string>;
+        stagedActions: string[];
+        recordIdempotencyKeyIfAbsent: (key: string) => Promise<boolean>;
+      }) => Promise<void>,
+    ) => {
+      const stagedKeys = new Set(idempotencyKeys);
+      const stagedActions: string[] = [];
+      await callback({
+        stagedKeys,
+        stagedActions,
+        recordIdempotencyKeyIfAbsent: async (key) => {
+          if (stagedKeys.has(key)) return false;
+          stagedKeys.add(key);
+          return true;
+        },
+      });
+      idempotencyKeys.clear();
+      for (const key of stagedKeys) idempotencyKeys.add(key);
+      committedActions.push(...stagedActions);
+    };
+    const processAlert = createIdempotentAlertProcessor({
+      runTransaction,
+      performBusinessAction: async (
+        payload: { idempotencyKey: string },
+        tx: { stagedActions: string[] },
+      ) => {
+        tx.stagedActions.push(payload.idempotencyKey);
+        if (shouldFail) throw new Error("Simulated durable action failure");
+        markSuccessfulActionStarted?.();
+        await new Promise<void>((resolve) => {
+          releaseSuccessfulAction = resolve;
+        });
+      },
+    });
+    const server = createWebhookServer([signingSecret], processAlert);
+    await new Promise<void>((resolve, reject) => {
+      server.once("error", reject);
+      server.listen(0, "127.0.0.1", resolve);
+    });
+
+    const address = server.address() as AddressInfo;
+    const endpoint = `http://127.0.0.1:${address.port}/webhook`;
+    const closeServer = () => new Promise<void>((resolve, reject) => {
+      server.close((error) => error ? reject(error) : resolve());
+    });
+    const timestamp = Math.floor(Date.now() / 1000).toString();
+    const body = JSON.stringify({
+      event: "moderation.report.created",
+      idempotencyKey: "report-transaction-retry-test",
+    });
+    const headers = {
+      "Content-Type": "application/json",
+      "X-SketchDuel-Timestamp": timestamp,
+      "X-SketchDuel-Signature": signReceiverRequest(body, timestamp),
+    };
+    const request = () => fetch(endpoint, { method: "POST", headers, body });
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    try {
+      const failedAttempt = await request();
+      expect(failedAttempt.status).toBe(500);
+      expect(idempotencyKeys.size).toBe(0);
+      expect(committedActions).toEqual([]);
+
+      shouldFail = false;
+      let retryResponseReceived = false;
+      const successfulRetry = request().then((response) => {
+        retryResponseReceived = true;
+        return response;
+      });
+      await successfulActionStarted;
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      expect(retryResponseReceived).toBe(false);
+
+      releaseSuccessfulAction?.();
+      const acceptedRetry = await successfulRetry;
+      expect(acceptedRetry.status).toBe(204);
+      expect(idempotencyKeys).toEqual(new Set(["report-transaction-retry-test"]));
+      expect(committedActions).toEqual(["report-transaction-retry-test"]);
+
+      const duplicate = await request();
+      expect(duplicate.status).toBe(204);
+      expect(committedActions).toEqual(["report-transaction-retry-test"]);
+    } finally {
+      releaseSuccessfulAction?.();
+      await closeServer();
+      errorSpy.mockRestore();
     }
   });
 

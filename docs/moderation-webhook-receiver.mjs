@@ -48,6 +48,8 @@ export function verifySketchDuelSignature({
  * tx.recordIdempotencyKeyIfAbsent(key) must atomically insert a
  * unique key and return true only when this transaction inserted it.
  * performBusinessAction must use the same transaction for database changes.
+ * If it throws, runTransaction must roll back the key claim and all action
+ * changes, then propagate the error so the HTTP receiver returns 500.
  *
  * If the key already exists, skip the action and return normally: the webhook
  * will be acknowledged as a successful duplicate.
@@ -77,10 +79,13 @@ async function readRawBody(request) {
   return Buffer.concat(chunks);
 }
 
-export function createWebhookServer(secrets, processAlert = async () => {
-  throw new Error("Configure a durable report-alert processor before accepting alerts");
-}) {
-  if (typeof processAlert !== "function") {
+export function createWebhookServer(secrets, processAlert) {
+  const alertProcessor = processAlert === undefined
+    ? async () => {
+      throw new Error("Configure a durable report-alert processor before accepting alerts");
+    }
+    : processAlert;
+  if (typeof alertProcessor !== "function") {
     throw new TypeError("processAlert must be a function");
   }
   return createServer(async (request, response) => {
@@ -118,7 +123,7 @@ export function createWebhookServer(secrets, processAlert = async () => {
     }
 
     try {
-      await processAlert(payload);
+      await alertProcessor(payload);
     } catch (error) {
       console.error("Could not durably process SketchDuel report alert:", error);
       response.writeHead(500).end("Alert processing failed");
