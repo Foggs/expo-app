@@ -3,6 +3,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import DrawingThumbnail, { type StrokeLike } from "@/components/DrawingThumbnail";
 import type { ThemeColors } from "@/hooks/useThemeColors";
+import ReportActionButton, { type ReportReason } from "@/components/ReportActionButton";
 
 interface GalleryCardDrawing {
   id: string;
@@ -17,7 +18,9 @@ export interface GalleryCardProps {
   colors: ThemeColors;
   formattedDate: string;
   onDelete: (id: string) => void;
+  onReport: (id: string, reason: ReportReason) => void;
   isDeleting?: boolean;
+  isReporting?: boolean;
 }
 
 export default function GalleryCard({
@@ -25,7 +28,9 @@ export default function GalleryCard({
   colors,
   formattedDate,
   onDelete,
+  onReport,
   isDeleting = false,
+  isReporting = false,
 }: GalleryCardProps) {
   return (
     <View
@@ -43,19 +48,26 @@ export default function GalleryCard({
             <Ionicons name="layers-outline" size={14} color={colors.textSecondary} />
             <Text style={[styles.cardDetailText, { color: colors.text }]}>{drawing.roundCount} rounds</Text>
           </View>
-          <Pressable
-            onPress={() => onDelete(drawing.id)}
-            disabled={isDeleting}
-            style={({ pressed }) => [
-              styles.deleteButton,
-              { opacity: isDeleting ? 0.45 : pressed ? 0.7 : 1 },
-            ]}
-            accessibilityRole="button"
-            accessibilityLabel="Delete this drawing"
-            accessibilityHint="Opens a confirmation before removing this drawing"
-          >
-            <Ionicons name="trash-outline" size={18} color={colors.error} />
-          </Pressable>
+          <View style={styles.actions}>
+            <ReportActionButton
+              colors={colors}
+              disabled={isReporting}
+              onSelectReason={(reason) => onReport(drawing.id, reason)}
+            />
+            <Pressable
+              onPress={() => onDelete(drawing.id)}
+              disabled={isDeleting}
+              style={({ pressed }) => [
+                styles.deleteButton,
+                { opacity: isDeleting ? 0.45 : pressed ? 0.7 : 1 },
+              ]}
+              accessibilityRole="button"
+              accessibilityLabel="Delete this drawing"
+              accessibilityHint="Opens a confirmation before removing this drawing"
+            >
+              <Ionicons name="trash-outline" size={18} color={colors.error} />
+            </Pressable>
+          </View>
         </View>
       </View>
     </View>
@@ -90,11 +102,16 @@ const styles = StyleSheet.create({
     fontFamily: "Inter_500Medium",
   },
   deleteButton: {
-    marginTop: 4,
-    alignSelf: "flex-start",
+    alignSelf: "center",
     width: 44,
     height: 44,
     justifyContent: "center",
     alignItems: "center",
+  },
+  actions: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 6,
   },
 });

@@ -12,6 +12,8 @@ export default defineConfig({
     include: [
       "lib/state/__tests__/**/*.test.ts",
       "lib/network/__tests__/**/*.test.ts",
+      "server/__tests__/**/*.test.ts",
+      "shared/__tests__/**/*.test.ts",
     ],
   },
 });

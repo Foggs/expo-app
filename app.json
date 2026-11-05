@@ -81,7 +81,8 @@
       "expo-web-browser"
     ],
     "extra": {
-      "privacyPolicyUrl": "https://sketchduel.app/privacy"
+      "privacyPolicyUrl": "https://sketchduel.app/privacy",
+      "supportEmail": "support@sketchduel.app"
     },
     "experiments": {
       "typedRoutes": true,

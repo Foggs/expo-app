@@ -20,6 +20,7 @@ export interface MatchFlowModel {
   gameId: string | null;
   playerRole: "player1" | "player2" | null;
   opponentName: string | null;
+  opponentPlayerId: string | null;
   matchType: MatchType | null;
   queuePosition: number;
   reconnectAttempt: number;
@@ -38,6 +39,7 @@ export type MatchFlowEvent =
       gameId: string;
       playerRole: "player1" | "player2";
       opponentName: string;
+      opponentPlayerId: string;
       matchType: MatchType;
     }
   | {

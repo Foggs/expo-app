@@ -1,0 +1,74 @@
+export const moderationPage = `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>SketchDuel report review</title>
+  <style>
+    body{font:16px system-ui,sans-serif;max-width:920px;margin:32px auto;padding:0 16px;color:#202033;background:#f6f7fb}
+    h1{font-size:26px}button{padding:9px 12px;border:0;border-radius:8px;background:#6757d9;color:white;cursor:pointer;margin:4px}
+    button.secondary{background:#555}article{background:white;border-radius:12px;padding:18px;margin:16px 0;box-shadow:0 2px 12px #18204a12}
+    pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#f2f3f8;padding:12px;border-radius:8px;font-size:13px}
+    .meta{color:#5d5d70;font-size:14px}.error{color:#a12135}
+  </style>
+</head>
+<body>
+  <h1>SketchDuel content reports</h1>
+  <p>Enter the server access key to review reports. The key stays in this page's memory and is not saved.</p>
+  <button id="login">Load reports</button><button id="reload" class="secondary" hidden>Reload</button>
+  <p id="status" role="status"></p><main id="reports"></main>
+  <script>
+    let accessKey = "";
+    const status = document.getElementById("status");
+    const reportList = document.getElementById("reports");
+    const authHeaders = () => ({ "X-Moderation-Admin-Token": accessKey, "Content-Type": "application/json" });
+    async function loadReports() {
+      if (!accessKey) accessKey = window.prompt("Server access key") || "";
+      if (!accessKey) return;
+      status.textContent = "Loading reports…";
+      reportList.replaceChildren();
+      try {
+        const response = await fetch("/api/moderation/reports", { headers: authHeaders() });
+        if (!response.ok) throw new Error(response.status === 401 ? "Access key was not accepted." : "Could not load reports (" + response.status + ").");
+        const reports = await response.json();
+        status.textContent = reports.length ? reports.length + " report(s)" : "No reports yet.";
+        document.getElementById("reload").hidden = false;
+        for (const report of reports) {
+          const card = document.createElement("article");
+          const heading = document.createElement("h2");
+          heading.textContent = report.reason.replaceAll("_", " ") + " — " + report.status;
+          const meta = document.createElement("p");
+          meta.className = "meta";
+          meta.textContent = "Reported " + new Date(report.createdAt).toLocaleString() + " · " + report.reportType + " · " + report.targetName;
+          const evidence = document.createElement("pre");
+          evidence.textContent = JSON.stringify(report.evidence, null, 2);
+          card.append(heading, meta, evidence);
+          for (const [state, label] of [["reviewed", "Mark reviewed"], ["actioned", "Take action"], ["dismissed", "Dismiss"]]) {
+            const button = document.createElement("button");
+            button.textContent = label;
+            button.addEventListener("click", async () => {
+              const response = await fetch("/api/moderation/reports/" + encodeURIComponent(report.id), {
+                method: "PATCH", headers: authHeaders(), body: JSON.stringify({ status: state }),
+              });
+              if (!response.ok) {
+                status.textContent = "Could not update report.";
+                status.className = "error";
+                return;
+              }
+              await loadReports();
+            });
+            card.append(button);
+          }
+          reportList.append(card);
+        }
+      } catch (error) {
+        status.textContent = error instanceof Error ? error.message : "Could not load reports.";
+        status.className = "error";
+        accessKey = "";
+      }
+    }
+    document.getElementById("login").addEventListener("click", loadReports);
+    document.getElementById("reload").addEventListener("click", loadReports);
+  </script>
+</body>
+</html>`;

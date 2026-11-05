@@ -382,7 +382,14 @@ function GalleryView({ colors, isDark }: { colors: ThemeColors; isDark: boolean 
       </View>
       <ScrollView contentContainerStyle={[styles.galleryList, { paddingBottom: bottomPadding + 20 }]}>
         {items.map((it) => (
-          <GalleryCard key={it.id} drawing={it} colors={colors} formattedDate={fmt(it.createdAt)} onDelete={NOOP} />
+          <GalleryCard
+            key={it.id}
+            drawing={it}
+            colors={colors}
+            formattedDate={fmt(it.createdAt)}
+            onDelete={NOOP}
+            onReport={NOOP}
+          />
         ))}
       </ScrollView>
     </View>

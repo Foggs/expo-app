@@ -32,12 +32,16 @@ const STROKE_SEND_INTERVAL_MS = 80;
 interface UseGameScreenControllerOptions {
   playerRole: PlayerId;
   opponentName: string;
+  gameId?: string;
+  opponentPlayerId?: string;
   colors: ThemeColors;
 }
 
 export function useGameScreenController({
   playerRole,
   opponentName,
+  gameId,
+  opponentPlayerId,
   colors,
 }: UseGameScreenControllerOptions) {
   const canvasRef = useRef<DrawingCanvasRef>(null);
@@ -108,7 +112,14 @@ export function useGameScreenController({
             strokes: [...backgroundStrokesRef.current, ...opponentStrokesRef.current],
           });
         }
-        router.push({ pathname: "/results", params: { opponentName } });
+        router.push({
+          pathname: "/results",
+          params: {
+            opponentName,
+            gameId,
+            opponentPlayerId,
+          },
+        });
       }
     },
     onNavigateHome: () => {

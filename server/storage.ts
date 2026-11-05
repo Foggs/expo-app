@@ -1,23 +1,26 @@
-import { eq, and, desc } from "drizzle-orm";
+import { eq, and, desc, or, notExists } from "drizzle-orm";
 import { db } from "./db";
 import {
   users,
   games,
   turns,
   galleryDrawings,
+  playerBlocks,
+  moderationReports,
   type User,
   type InsertUser,
   type Game,
   type Turn,
   type GalleryDrawing,
 } from "@shared/schema";
+import { filterDisplayName } from "@shared/contentFilter";
 
 export interface IStorage {
   getUser(id: string): Promise<User | undefined>;
   getUserByUsername(username: string): Promise<User | undefined>;
   createUser(user: InsertUser): Promise<User>;
 
-  createGame(player1Id?: string): Promise<Game>;
+  createGame(player1Id?: string, player1SessionKey?: string, player2SessionKey?: string): Promise<Game>;
   getGame(id: string): Promise<Game | undefined>;
   updateGame(id: string, data: Partial<Game>): Promise<Game | undefined>;
   getActiveGames(): Promise<Game[]>;
@@ -41,7 +44,22 @@ export interface IStorage {
   }): Promise<GalleryDrawing>;
   getGalleryDrawings(limit?: number): Promise<GalleryDrawing[]>;
   getGalleryDrawing(id: string): Promise<GalleryDrawing | undefined>;
-  deleteGalleryDrawing(id: string): Promise<boolean>;
+  deleteGalleryDrawingOwned(id: string, sessionToken: string): Promise<boolean>;
+  arePlayersBlocked(firstKey: string, secondKey: string): Promise<boolean>;
+  havePlayedTogether(firstKey: string, secondKey: string): Promise<boolean>;
+  blockPlayer(blockerKey: string, blockedPlayerKey: string): Promise<void>;
+  createModerationReport(data: {
+    reportType: string;
+    reason: string;
+    reporterSessionKey: string;
+    targetPlayerKey?: string | null;
+    targetName: string;
+    galleryDrawingId?: string | null;
+    gameId?: string | null;
+    evidence: unknown;
+  }): Promise<void>;
+  getModerationReports(limit?: number): Promise<(typeof moderationReports.$inferSelect)[]>;
+  reviewModerationReport(id: string, status: string, reviewNote?: string): Promise<boolean>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -63,11 +81,13 @@ export class DatabaseStorage implements IStorage {
     return user;
   }
 
-  async createGame(player1Id?: string): Promise<Game> {
+  async createGame(player1Id?: string, player1SessionKey?: string, player2SessionKey?: string): Promise<Game> {
     const [game] = await db
       .insert(games)
       .values({
         player1Id: player1Id || null,
+        player1SessionKey: player1SessionKey || null,
+        player2SessionKey: player2SessionKey || null,
         status: "waiting",
         currentRound: 1,
         currentPlayer: "player1",
@@ -149,8 +169,8 @@ export class DatabaseStorage implements IStorage {
     const [drawing] = await db
       .insert(galleryDrawings)
       .values({
-        playerName: data.playerName || "Anonymous",
-        opponentName: data.opponentName || "Unknown",
+        playerName: filterDisplayName(data.playerName || "Anonymous"),
+        opponentName: filterDisplayName(data.opponentName || "Unknown"),
         strokes: data.strokes,
         roundCount: data.roundCount || 3,
         sessionToken: data.sessionToken || null,
@@ -160,11 +180,27 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getGalleryDrawings(limit = 50): Promise<GalleryDrawing[]> {
-    return db
+    const rows = await db
       .select()
       .from(galleryDrawings)
+      .where(notExists(
+        db.select({ id: moderationReports.id })
+          .from(moderationReports)
+          .where(and(
+            eq(moderationReports.galleryDrawingId, galleryDrawings.id),
+            or(
+              eq(moderationReports.status, "pending"),
+              eq(moderationReports.status, "actioned"),
+            ),
+          )),
+      ))
       .orderBy(desc(galleryDrawings.createdAt))
       .limit(limit);
+    return rows.map((drawing) => ({
+      ...drawing,
+      playerName: filterDisplayName(drawing.playerName),
+      opponentName: filterDisplayName(drawing.opponentName),
+    }));
   }
 
   async getGalleryDrawing(id: string): Promise<GalleryDrawing | undefined> {
@@ -175,12 +211,91 @@ export class DatabaseStorage implements IStorage {
     return drawing;
   }
 
-  async deleteGalleryDrawing(id: string): Promise<boolean> {
-    const result = await db
-      .delete(galleryDrawings)
-      .where(eq(galleryDrawings.id, id))
-      .returning();
+  async deleteGalleryDrawingOwned(id: string, sessionToken: string): Promise<boolean> {
+    const result = await db.delete(galleryDrawings)
+      .where(and(
+        eq(galleryDrawings.id, id),
+        eq(galleryDrawings.sessionToken, sessionToken),
+      ))
+      .returning({ id: galleryDrawings.id });
     return result.length > 0;
+  }
+
+  async arePlayersBlocked(firstKey: string, secondKey: string): Promise<boolean> {
+    const [block] = await db
+      .select({ id: playerBlocks.id })
+      .from(playerBlocks)
+      .where(or(
+        and(
+          eq(playerBlocks.blockerSessionKey, firstKey),
+          eq(playerBlocks.blockedPlayerKey, secondKey),
+        ),
+        and(
+          eq(playerBlocks.blockerSessionKey, secondKey),
+          eq(playerBlocks.blockedPlayerKey, firstKey),
+        ),
+      ))
+      .limit(1);
+    return Boolean(block);
+  }
+
+  async havePlayedTogether(firstKey: string, secondKey: string): Promise<boolean> {
+    const [game] = await db.select({ id: games.id })
+      .from(games)
+      .where(or(
+        and(
+          eq(games.player1SessionKey, firstKey),
+          eq(games.player2SessionKey, secondKey),
+        ),
+        and(
+          eq(games.player1SessionKey, secondKey),
+          eq(games.player2SessionKey, firstKey),
+        ),
+      ))
+      .limit(1);
+    return Boolean(game);
+  }
+
+  async blockPlayer(blockerKey: string, blockedPlayerKey: string): Promise<void> {
+    await db.insert(playerBlocks)
+      .values({ blockerSessionKey: blockerKey, blockedPlayerKey })
+      .onConflictDoNothing();
+  }
+
+  async createModerationReport(data: {
+    reportType: string;
+    reason: string;
+    reporterSessionKey: string;
+    targetPlayerKey?: string | null;
+    targetName: string;
+    galleryDrawingId?: string | null;
+    gameId?: string | null;
+    evidence: unknown;
+  }): Promise<void> {
+    await db.insert(moderationReports).values({
+      ...data,
+      targetPlayerKey: data.targetPlayerKey || null,
+      galleryDrawingId: data.galleryDrawingId || null,
+      gameId: data.gameId || null,
+    });
+  }
+
+  async getModerationReports(limit = 100): Promise<(typeof moderationReports.$inferSelect)[]> {
+    return db.select().from(moderationReports)
+      .orderBy(desc(moderationReports.createdAt))
+      .limit(limit);
+  }
+
+  async reviewModerationReport(id: string, status: string, reviewNote?: string): Promise<boolean> {
+    const rows = await db.update(moderationReports)
+      .set({
+        status,
+        reviewNote: reviewNote || null,
+        reviewedAt: new Date(),
+      })
+      .where(eq(moderationReports.id, id))
+      .returning({ id: moderationReports.id });
+    return rows.length > 0;
   }
 }
 

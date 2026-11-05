@@ -81,6 +81,7 @@ export default function HomeScreen() {
             gameId: info.gameId,
             playerRole: info.playerRole,
             opponentName: info.opponentName,
+            opponentPlayerId: info.opponentPlayerId,
           },
         });
       },

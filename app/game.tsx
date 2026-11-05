@@ -37,11 +37,13 @@ export default function GameScreen() {
     gameId?: string | string[];
     playerRole?: string | string[];
     opponentName?: string | string[];
+    opponentPlayerId?: string | string[];
   }>();
 
   const routeGameId = firstParam(params.gameId);
   const routePlayerRole = toPlayerId(firstParam(params.playerRole));
   const routeOpponentName = firstParam(params.opponentName);
+  const routeOpponentPlayerId = firstParam(params.opponentPlayerId);
 
   const matchInfoForRoute =
     matchInfo && (!routeGameId || matchInfo.gameId === routeGameId)
@@ -49,10 +51,14 @@ export default function GameScreen() {
       : null;
   const playerRole = matchInfoForRoute?.playerRole ?? routePlayerRole ?? "player1";
   const opponentName = matchInfoForRoute?.opponentName ?? routeOpponentName ?? "Opponent";
+  const opponentPlayerId =
+    matchInfoForRoute?.opponentPlayerId ?? routeOpponentPlayerId;
 
   const game = useGameScreenController({
     playerRole,
     opponentName,
+    gameId: matchInfoForRoute?.gameId ?? routeGameId,
+    opponentPlayerId,
     colors,
   });
 

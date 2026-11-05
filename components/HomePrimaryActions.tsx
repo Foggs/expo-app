@@ -5,6 +5,7 @@ import { Pressable, StyleSheet, Text, View } from "react-native";
 import Animated from "react-native-reanimated";
 import type { ThemeColors } from "@/hooks/useThemeColors";
 import { openPrivacyPolicy } from "@/lib/privacyPolicy";
+import { openSupportContact } from "@/lib/supportContact";
 
 interface HomePrimaryActionsProps {
   colors: ThemeColors;
@@ -100,6 +101,18 @@ export default function HomePrimaryActions({
       >
         <Text style={[styles.privacyLinkText, { color: colors.textSecondary }]}>
           Privacy Policy
+        </Text>
+      </Pressable>
+      <Pressable
+        onPress={openSupportContact}
+        style={styles.privacyLink}
+        accessibilityRole="link"
+        accessibilityLabel="Contact Support"
+        accessibilityHint="Opens an email to SketchDuel support"
+        hitSlop={8}
+      >
+        <Text style={[styles.privacyLinkText, { color: colors.textSecondary }]}>
+          Contact Support
         </Text>
       </Pressable>
     </>

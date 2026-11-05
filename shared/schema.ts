@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, integer, jsonb, timestamp, boolean } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, integer, jsonb, timestamp, uniqueIndex } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 import { isValidRoomCode, normalizeRoomCode } from "./friendRoom";
@@ -26,6 +26,8 @@ export const games = pgTable("games", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
   completedAt: timestamp("completed_at"),
+  player1SessionKey: text("player1_session_key"),
+  player2SessionKey: text("player2_session_key"),
 });
 
 export const turns = pgTable("turns", {
@@ -55,7 +57,63 @@ export const galleryDrawings = pgTable("gallery_drawings", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
+export const playerBlocks = pgTable("player_blocks", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  blockerSessionKey: text("blocker_session_key").notNull(),
+  blockedPlayerKey: text("blocked_player_key").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => ({
+  pairUnique: uniqueIndex("player_blocks_pair_unique").on(table.blockerSessionKey, table.blockedPlayerKey),
+}));
+
+export const moderationReports = pgTable("moderation_reports", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  reportType: text("report_type").notNull(),
+  reason: text("reason").notNull(),
+  reporterSessionKey: text("reporter_session_key").notNull(),
+  targetPlayerKey: text("target_player_key"),
+  targetName: text("target_name").notNull().default("Unknown"),
+  galleryDrawingId: varchar("gallery_drawing_id").references(() => galleryDrawings.id, { onDelete: "set null" }),
+  gameId: varchar("game_id").references(() => games.id, { onDelete: "set null" }),
+  evidence: jsonb("evidence").notNull().default({}),
+  status: text("status").notNull().default("pending"),
+  reviewNote: text("review_note"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  reviewedAt: timestamp("reviewed_at"),
+});
+
 export type GalleryDrawing = typeof galleryDrawings.$inferSelect;
+
+export const reportReasonSchema = z.enum([
+  "harassment",
+  "sexual_content",
+  "violence",
+  "hate_speech",
+  "spam",
+  "other",
+]);
+
+export const createReportSchema = z.discriminatedUnion("reportType", [
+  z.object({
+    reportType: z.literal("gallery"),
+    galleryDrawingId: z.string().min(1).max(100),
+    reason: reportReasonSchema,
+  }).strict(),
+  z.object({
+    reportType: z.literal("match"),
+    gameId: z.string().min(1).max(100),
+    reason: reportReasonSchema,
+  }).strict(),
+]);
+
+export const createPlayerBlockSchema = z.object({
+  blockedPlayerId: z.string().regex(/^[a-f0-9]{64}$/),
+}).strict();
+
+export const reviewReportSchema = z.object({
+  status: z.enum(["reviewed", "dismissed", "actioned"]),
+  reviewNote: z.string().max(1000).optional(),
+}).strict();
 
 export const insertGalleryDrawingSchema = z.object({
   playerName: z.string().max(50).optional(),
@@ -102,6 +160,10 @@ export const strokeSchema = z.object({
 }).strict();
 
 export const wsClientMessageSchema = z.discriminatedUnion("type", [
+  z.object({
+    type: z.literal("authenticate"),
+    sessionToken: z.string().regex(/^[a-f0-9]{64}$/i),
+  }).strict(),
   z.object({ type: z.literal("join_queue") }).strict(),
   z.object({ type: z.literal("leave_queue") }).strict(),
   z.object({ type: z.literal("create_room") }).strict(),
@@ -144,6 +206,7 @@ export type WsServerMessage =
       gameId: string;
       playerRole: "player1" | "player2";
       opponentName: string;
+      opponentPlayerId: string;
       matchType: "queue" | "friend";
     }
   | { type: "game_state"; gameId: string; currentRound: number; currentPlayer: "player1" | "player2"; totalRounds: number; status: string }

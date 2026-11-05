@@ -19,6 +19,7 @@ describe("MatchFlow", () => {
         gameId: "game-1",
         playerRole: "player1",
         opponentName: "Alice",
+        opponentPlayerId: "a".repeat(64),
         matchType: "queue",
       });
       expect(m.currentStateId).toBe("matched");
@@ -49,6 +50,7 @@ describe("MatchFlow", () => {
         gameId: "friend-1",
         playerRole: "player2",
         opponentName: "Riley",
+        opponentPlayerId: "b".repeat(64),
         matchType: "friend",
       });
 
@@ -84,6 +86,7 @@ describe("MatchFlow", () => {
         gameId: "g1",
         playerRole: "player1",
         opponentName: "Bob",
+        opponentPlayerId: "c".repeat(64),
         matchType: "queue",
       });
       collectEffects(m, {
@@ -111,6 +114,7 @@ describe("MatchFlow", () => {
         gameId: "g2",
         playerRole: "player1",
         opponentName: "Alice",
+        opponentPlayerId: "d".repeat(64),
         matchType: "queue",
       });
       collectEffects(m2, {

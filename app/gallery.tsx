@@ -12,6 +12,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import GalleryCard from "@/components/GalleryCard";
+import type { ReportReason } from "@/components/ReportActionButton";
 import type { StrokeLike } from "@/components/DrawingThumbnail";
 import { useScreenPadding } from "@/hooks/useScreenPadding";
 import { useThemeColors } from "@/hooks/useThemeColors";
@@ -67,6 +68,24 @@ export default function GalleryScreen() {
         undefined,
         message,
       );
+    },
+  });
+
+  const reportMutation = useMutation({
+    mutationFn: async ({ id, reason }: { id: string; reason: ReportReason }) => {
+      const token = await getSessionToken();
+      await apiRequest("POST", "/api/reports", {
+        reportType: "gallery",
+        galleryDrawingId: id,
+        reason,
+      }, { "x-session-token": token });
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["/api/gallery"] });
+      showPlatformAlert("Report received", "Thank you. This drawing is hidden while it is reviewed.");
+    },
+    onError: () => {
+      showPlatformAlert("Couldn't send report", "Please check your connection and try again.");
     },
   });
 
@@ -148,7 +167,9 @@ export default function GalleryScreen() {
               colors={colors}
               formattedDate={formatDate(item.createdAt)}
               onDelete={handleDelete}
+              onReport={(id, reason) => reportMutation.mutate({ id, reason })}
               isDeleting={deleteMutation.isPending}
+              isReporting={reportMutation.isPending}
             />
           )}
           keyExtractor={(item) => item.id}

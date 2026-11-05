@@ -13,6 +13,7 @@ import ResultsActionButtons from "@/components/ResultsActionButtons";
 import ResultsPlayersInfo from "@/components/ResultsPlayersInfo";
 import ResultsRoundGallery from "@/components/ResultsRoundGallery";
 import ResultsStatsCard from "@/components/ResultsStatsCard";
+import ContentSafetyActions from "@/components/ContentSafetyActions";
 import { useScreenPadding } from "@/hooks/useScreenPadding";
 import { useThemeColors } from "@/hooks/useThemeColors";
 import {
@@ -26,7 +27,16 @@ import { apiRequest } from "@/lib/query-client";
 import { getSessionToken } from "@/lib/sessionToken";
 
 export default function ResultsScreen() {
-  const { opponentName } = useLocalSearchParams<{ opponentName?: string }>();
+  const params = useLocalSearchParams<{
+    opponentName?: string | string[];
+    gameId?: string | string[];
+    opponentPlayerId?: string | string[];
+  }>();
+  const opponentName = Array.isArray(params.opponentName) ? params.opponentName[0] : params.opponentName;
+  const gameId = Array.isArray(params.gameId) ? params.gameId[0] : params.gameId;
+  const opponentPlayerId = Array.isArray(params.opponentPlayerId)
+    ? params.opponentPlayerId[0]
+    : params.opponentPlayerId;
   const navigation = useNavigation();
   const insets = useSafeAreaInsets();
   const { isDark, colors } = useThemeColors();
@@ -157,6 +167,12 @@ export default function ResultsScreen() {
           drawings={drawings}
           playerRole={playerRole}
           opponentName={opponentName}
+        />
+
+        <ContentSafetyActions
+          colors={colors}
+          gameId={gameId}
+          opponentPlayerId={opponentPlayerId}
         />
 
         <ResultsPlayersInfo colors={colors} opponentName={opponentName} />

@@ -34,6 +34,7 @@ import {
   INITIAL_MATCH_FLOW_MODEL,
 } from "@/lib/state/matchFlow";
 import { resolveNativeWsUrl } from "@/lib/network/endpoints";
+import { getSessionToken } from "@/lib/sessionToken";
 import type {
   MatchFlowStateId,
   MatchFlowEvent,
@@ -56,6 +57,7 @@ export interface MatchInfo {
   gameId: string;
   playerRole: "player1" | "player2";
   opponentName: string;
+  opponentPlayerId: string;
   matchType: MatchType;
 }
 
@@ -100,6 +102,7 @@ const wsServerMessageSchema = z.discriminatedUnion("type", [
     gameId: z.string(),
     playerRole: z.enum(["player1", "player2"]),
     opponentName: z.string(),
+    opponentPlayerId: z.string().regex(/^[a-f0-9]{64}$/),
     matchType: z.enum(["queue", "friend"]),
   }),
   z.object({
@@ -293,6 +296,7 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
   const [friendRoomError, setFriendRoomError] = useState<string | null>(null);
 
   const wsRef = useRef<WebSocket | null>(null);
+  const openingSocketRef = useRef(false);
   const pingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null); // TIMER-KEY: playing/queueing (active connection)
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null); // TIMER-KEY: error_recoverable
   const backoffTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null); // TIMER-KEY: error_backoff
@@ -375,6 +379,7 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
           gameId: msg.gameId,
           playerRole: msg.playerRole,
           opponentName: msg.opponentName,
+          opponentPlayerId: msg.opponentPlayerId,
           matchType: msg.matchType,
         });
         if (msg.matchType === "friend") {
@@ -479,21 +484,30 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
     }
   }, [sendRaw]);
 
-  const openSocket = useCallback(() => {
+  const openSocket = useCallback(async () => {
     if (
+      openingSocketRef.current ||
       wsRef.current?.readyState === WebSocket.OPEN ||
       wsRef.current?.readyState === WebSocket.CONNECTING
     ) {
       return;
     }
 
+    openingSocketRef.current = true;
     try {
-      const url = getWsUrl();
-      const ws = new WebSocket(url);
+      const sessionToken = await getSessionToken();
+      if (!mountedRef.current) return;
+      const ws = new WebSocket(getWsUrl());
       wsRef.current = ws;
 
       ws.onopen = () => {
         if (!mountedRef.current) return;
+        try {
+          ws.send(JSON.stringify({ type: "authenticate", sessionToken }));
+        } catch {
+          ws.close(1008, "Session authentication failed");
+          return;
+        }
         clearPingTimer();
         pingTimerRef.current = setInterval(() => { // TIMER-KEY: playing/queueing
           sendRaw({ type: "ping" });
@@ -543,6 +557,8 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
       };
     } catch {
       machineRef.current?.dispatch({ type: "WS_CLOSED" });
+    } finally {
+      openingSocketRef.current = false;
     }
   }, [clearPingTimer, sendRaw, handleWsMessage]);
 

@@ -18,9 +18,14 @@ This audit lowers rejection and incident risk; it does **not** guarantee App Sto
 
 ### Release-blocking owner actions
 1. **Publish the privacy policy** at `https://sketchduel.app/privacy` (DNS lookup for `sketchduel.app` failed on 2026-11-04). It must cover the data inventory in §4. Use the same URL in App Store Connect. If you use a different URL, change `expo.extra.privacyPolicyUrl` in `app.json`.
-2. **Decide how to handle UGC (Guideline 1.2).** Strangers see each other's freehand drawings in random matches and in a public gallery. Gallery names are client-supplied free text. Apple expects all four of these: a way to filter objectionable content, a way to report content with timely responses, a way to block abusive users, and published contact info. None exist today. Options: (a) build report + block + moderation, or (b) limit public exposure (for example, friends-only matches and a private gallery).
+2. **UGC controls (Guideline 1.2): implemented on 2026-11-05.** The app now has report actions for gallery and match drawings, server-side report storage and review, device-level blocking, and a basic name filter. The owner should confirm the configured support mailbox is active and assign someone to review reports promptly; see `docs/content-moderation.md`.
 3. **Answer App Store Connect privacy labels** as drafted in §6. Re-check them if the code changes.
 4. **Remove `app/sepzellc.txt`** from the repo. It holds what looks like business/shipping reference numbers. It is not in the app bundle (verified in the iOS export), but it is committed to git.
+
+### UGC remediation details
+- Gallery drawings with pending reports are hidden; content marked actioned remains hidden. Owners review and resolve reports at `/moderation/reports`, using the server `SESSION_SECRET` as the access key.
+- Random matchmaking checks device-level blocks in both directions. The device token itself is not exposed to opponents; only a one-way derived identifier is used.
+- The home screen links to `support@sketchduel.app`. Confirm that address is monitored before release, or change `expo.extra.supportEmail` in `app.json`.
 
 ## 2. Method & evidence
 - Scanners: dependency audit (osv), SAST, HoundDog privacy dataflow. All three were run before and after the fixes.

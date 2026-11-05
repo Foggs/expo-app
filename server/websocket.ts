@@ -9,6 +9,7 @@ import {
 } from "@shared/friendRoom";
 import { storage } from "./storage";
 import { randomInt } from "crypto";
+import { getSessionKey } from "./sessionIdentity";
 
 const MAX_MESSAGE_SIZE = 512 * 1024; // 512KB
 const HEARTBEAT_INTERVAL = 30_000;
@@ -29,6 +30,7 @@ interface PlayerConnection {
   ws: WebSocket;
   id: string;
   playerName: string;
+  sessionKey: string;
   gameId: string | null;
   playerRole: "player1" | "player2" | null;
   friendRoomCode: string | null;
@@ -408,7 +410,7 @@ async function startGameForPlayers(
   let gameId: string | null = null;
 
   try {
-    const game = await storage.createGame();
+    const game = await storage.createGame(undefined, player1.sessionKey, player2.sessionKey);
     gameId = game.id;
 
     const room: GameRoom = {
@@ -448,6 +450,7 @@ async function startGameForPlayers(
     gameId,
     playerRole: "player1",
     opponentName: player2.playerName,
+    opponentPlayerId: player2.sessionKey,
     matchType,
   });
 
@@ -456,6 +459,7 @@ async function startGameForPlayers(
     gameId,
     playerRole: "player2",
     opponentName: player1.playerName,
+    opponentPlayerId: player1.sessionKey,
     matchType,
   });
 
@@ -487,31 +491,36 @@ async function attemptMatchmaking(): Promise<void> {
     do {
       matchmakingPending = false;
       while (matchmakingQueue.length >= 2) {
-        const p1Id = matchmakingQueue.shift()!;
-        const p2Id = matchmakingQueue.shift()!;
+        let selectedPair: [number, number, PlayerConnection, PlayerConnection] | null = null;
+        const staleIds = matchmakingQueue.filter((id) => !getOpenConnection(id));
+        for (const staleId of staleIds) removeFromQueue(staleId);
+        const available = matchmakingQueue
+          .map((id, index) => ({ id, index, conn: getOpenConnection(id) }))
+          .filter((entry): entry is { id: string; index: number; conn: PlayerConnection } => Boolean(entry.conn));
 
-        const p1 = getOpenConnection(p1Id);
-        const p2 = getOpenConnection(p2Id);
-
-        if (!p1) {
-          if (p2) {
-            matchmakingQueue.unshift(p2Id);
+        for (let i = 0; i < available.length && !selectedPair; i++) {
+          for (let j = i + 1; j < available.length; j++) {
+            const first = available[i].conn;
+            const second = available[j].conn;
+            if (first.sessionKey === second.sessionKey) continue;
+            if (await storage.arePlayersBlocked(first.sessionKey, second.sessionKey)) continue;
+            selectedPair = [available[i].index, available[j].index, first, second];
+            break;
           }
-          continue;
         }
 
-        if (!p2) {
-          matchmakingQueue.unshift(p1Id);
-          continue;
-        }
+        if (!selectedPair) break;
+        const [firstIndex, secondIndex, p1, p2] = selectedPair;
+        matchmakingQueue.splice(secondIndex, 1);
+        matchmakingQueue.splice(firstIndex, 1);
 
         try {
           const gameId = await startGameForPlayers(p1, p2, "queue");
           console.log(`Match created: ${p1.playerName} vs ${p2.playerName} (game ${gameId})`);
         } catch (err) {
           console.error("Failed to create match:", err);
-          matchmakingQueue.unshift(p2Id);
-          matchmakingQueue.unshift(p1Id);
+          matchmakingQueue.unshift(p2.id);
+          matchmakingQueue.unshift(p1.id);
           break;
         }
       }
@@ -886,6 +895,25 @@ function handleMessage(conn: PlayerConnection, data: Buffer | ArrayBuffer | Buff
     return;
   }
 
+  if (msg.type === "authenticate") {
+    if (conn.sessionKey) {
+      sendMessage(conn, { type: "error", message: "Session is already authenticated", code: "ALREADY_AUTHENTICATED" });
+      return;
+    }
+    const sessionKey = getSessionKey(msg.sessionToken);
+    if (!sessionKey) {
+      conn.ws.close(1008, "Valid device session required");
+      return;
+    }
+    conn.sessionKey = sessionKey;
+    return;
+  }
+
+  if (!conn.sessionKey) {
+    conn.ws.close(1008, "Authenticate before sending game actions");
+    return;
+  }
+
   switch (msg.type) {
     case "ping":
       sendMessage(conn, { type: "pong" });
@@ -1121,7 +1149,7 @@ export function setupWebSocket(server: Server): WebSocketServer {
     }
   }, ROOM_CLEANUP_INTERVAL);
 
-  wss.on("connection", (ws: WebSocket) => {
+  wss.on("connection", (ws: WebSocket, req: IncomingMessage) => {
     if (connections.size >= MAX_CONNECTIONS) {
       console.warn(`Connection rejected: max connections (${MAX_CONNECTIONS}) reached`);
       ws.close(1013, "Server at capacity");
@@ -1134,6 +1162,7 @@ export function setupWebSocket(server: Server): WebSocketServer {
       ws,
       id: connId,
       playerName: generatePlayerName(),
+      sessionKey: "",
       gameId: null,
       playerRole: null,
       friendRoomCode: null,
