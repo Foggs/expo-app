@@ -120,6 +120,36 @@ describe("moderation notifications", () => {
     }
   });
 
+  it("returns HTTP 413 for oversized requests without processing the alert", async () => {
+    const processAlert = vi.fn();
+    const server = createWebhookServer([signingSecret], processAlert);
+    await new Promise<void>((resolve, reject) => {
+      server.once("error", reject);
+      server.listen(0, "127.0.0.1", resolve);
+    });
+
+    const address = server.address() as AddressInfo;
+    const endpoint = `http://127.0.0.1:${address.port}/webhook`;
+    const closeServer = () => new Promise<void>((resolve, reject) => {
+      server.close((error) => error ? reject(error) : resolve());
+    });
+
+    try {
+      const oversizedBody = "x".repeat(64 * 1024 + 1);
+      const response = await fetch(endpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: oversizedBody,
+      });
+
+      expect(response.status).toBe(413);
+      expect(await response.text()).toBe("Request body too large");
+      expect(processAlert).not.toHaveBeenCalled();
+    } finally {
+      await closeServer();
+    }
+  });
+
   it("rolls back a failed action and accepts its later retry exactly once", async () => {
     const idempotencyKeys = new Set<string>();
     const committedActions: string[] = [];
