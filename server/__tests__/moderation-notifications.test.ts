@@ -1,5 +1,6 @@
-import { createHmac, timingSafeEqual } from "node:crypto";
+import { createHmac } from "node:crypto";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { verifySketchDuelSignature } from "../../docs/moderation-webhook-receiver.mjs";
 import {
   getModerationNotificationStatus,
   ModerationNotificationError,
@@ -16,11 +17,13 @@ describe("moderation notifications", () => {
   const signingSecret = "test-only-moderation-secret";
 
   function verifyReceiverContract(body: string, timestamp: string, signature: string, nowSeconds: number): boolean {
-    if (!/^\d+$/.test(timestamp) || Math.abs(nowSeconds - Number(timestamp)) > 300) return false;
-    const expected = `v1=${createHmac("sha256", signingSecret).update(`${timestamp}.${body}`).digest("hex")}`;
-    const actualBytes = Buffer.from(signature);
-    const expectedBytes = Buffer.from(expected);
-    return actualBytes.length === expectedBytes.length && timingSafeEqual(actualBytes, expectedBytes);
+    return verifySketchDuelSignature({
+      rawBody: Buffer.from(body, "utf8"),
+      timestamp,
+      signature,
+      secrets: [signingSecret],
+      nowSeconds,
+    });
   }
 
   it("reports when no webhook is configured", () => {
@@ -110,6 +113,58 @@ describe("moderation notifications", () => {
       .update(`${staleTimestamp}.${options.body}`)
       .digest("hex")}`;
     expect(verifyReceiverContract(options.body, staleTimestamp, staleSignature, Number(timestamp))).toBe(false);
+  });
+
+  it("accepts either active secret during rotation and enforces both signature headers", async () => {
+    vi.stubEnv("MODERATION_NOTIFICATION_WEBHOOK_URL", "https://hooks.example.test/notify");
+    vi.stubEnv("MODERATION_NOTIFICATION_WEBHOOK_SECRET", signingSecret);
+    const fetchMock = vi.fn().mockResolvedValue(new Response(null, { status: 204 }));
+    vi.stubGlobal("fetch", fetchMock);
+    await sendModerationNotification("report_created", "rotation-report");
+
+    const [, options] = fetchMock.mock.calls[0];
+    const rawBody = Buffer.from(options.body, "utf8");
+    const { "X-SketchDuel-Timestamp": timestamp, "X-SketchDuel-Signature": signature } = options.headers;
+    const replacementSecret = "replacement-secret-during-overlap";
+    expect(verifySketchDuelSignature({
+      rawBody,
+      timestamp,
+      signature,
+      secrets: ["old-secret", signingSecret, replacementSecret],
+      nowSeconds: Number(timestamp),
+    })).toBe(true);
+    expect(verifySketchDuelSignature({
+      rawBody,
+      timestamp,
+      signature,
+      secrets: ["old-secret", replacementSecret],
+      nowSeconds: Number(timestamp),
+    })).toBe(false);
+    expect(verifySketchDuelSignature({
+      rawBody,
+      timestamp: undefined,
+      signature,
+      secrets: [signingSecret],
+      nowSeconds: Number(timestamp),
+    })).toBe(false);
+    expect(verifySketchDuelSignature({
+      rawBody,
+      timestamp,
+      signature: undefined,
+      secrets: [signingSecret],
+      nowSeconds: Number(timestamp),
+    })).toBe(false);
+
+    const replacementSignature = `v1=${createHmac("sha256", replacementSecret)
+      .update(`${timestamp}.${options.body}`)
+      .digest("hex")}`;
+    expect(verifySketchDuelSignature({
+      rawBody,
+      timestamp,
+      signature: replacementSignature,
+      secrets: [signingSecret, replacementSecret],
+      nowSeconds: Number(timestamp),
+    })).toBe(true);
   });
 
   it("rejects unsuccessful webhook responses", async () => {
