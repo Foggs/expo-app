@@ -78,6 +78,8 @@ export const moderationReports = pgTable("moderation_reports", {
   evidence: jsonb("evidence").notNull().default({}),
   status: text("status").notNull().default("pending"),
   alertDeliveryStatus: text("alert_delivery_status").notNull().default("pending"),
+  alertDeliveryAttempts: integer("alert_delivery_attempts").notNull().default(0),
+  alertDeliveryNextAttemptAt: timestamp("alert_delivery_next_attempt_at").defaultNow(),
   reviewNote: text("review_note"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   reviewedAt: timestamp("reviewed_at"),

@@ -3,7 +3,6 @@ import {
   getModerationNotificationStatus,
   ModerationNotificationError,
   sendModerationNotification,
-  sendReportCreatedNotificationWithRetry,
 } from "../moderation-notifications";
 
 describe("moderation notifications", () => {
@@ -51,57 +50,17 @@ describe("moderation notifications", () => {
     });
   });
 
-  it("retries temporary failures, then succeeds without resubmitting a report", async () => {
-    vi.useFakeTimers();
-    vi.stubEnv("MODERATION_NOTIFICATION_WEBHOOK_URL", "https://hooks.example.test/notify");
-    const fetchMock = vi.fn()
-      .mockResolvedValueOnce(new Response(null, { status: 503 }))
-      .mockRejectedValueOnce(new TypeError("network unavailable"))
-      .mockResolvedValueOnce(new Response(null, { status: 204 }));
-    vi.stubGlobal("fetch", fetchMock);
-
-    const delivery = sendReportCreatedNotificationWithRetry();
-    await vi.advanceTimersByTimeAsync(2_000);
-    await delivery;
-
-    expect(fetchMock).toHaveBeenCalledTimes(3);
-    expect(fetchMock.mock.calls.map(([, options]) => JSON.parse(options.body))).toEqual(
-      Array(3).fill({
-        event: "moderation.report.created",
-        message: "A new SketchDuel content report needs review.",
-        reviewPath: "/moderation/reports",
-      }),
-    );
-  });
-
-  it("does not retry permanent webhook responses or configuration errors", async () => {
-    vi.useFakeTimers();
+  it("classifies permanent webhook responses and configuration errors", async () => {
     vi.stubEnv("MODERATION_NOTIFICATION_WEBHOOK_URL", "https://hooks.example.test/notify");
     const fetchMock = vi.fn().mockResolvedValue(new Response(null, { status: 400 }));
     vi.stubGlobal("fetch", fetchMock);
 
-    await expect(sendReportCreatedNotificationWithRetry()).rejects.toMatchObject({ kind: "permanent" });
+    await expect(sendModerationNotification("report_created")).rejects.toMatchObject({ kind: "permanent" });
     expect(fetchMock).toHaveBeenCalledOnce();
 
     vi.stubEnv("MODERATION_NOTIFICATION_WEBHOOK_URL", "http://hooks.example.test/notify");
-    await expect(sendReportCreatedNotificationWithRetry()).rejects.toBeInstanceOf(ModerationNotificationError);
+    await expect(sendModerationNotification("report_created")).rejects.toBeInstanceOf(ModerationNotificationError);
     expect(fetchMock).toHaveBeenCalledOnce();
   });
 
-  it("stops after the bounded number of temporary attempts", async () => {
-    vi.useFakeTimers();
-    vi.stubEnv("MODERATION_NOTIFICATION_WEBHOOK_URL", "https://hooks.example.test/notify");
-    const fetchMock = vi.fn().mockResolvedValue(new Response(null, { status: 503 }));
-    vi.stubGlobal("fetch", fetchMock);
-
-    const delivery = sendReportCreatedNotificationWithRetry();
-    const assertion = expect(delivery).rejects.toMatchObject({ kind: "transient" });
-    await vi.advanceTimersByTimeAsync(2_000);
-    await assertion;
-    expect(fetchMock).toHaveBeenCalledTimes(3);
-  });
-
-  afterEach(() => {
-    vi.useRealTimers();
-  });
 });

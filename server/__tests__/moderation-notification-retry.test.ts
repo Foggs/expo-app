@@ -1,28 +1,43 @@
 import express from "express";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import { registerRoutes } from "../routes";
+import { registerRoutes, resumePendingModerationReportAlerts } from "../routes";
 
 const mocks = vi.hoisted(() => {
   let alertStatus = "failed";
+  let alertAttempts = 0;
+  let attemptClaimed = false;
 
   return {
-    reset(status = "failed") {
+    reset(status = "failed", attempts = 0) {
       alertStatus = status;
+      alertAttempts = attempts;
+      attemptClaimed = false;
     },
     storage: {
       claimFailedModerationReportAlertRetry: vi.fn(async () => {
         if (alertStatus !== "failed") return false;
         alertStatus = "pending";
+        alertAttempts = 0;
+        attemptClaimed = false;
         return true;
       }),
+      claimPendingModerationReportAlertAttempt: vi.fn(async () => {
+        if (alertStatus !== "pending" || attemptClaimed || alertAttempts >= 3) return undefined;
+        attemptClaimed = true;
+        alertAttempts += 1;
+        return alertAttempts;
+      }),
+      getDueModerationReportAlertDeliveries: vi.fn(async () => (
+        alertStatus === "pending" ? [{ id: REPORT_ID, alertDeliveryAttempts: alertAttempts }] : []
+      )),
       getModerationReportAlertDeliveryStatus: vi.fn(async () => alertStatus),
-      updateModerationReportAlertDeliveryStatus: vi.fn(async (_id: string, status: string) => {
+      updateModerationReportAlertDeliveryStatus: vi.fn(async (_id: string, status: string, _nextAttemptAt?: Date | null) => {
         alertStatus = status;
+        if (status === "pending") attemptClaimed = false;
         return true;
       }),
       createModerationReport: vi.fn(),
     },
-    sendReportCreatedNotificationWithRetry: vi.fn(async () => undefined),
     sendModerationNotification: vi.fn(async () => undefined),
     getModerationNotificationStatus: vi.fn(() => "configured"),
   };
@@ -31,11 +46,15 @@ const mocks = vi.hoisted(() => {
 vi.mock("../storage", () => ({ storage: mocks.storage }));
 vi.mock("../moderation-notifications", () => ({
   ModerationNotificationError: class ModerationNotificationError extends Error {
-    kind = "permanent";
+    kind: string;
+
+    constructor(message: string, kind = "permanent") {
+      super(message);
+      this.kind = kind;
+    }
   },
   getModerationNotificationStatus: mocks.getModerationNotificationStatus,
   sendModerationNotification: mocks.sendModerationNotification,
-  sendReportCreatedNotificationWithRetry: mocks.sendReportCreatedNotificationWithRetry,
 }));
 
 const ADMIN_TOKEN = "test-moderator-token";
@@ -63,7 +82,7 @@ describe("moderation alert retry route", () => {
     vi.stubEnv("SESSION_SECRET", ADMIN_TOKEN);
     mocks.reset();
     vi.clearAllMocks();
-    mocks.sendReportCreatedNotificationWithRetry.mockReset().mockResolvedValue(undefined);
+    mocks.sendModerationNotification.mockReset().mockResolvedValue(undefined);
   });
 
   afterEach(() => {
@@ -85,7 +104,7 @@ describe("moderation alert retry route", () => {
     }
 
     expect(mocks.storage.claimFailedModerationReportAlertRetry).not.toHaveBeenCalled();
-    expect(mocks.sendReportCreatedNotificationWithRetry).not.toHaveBeenCalled();
+    expect(mocks.sendModerationNotification).not.toHaveBeenCalled();
   });
 
   it("does not allow retries when moderator authentication is not configured", async () => {
@@ -95,7 +114,7 @@ describe("moderation alert retry route", () => {
 
     expect(response.status).toBe(503);
     expect(mocks.storage.claimFailedModerationReportAlertRetry).not.toHaveBeenCalled();
-    expect(mocks.sendReportCreatedNotificationWithRetry).not.toHaveBeenCalled();
+    expect(mocks.sendModerationNotification).not.toHaveBeenCalled();
   });
 
   it.each(["pending", "delivered"])("does not retry an alert already marked %s", async (status) => {
@@ -104,7 +123,7 @@ describe("moderation alert retry route", () => {
     const response = await retryAlert(ADMIN_TOKEN);
 
     expect(response.status).toBe(409);
-    expect(mocks.sendReportCreatedNotificationWithRetry).not.toHaveBeenCalled();
+    expect(mocks.sendModerationNotification).not.toHaveBeenCalled();
     expect(mocks.storage.createModerationReport).not.toHaveBeenCalled();
   });
 
@@ -117,7 +136,7 @@ describe("moderation alert retry route", () => {
     const deliveryGate = new Promise<void>((resolve) => {
       finishDelivery = resolve;
     });
-    mocks.sendReportCreatedNotificationWithRetry.mockImplementation(async () => {
+    mocks.sendModerationNotification.mockImplementation(async () => {
       beginDelivery();
       await deliveryGate;
     });
@@ -130,8 +149,36 @@ describe("moderation alert retry route", () => {
 
     expect(firstResponse.status).toBe(200);
     expect(secondResponse.status).toBe(409);
-    expect(mocks.sendReportCreatedNotificationWithRetry).toHaveBeenCalledOnce();
-    expect(mocks.storage.updateModerationReportAlertDeliveryStatus).toHaveBeenCalledWith(REPORT_ID, "delivered");
+    expect(mocks.sendModerationNotification).toHaveBeenCalledOnce();
+    expect(mocks.storage.updateModerationReportAlertDeliveryStatus).toHaveBeenCalledWith(REPORT_ID, "delivered", null);
     expect(mocks.storage.createModerationReport).not.toHaveBeenCalled();
+  });
+
+  it("resumes due pending alerts and records a delayed retry after transient failure", async () => {
+    mocks.reset("pending", 1);
+    const { ModerationNotificationError } = await import("../moderation-notifications");
+    mocks.sendModerationNotification.mockRejectedValueOnce(
+      new ModerationNotificationError("temporary failure", "transient"),
+    );
+
+    await resumePendingModerationReportAlerts();
+
+    expect(mocks.storage.getDueModerationReportAlertDeliveries).toHaveBeenCalledOnce();
+    expect(mocks.storage.claimPendingModerationReportAlertAttempt).toHaveBeenCalledWith(REPORT_ID);
+    expect(mocks.sendModerationNotification).toHaveBeenCalledOnce();
+    expect(mocks.storage.updateModerationReportAlertDeliveryStatus).toHaveBeenCalledWith(
+      REPORT_ID,
+      "pending",
+      expect.any(Date),
+    );
+  });
+
+  it("marks a pending alert failed once its persisted attempt limit is exhausted", async () => {
+    mocks.reset("pending", 3);
+
+    await resumePendingModerationReportAlerts();
+
+    expect(mocks.sendModerationNotification).not.toHaveBeenCalled();
+    expect(mocks.storage.updateModerationReportAlertDeliveryStatus).toHaveBeenCalledWith(REPORT_ID, "failed", null);
   });
 });

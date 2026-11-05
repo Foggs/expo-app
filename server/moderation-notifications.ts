@@ -1,7 +1,5 @@
 const WEBHOOK_ENV_KEY = "MODERATION_NOTIFICATION_WEBHOOK_URL";
 const DELIVERY_TIMEOUT_MS = 5_000;
-const REPORT_NOTIFICATION_MAX_ATTEMPTS = 3;
-const REPORT_NOTIFICATION_RETRY_DELAYS_MS = [500, 1_500] as const;
 
 type NotificationKind = "report_created" | "test";
 
@@ -32,7 +30,6 @@ function getWebhookUrl(): { status: ModerationNotificationStatus; url?: URL } {
     return { status: "invalid" };
   }
 }
-
 export function getModerationNotificationStatus(): ModerationNotificationStatus {
   return getWebhookUrl().status;
 }
@@ -71,27 +68,5 @@ export async function sendModerationNotification(kind: NotificationKind): Promis
       ? "transient"
       : "permanent";
     throw new ModerationNotificationError(`Notification webhook returned HTTP ${response.status}`, kind);
-  }
-}
-
-/**
- * Retries only temporary delivery failures. A retry sends the same generic alert;
- * it never creates or resubmits the moderation report.
- */
-export async function sendReportCreatedNotificationWithRetry(): Promise<void> {
-  for (let attempt = 1; attempt <= REPORT_NOTIFICATION_MAX_ATTEMPTS; attempt += 1) {
-    try {
-      await sendModerationNotification("report_created");
-      return;
-    } catch (error) {
-      if (
-        !(error instanceof ModerationNotificationError) ||
-        error.kind !== "transient" ||
-        attempt === REPORT_NOTIFICATION_MAX_ATTEMPTS
-      ) {
-        throw error;
-      }
-      await new Promise((resolve) => setTimeout(resolve, REPORT_NOTIFICATION_RETRY_DELAYS_MS[attempt - 1]));
-    }
   }
 }

@@ -65,7 +65,7 @@ export const moderationPage = `<!doctype html>
           const delivery = document.createElement("p");
           delivery.className = "delivery";
           const deliveryState = report.alertDeliveryStatus || "pending";
-          delivery.textContent = "Owner alert: " + deliveryState;
+          delivery.textContent = "Owner alert: " + deliveryState + " · " + (report.alertDeliveryAttempts || 0) + " attempt(s)";
           const evidence = document.createElement("pre");
           evidence.textContent = JSON.stringify(report.evidence, null, 2);
           card.append(heading, meta, delivery, evidence);

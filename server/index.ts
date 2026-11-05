@@ -1,8 +1,9 @@
 import express from "express";
+import { setInterval } from "node:timers";
 import type { Request, Response, NextFunction } from "express";
 import helmet from "helmet";
 import rateLimit from "express-rate-limit";
-import { registerRoutes } from "./routes";
+import { registerRoutes, resumePendingModerationReportAlerts } from "./routes";
 import { setupWebSocket } from "./websocket";
 import { pool } from "./db";
 import * as fs from "fs";
@@ -291,6 +292,10 @@ function setupSecurity(app: express.Application) {
   configureExpoAndLanding(app);
 
   const server = await registerRoutes(app);
+  void resumePendingModerationReportAlerts();
+  const moderationAlertResumeTimer = setInterval(() => {
+    void resumePendingModerationReportAlerts();
+  }, 5_000);
 
   const wss = setupWebSocket(server);
 

@@ -1,4 +1,4 @@
-import { eq, and, desc, or, notExists } from "drizzle-orm";
+import { eq, and, desc, or, notExists, lte, sql } from "drizzle-orm";
 import { db } from "./db";
 import {
   users,
@@ -59,9 +59,15 @@ export interface IStorage {
     evidence: unknown;
   }): Promise<string>;
   getModerationReports(limit?: number): Promise<(typeof moderationReports.$inferSelect)[]>;
+  getDueModerationReportAlertDeliveries(limit?: number): Promise<Pick<typeof moderationReports.$inferSelect, "id" | "alertDeliveryAttempts">[]>;
+  claimPendingModerationReportAlertAttempt(id: string): Promise<number | undefined>;
   getModerationReportAlertDeliveryStatus(id: string): Promise<string | undefined>;
   claimFailedModerationReportAlertRetry(id: string): Promise<boolean>;
-  updateModerationReportAlertDeliveryStatus(id: string, status: "pending" | "delivered" | "failed"): Promise<boolean>;
+  updateModerationReportAlertDeliveryStatus(
+    id: string,
+    status: "pending" | "delivered" | "failed",
+    nextAttemptAt?: Date | null,
+  ): Promise<boolean>;
   reviewModerationReport(id: string, status: string, reviewNote?: string): Promise<boolean>;
 }
 
@@ -290,6 +296,41 @@ export class DatabaseStorage implements IStorage {
       .limit(limit);
   }
 
+  async getDueModerationReportAlertDeliveries(
+    limit = 100,
+  ): Promise<Pick<typeof moderationReports.$inferSelect, "id" | "alertDeliveryAttempts">[]> {
+    return db.select({
+      id: moderationReports.id,
+      alertDeliveryAttempts: moderationReports.alertDeliveryAttempts,
+    })
+      .from(moderationReports)
+      .where(and(
+        eq(moderationReports.alertDeliveryStatus, "pending"),
+        lte(moderationReports.alertDeliveryNextAttemptAt, new Date()),
+      ))
+      .orderBy(moderationReports.alertDeliveryNextAttemptAt)
+      .limit(limit);
+  }
+
+  async claimPendingModerationReportAlertAttempt(id: string): Promise<number | undefined> {
+    const now = new Date();
+    // A short lease recovers work if the process exits while the webhook request is in flight.
+    const leaseUntil = new Date(now.getTime() + 7_000);
+    const rows = await db.update(moderationReports)
+      .set({
+        alertDeliveryAttempts: sql`${moderationReports.alertDeliveryAttempts} + 1`,
+        alertDeliveryNextAttemptAt: leaseUntil,
+      })
+      .where(and(
+        eq(moderationReports.id, id),
+        eq(moderationReports.alertDeliveryStatus, "pending"),
+        lte(moderationReports.alertDeliveryNextAttemptAt, now),
+        sql`${moderationReports.alertDeliveryAttempts} < 3`,
+      ))
+      .returning({ attempts: moderationReports.alertDeliveryAttempts });
+    return rows[0]?.attempts;
+  }
+
   async getModerationReportAlertDeliveryStatus(id: string): Promise<string | undefined> {
     const [report] = await db.select({ status: moderationReports.alertDeliveryStatus })
       .from(moderationReports)
@@ -299,7 +340,11 @@ export class DatabaseStorage implements IStorage {
 
   async claimFailedModerationReportAlertRetry(id: string): Promise<boolean> {
     const rows = await db.update(moderationReports)
-      .set({ alertDeliveryStatus: "pending" })
+      .set({
+        alertDeliveryStatus: "pending",
+        alertDeliveryAttempts: 0,
+        alertDeliveryNextAttemptAt: new Date(),
+      })
       .where(and(
         eq(moderationReports.id, id),
         eq(moderationReports.alertDeliveryStatus, "failed"),
@@ -311,9 +356,13 @@ export class DatabaseStorage implements IStorage {
   async updateModerationReportAlertDeliveryStatus(
     id: string,
     status: "pending" | "delivered" | "failed",
+    nextAttemptAt: Date | null = null,
   ): Promise<boolean> {
     const rows = await db.update(moderationReports)
-      .set({ alertDeliveryStatus: status })
+      .set({
+        alertDeliveryStatus: status,
+        alertDeliveryNextAttemptAt: nextAttemptAt,
+      })
       .where(eq(moderationReports.id, id))
       .returning({ id: moderationReports.id });
     return rows.length > 0;

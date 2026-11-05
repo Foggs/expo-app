@@ -19,31 +19,79 @@ import {
   getModerationNotificationStatus,
   ModerationNotificationError,
   sendModerationNotification,
-  sendReportCreatedNotificationWithRetry,
 } from "./moderation-notifications";
 
 const GALLERY_MAX_BODY_SIZE = 2 * 1024 * 1024; // 2MB
+const REPORT_NOTIFICATION_MAX_ATTEMPTS = 3;
+const REPORT_NOTIFICATION_RETRY_DELAYS_MS = [500, 1_500] as const;
+let isResumingModerationReportAlerts = false;
+let nextModerationAlertScanErrorLogAt = 0;
 
-async function deliverReportAlert(reportId: string): Promise<"delivered" | "failed" | "unknown"> {
+async function deliverReportAlert(reportId: string): Promise<"delivered" | "failed" | "pending" | "unknown"> {
+  let attempt: number | undefined;
   try {
-    await sendReportCreatedNotificationWithRetry();
+    attempt = await storage.claimPendingModerationReportAlertAttempt(reportId);
+  } catch (error) {
+    console.error("Could not claim a pending moderation report notification.");
+    return "pending";
+  }
+  if (attempt === undefined) return "pending";
+
+  try {
+    await sendModerationNotification("report_created");
   } catch (error) {
     const failureKind = error instanceof ModerationNotificationError ? error.kind : "permanent";
+    const exhausted = attempt !== undefined && attempt >= REPORT_NOTIFICATION_MAX_ATTEMPTS;
+    const shouldRetry = failureKind === "transient" && !exhausted;
     try {
-      await storage.updateModerationReportAlertDeliveryStatus(reportId, "failed");
+      const nextAttemptAt = shouldRetry
+        ? new Date(Date.now() + REPORT_NOTIFICATION_RETRY_DELAYS_MS[attempt - 1])
+        : null;
+      await storage.updateModerationReportAlertDeliveryStatus(
+        reportId,
+        shouldRetry ? "pending" : "failed",
+        nextAttemptAt,
+      );
     } catch {
-      console.error("Could not record failed moderation report notification delivery.");
+      // The claim lease lets the worker recover if this status update fails or the process exits.
+      console.error("Could not record moderation report notification delivery failure.");
     }
-    console.warn(`Moderation report notification delivery failed (${failureKind}).`);
-    return "failed";
+    console.warn(`Moderation report notification delivery failed (${failureKind}; attempt ${attempt}).`);
+    return shouldRetry ? "pending" : "failed";
   }
   try {
-    await storage.updateModerationReportAlertDeliveryStatus(reportId, "delivered");
+    await storage.updateModerationReportAlertDeliveryStatus(reportId, "delivered", null);
     return "delivered";
   } catch {
     // Do not mark a successfully sent alert as failed; that could invite a duplicate retry.
     console.error("Could not record successful moderation report notification delivery.");
     return "unknown";
+  }
+}
+
+export async function resumePendingModerationReportAlerts(): Promise<void> {
+  if (isResumingModerationReportAlerts) return;
+  isResumingModerationReportAlerts = true;
+  try {
+    const deliveries = await storage.getDueModerationReportAlertDeliveries();
+    for (const delivery of deliveries) {
+      if (delivery.alertDeliveryAttempts >= REPORT_NOTIFICATION_MAX_ATTEMPTS) {
+        try {
+          await storage.updateModerationReportAlertDeliveryStatus(delivery.id, "failed", null);
+        } catch {
+          console.error("Could not mark an exhausted moderation report notification as failed.");
+        }
+        continue;
+      }
+      await deliverReportAlert(delivery.id);
+    }
+  } catch {
+    if (Date.now() >= nextModerationAlertScanErrorLogAt) {
+      console.error("Could not load pending moderation report notifications.");
+      nextModerationAlertScanErrorLogAt = Date.now() + 60_000;
+    }
+  } finally {
+    isResumingModerationReportAlerts = false;
   }
 }
 
@@ -492,6 +540,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const deliveryResult = await deliverReportAlert(reportId);
       if (deliveryResult === "failed") {
         res.status(502).json({ message: "Report alert delivery failed. You can try again." });
+        return;
+      }
+      if (deliveryResult === "pending") {
+        res.status(202).json({ message: "Report alert is queued for another delivery attempt." });
         return;
       }
       if (deliveryResult === "unknown") {
