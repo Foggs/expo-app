@@ -44,7 +44,7 @@ Preferred communication style: Simple, everyday language.
 - **Matchmaking**: Queue-based with automatic pairing and timeout protection.
 - **Game Rooms**: Server-authoritative state, turn validation, opponent disconnect detection.
 - **Live Drawing Sync**: Real-time stroke broadcasting with throttling and guaranteed stroke delivery.
-- **Client Connection**: Shared WebSocket via `WebSocketContext` with client-side Zod validation, send guards, and reconnection logic.
+- **Client Connection**: Shared WebSocket via `WebSocketContext` with client-side Zod validation (`lib/network/serverMessages.ts`), send guards, and reconnection logic.
 
 ### Game Features
 - **Drawing Canvas**: `react-native-svg` with PanResponder for input, 12 colors, 5 brush sizes, eraser, undo, clear. Drawings accumulate across rounds, with previous rounds forming a non-editable background layer.

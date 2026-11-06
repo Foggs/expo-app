@@ -176,7 +176,7 @@ export const wsClientMessageSchema = z.discriminatedUnion("type", [
       .string()
       .transform((value) => normalizeRoomCode(value))
       .refine((value) => isValidRoomCode(value), {
-        message: "Invalid room code",
+        error: "Invalid room code",
       }),
   }).strict(),
   z.object({ type: z.literal("leave_room") }).strict(),

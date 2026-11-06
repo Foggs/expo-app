@@ -57,7 +57,7 @@ This audit lowers rejection and incident risk; it does **not** guarantee App Sto
 - High findings still reported:
   - `expo-router@6.0.24` and `query-string` include vulnerable `decode-uri-component` versions. npm's suggested Expo Router fix is a major jump beyond SDK 54, so this needs a compatible upstream SDK update or a separately tested dependency change.
   - Expo/Metro/React Native trees include vulnerable `ws` 6/7, `postcss`, and `image-size` versions; npm also reports `brace-expansion` in the dependency tree.
-  - `zod@3.25.76` is vulnerable to memory exhaustion on oversized constrained collections. The fix is zod 4 (a major upgrade); existing request-body/WebSocket limits and array `.max()` checks mitigate exposure. `zod-validation-error@3.5.4` also needs a compatible major upgrade to clear its related finding.
+  - Resolved (2026-11-06): the `zod@3.25.76` memory-exhaustion advisory is cleared by upgrading to `zod@4.6.7` (with `drizzle-zod@0.8.3`). `zod-validation-error` was unused and has been removed. Request and WebSocket limits are pinned by tests in `shared/__tests__/schema.test.ts` and `server/__tests__/request-validation.test.ts`.
   - `@react-navigation/core` is flagged through `query-string`.
 - Remaining moderate and low findings include Expo CLI/build transitive packages, `@expo/ngrok`, ESLint/TypeScript tooling, `drizzle-kit`, `uuid`, `yaml`, and `deepmerge`. Review them again when compatible SDK/tooling patches are available.
 
@@ -99,5 +99,5 @@ Recommendations (not release-blocking): add a retention purge for `turns` and ab
 ## 7. Residual risks
 - UGC moderation gap (Guideline 1.2); see owner action 2.
 - Public, anyone-can-delete gallery (F7).
-- Build-time dependency advisories pinned by Expo SDK 54 and the zod 3 line.
+- Build-time dependency advisories pinned by Expo SDK 54.
 - No server-side retention limits for drawings.

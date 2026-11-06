@@ -122,7 +122,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         if (!parsed.success) {
           res.status(400).json({
             message: "Invalid request",
-            errors: parsed.error.flatten().fieldErrors,
+            errors: z.flattenError(parsed.error).fieldErrors,
           });
           return;
         }
@@ -185,7 +185,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         if (!parsed.success) {
           res.status(400).json({
             message: "Invalid turn data",
-            errors: parsed.error.flatten().fieldErrors,
+            errors: z.flattenError(parsed.error).fieldErrors,
           });
           return;
         }
@@ -288,7 +288,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!parsed.success) {
         res.status(400).json({
           message: "Invalid drawing data",
-          errors: parsed.error.flatten().fieldErrors,
+          errors: z.flattenError(parsed.error).fieldErrors,
         });
         return;
       }
@@ -377,7 +377,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const parsed = createReportSchema.safeParse(req.body);
       if (!parsed.success) {
-        res.status(400).json({ message: "Invalid report", errors: parsed.error.flatten().fieldErrors });
+        res.status(400).json({ message: "Invalid report", errors: z.flattenError(parsed.error).fieldErrors });
         return;
       }
 
