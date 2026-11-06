@@ -1,4 +1,5 @@
 import { createHmac } from "node:crypto";
+import { request as httpRequest } from "node:http";
 import { type AddressInfo } from "node:net";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
@@ -189,6 +190,86 @@ describe("moderation notifications", () => {
       expect(processAlert).not.toHaveBeenCalled();
     } finally {
       await closeServer();
+    }
+  });
+
+  it("returns HTTP 413 for an oversized chunked stream without a length header", async () => {
+    const processAlert = vi.fn();
+    const server = createWebhookServer([signingSecret], processAlert);
+    const receivedHeaders: Array<Record<string, string | string[] | undefined>> = [];
+    server.on("request", (request) => receivedHeaders.push(request.headers));
+    await new Promise<void>((resolve, reject) => {
+      server.once("error", reject);
+      server.listen(0, "127.0.0.1", resolve);
+    });
+    const { port } = server.address() as AddressInfo;
+
+    // A correctly signed alert, so only the size limit can stop it being processed.
+    const timestamp = Math.floor(Date.now() / 1000).toString();
+    const body = Buffer.from(JSON.stringify({
+      event: "moderation.report.created",
+      idempotencyKey: "oversized-stream-test",
+      padding: "x".repeat(70 * 1024),
+    }));
+    expect(body.length).toBeGreaterThan(64 * 1024);
+    const chunkSize = 8 * 1024;
+
+    try {
+      const response = await new Promise<{ status: number; text: string }>((resolve, reject) => {
+        const request = httpRequest({
+          host: "127.0.0.1",
+          port,
+          path: "/webhook",
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Transfer-Encoding": "chunked",
+            "X-SketchDuel-Timestamp": timestamp,
+            "X-SketchDuel-Signature": signReceiverRequest(body.toString("utf8"), timestamp),
+          },
+        });
+        let responded = false;
+        request.on("response", (res) => {
+          responded = true;
+          const chunks: Buffer[] = [];
+          res.on("data", (chunk: Buffer) => chunks.push(chunk));
+          res.on("end", () => resolve({
+            status: res.statusCode ?? 0,
+            text: Buffer.concat(chunks).toString("utf8"),
+          }));
+        });
+        // The receiver may stop reading mid-stream; only fail if no response arrived.
+        request.on("error", (error) => {
+          if (!responded) reject(error);
+        });
+        expect(request.getHeader("content-length")).toBeUndefined();
+
+        let offset = 0;
+        const writeNextChunk = () => {
+          if (responded || request.destroyed) return;
+          if (offset >= body.length) {
+            request.end();
+            return;
+          }
+          const chunk = body.subarray(offset, offset + chunkSize);
+          offset += chunk.length;
+          request.write(chunk);
+          setTimeout(writeNextChunk, 5);
+        };
+        writeNextChunk();
+      });
+
+      expect(receivedHeaders).toHaveLength(1);
+      expect(receivedHeaders[0]["content-length"]).toBeUndefined();
+      expect(receivedHeaders[0]["transfer-encoding"]).toBe("chunked");
+      expect(response.status).toBe(413);
+      expect(response.text).toBe("Request body too large");
+      expect(processAlert).not.toHaveBeenCalled();
+    } finally {
+      server.closeAllConnections();
+      await new Promise<void>((resolve, reject) => {
+        server.close((error) => error ? reject(error) : resolve());
+      });
     }
   });
 
