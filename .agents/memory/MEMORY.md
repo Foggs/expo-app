@@ -3,5 +3,5 @@
 - [React Native cryptographic randomness](react-native-cryptographic-randomness.md) — native iOS may lack browser crypto; use native secure randomness for tokens.
 - [Lockfile registry URLs](lockfile-registry-urls.md) — installs here can write internal mirror URLs into package-lock.json; rewrite to the public registry.
 - [Vitest peer resolution](vitest-peer-resolution.md) — npm's peer-resolution workaround requires direct Vite/Babel preset dependencies and matching clean-install flags.
-- [Moderation alert recovery tests](moderation-alert-recovery-tests.md) — gate webhook responses so periodic retries cannot outrun persisted-state assertions.
+- [Moderation alert recovery tests](moderation-alert-recovery-tests.md) — gate webhook responses; spawn servers with node --import tsx so SIGKILL crashes are real.
 

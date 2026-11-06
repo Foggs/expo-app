@@ -3,7 +3,7 @@ import { mkdir, mkdtemp, readFile, rm } from "node:fs/promises";
 import { createServer as createHttpsServer } from "node:https";
 import type { ServerResponse } from "node:http";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { spawn, type ChildProcess } from "node:child_process";
 import { Pool } from "pg";
@@ -328,8 +328,12 @@ describe("moderation alert recovery after a real server restart", () => {
 
   async function startServer(): Promise<{ process: ChildProcess; baseUrl: string; logs: () => string }> {
     const port = await findFreePort();
+    // Load tsx in-process rather than via its CLI: the CLI runs the server in a
+    // child process, so SIGKILL would only kill the wrapper and leave the real
+    // server running (and retrying webhooks) after a simulated crash.
     const serverProcess = spawn(process.execPath, [
-      resolve("node_modules/tsx/dist/cli.mjs"),
+      "--import",
+      "tsx",
       "server/index.ts",
     ], {
       cwd: process.cwd(),
