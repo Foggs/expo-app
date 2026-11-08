@@ -223,6 +223,11 @@ describe("WebSocket message validation", () => {
       { type: "cancel_invite" },
       { type: "cancel_invite", inviteId: "a".repeat(31) },
       { type: "cancel_invite", inviteId: "a".repeat(32), reason: "x" },
+      { type: "set_visibility" },
+      { type: "set_visibility", visibility: "invisible" },
+      { type: "set_visibility", visibility: "VISIBLE" },
+      { type: "set_visibility", visibility: 1 },
+      { type: "set_visibility", visibility: "visible", playerKey: "someone-else" },
     ]) {
       client.ws.send(JSON.stringify(message));
       expect(await client.next()).toMatchObject({ type: "error", code: "VALIDATION_FAILED" });
@@ -241,6 +246,10 @@ describe("WebSocket message validation", () => {
     expect(await client.next()).toMatchObject({ type: "invite_error", code: "INVITE_NOT_FOUND" });
     client.ws.send(JSON.stringify({ type: "cancel_invite", inviteId: "b".repeat(32) }));
     expect(await client.next()).toMatchObject({ type: "invite_error", code: "INVITE_NOT_FOUND" });
+    for (const visibility of ["visible", "appear_offline", "do_not_disturb"]) {
+      client.ws.send(JSON.stringify({ type: "set_visibility", visibility }));
+      expect(await client.next()).toMatchObject({ type: "friends_error", code: "NOT_LINKED" });
+    }
     client.ws.close();
   });
 

@@ -73,6 +73,7 @@ This audit lowers rejection and incident risk; it does **not** guarantee App Sto
 | Game Center display name | Apple (on device) | Shown on the player's own home screen only. **Not sent to the server.** | Show who is signed in | Not stored | n/a |
 | Game Center friend IDs (team-scoped) | Apple, on device, after the player allows friend-list access | Sent over WSS while the app is in the foreground; held on that connection **in server memory only** | Show which friends play and are online; direct invites | Until the connection closes | Automatic |
 | Game Center friend names | Apple (on device) | Shown on the player's own Friends screen and invite banner. **Not sent to the server.** | Show friends by name | Not stored | n/a |
+| Friend visibility (Visible / Appear Offline / Do Not Disturb) | Player choice on the Friends screen | Server database, on the Game Center account | Decide how friends see the player and whether invites reach them | Kept with the account | With the Game Center account (manual database deletion only) |
 | Friend invites | User action | In memory only; the friend's open app sessions | Start a match with a friend | 30 s, or until answered | Automatic |
 | Friend room codes | Server | In memory only | Private matches | 10 min TTL | Automatic |
 | IP address | Network | Rate limiter memory; hosting infrastructure | Abuse prevention | Transient in app | n/a |

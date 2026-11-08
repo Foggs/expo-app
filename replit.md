@@ -44,7 +44,7 @@ Preferred communication style: Simple, everyday language.
 - **Matchmaking**: Queue-based with automatic pairing and timeout protection.
 - **Game Rooms**: Server-authoritative state, turn validation, opponent disconnect detection.
 - **Live Drawing Sync**: Real-time stroke broadcasting with throttling and guaranteed stroke delivery.
-- **Friends & Invites**: `server/friendHub.ts` keeps each session's Game Center friend IDs in memory, pushes mutual-only presence (online / in a game / offline), hides blocked pairs, and runs direct invites (30 s expiry, rate limits). Accepting reserves a private friend room for the two accounts. The app uses a separate foreground-only socket (`contexts/SocialContext.tsx`), a Friends screen (`app/friend-list.tsx`) and a global invite banner. See `docs/game-center.md`.
+- **Friends & Invites**: `server/friendHub.ts` keeps each session's Game Center friend IDs in memory, pushes mutual-only presence (online / in a game / Do Not Disturb / offline), applies each account's saved visibility (Visible, Appear Offline, Do Not Disturb; stored on `player_accounts`, enforced on the server), hides blocked pairs, and runs direct invites (30 s expiry, rate limits). Accepting reserves a private friend room for the two accounts. The app uses a separate foreground-only socket (`contexts/SocialContext.tsx`), a Friends screen (`app/friend-list.tsx`) and a global invite banner. See `docs/game-center.md`.
 - **Client Connection**: Shared WebSocket via `WebSocketContext` with client-side Zod validation (`lib/network/serverMessages.ts`), send guards, and reconnection logic.
 
 ### Game Features

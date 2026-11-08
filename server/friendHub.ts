@@ -3,6 +3,7 @@ import type {
   FriendInviteClosedReason,
   FriendInviteErrorCode,
   FriendPresenceStatus,
+  FriendVisibility,
   WsServerMessage,
 } from "@shared/schema";
 import type { FriendAccount, IStorage } from "./storage";
@@ -15,6 +16,12 @@ import type { FriendAccount, IStorage } from "./storage";
  * session only. Two players count as friends only when each one's uploaded
  * list includes the other. Blocked pairs never see each other.
  *
+ * Each account chooses how friends see it (stored on the account, so it
+ * follows the player to every device): Visible, Appear Offline (shown as
+ * offline and cannot be invited) or Do Not Disturb (shown as busy; invites are
+ * declined automatically). Until an account's choice is loaded it is treated
+ * as Appear Offline, so a player is never revealed by mistake.
+ *
  * Accepting an invite reserves a private friend room for the two accounts;
  * both apps then join it with the existing room flow, which starts the match.
  */
@@ -26,12 +33,16 @@ export type FriendHubOptions = {
   invitesPerMinute?: number;
   /** Friend-list uploads one connection may send per minute. Defaults to 6. */
   friendListUploadsPerMinute?: number;
+  /** Visibility changes one connection may send per minute. Defaults to 10. */
+  visibilityChangesPerMinute?: number;
 };
 
 const DEFAULT_INVITE_TTL_MS = 30_000;
 const DEFAULT_INVITES_PER_MINUTE = 5;
 const DEFAULT_FRIEND_UPLOADS_PER_MINUTE = 6;
+const DEFAULT_VISIBILITY_CHANGES_PER_MINUTE = 10;
 const RATE_WINDOW_MS = 60_000;
+const DO_NOT_DISTURB_MESSAGE = "Your friend has Do Not Disturb on and isn't taking invites right now. Try again later.";
 
 /** The connection fields the friend hub reads and maintains. */
 export interface SocialConnection {
@@ -50,6 +61,7 @@ export interface SocialConnection {
   sentStatus: Map<string, FriendPresenceStatus>;
   friendListVersion: number;
   friendUploadTimes: number[];
+  visibilityChangeTimes: number[];
 }
 
 type Invite = {
@@ -70,7 +82,10 @@ export type FriendHubDeps = {
   send(conn: SocialConnection, message: WsServerMessage): void;
   /** Reserves a private room only these two accounts can join. Returns its code, or null. */
   createInviteRoom(firstPlayerKey: string, secondPlayerKey: string): string | null;
-  storage: Pick<IStorage, "findFriendAccounts" | "findBlockedPlayerKeys" | "arePlayersBlocked">;
+  storage: Pick<
+    IStorage,
+    "findFriendAccounts" | "findBlockedPlayerKeys" | "arePlayersBlocked" | "getFriendVisibility" | "setFriendVisibility"
+  >;
 };
 
 export type FriendHub = ReturnType<typeof createFriendHub>;
@@ -79,9 +94,20 @@ export function createFriendHub(deps: FriendHubDeps, options: FriendHubOptions =
   const inviteTtlMs = options.inviteTtlMs ?? DEFAULT_INVITE_TTL_MS;
   const invitesPerMinute = options.invitesPerMinute ?? DEFAULT_INVITES_PER_MINUTE;
   const uploadsPerMinute = options.friendListUploadsPerMinute ?? DEFAULT_FRIEND_UPLOADS_PER_MINUTE;
+  const visibilityChangesPerMinute = options.visibilityChangesPerMinute ?? DEFAULT_VISIBILITY_CHANGES_PER_MINUTE;
 
   const invites = new Map<string, Invite>();
   const inviteTimesByAccount = new Map<string, number[]>();
+  /** Loaded visibility for accounts with an open friends session. */
+  const visibilityByAccount = new Map<string, FriendVisibility>();
+  /** Bumped on every change, so a slower read cannot overwrite a newer choice. */
+  const visibilityVersions = new Map<string, number>();
+  /** Per-account queue so saves from two devices are applied in the order they were made. */
+  const visibilityWrites = new Map<string, Promise<void>>();
+
+  function visibilityOf(accountKey: string): FriendVisibility {
+    return visibilityByAccount.get(accountKey) ?? "appear_offline";
+  }
 
   function withinLimit(times: number[], limit: number): boolean {
     const now = Date.now();
@@ -122,6 +148,9 @@ export function createFriendHub(deps: FriendHubDeps, options: FriendHubOptions =
    */
   function statusFor(viewer: SocialConnection, friendKey: string): FriendPresenceStatus {
     if (!viewer.gameCenterPlayerId || !listsFriend(friendKey, viewer.gameCenterPlayerId)) return "offline";
+    const visibility = visibilityOf(friendKey);
+    if (visibility === "appear_offline") return "offline";
+    if (visibility === "do_not_disturb") return "busy";
     return isInGame(friendKey) ? "in_game" : "online";
   }
 
@@ -189,8 +218,12 @@ export function createFriendHub(deps: FriendHubDeps, options: FriendHubOptions =
     const version = ++conn.friendListVersion;
     conn.friendIds = new Set(ids);
 
+    const accountKey = conn.sessionKey;
+    const visibilityVersion = visibilityVersions.get(accountKey) ?? 0;
     let visible: FriendAccount[];
+    let ownVisibility: FriendVisibility | null;
     try {
+      ownVisibility = await deps.storage.getFriendVisibility(accountKey);
       const accounts = (await deps.storage.findFriendAccounts(ids))
         .filter((account) => account.playerKey !== conn.sessionKey);
       const blocked = await deps.storage.findBlockedPlayerKeys(conn.playerKeys, accounts);
@@ -203,6 +236,9 @@ export function createFriendHub(deps: FriendHubDeps, options: FriendHubOptions =
       return;
     }
     if (conn.friendListVersion !== version || !isLive(conn)) return;
+    if ((visibilityVersions.get(accountKey) ?? 0) === visibilityVersion && ownVisibility) {
+      visibilityByAccount.set(accountKey, ownVisibility);
+    }
 
     conn.visibleFriends = new Map(visible.map((account) => [
       account.gameCenterPlayerId,
@@ -215,6 +251,7 @@ export function createFriendHub(deps: FriendHubDeps, options: FriendHubOptions =
       return { playerId: account.gameCenterPlayerId, status };
     });
     deps.send(conn, { type: "friends_status", friends });
+    deps.send(conn, { type: "visibility_status", visibility: visibilityOf(accountKey) });
 
     // Friends whose sessions list this player but loaded their lists before
     // this account existed (or was visible) learn about it now. Blocks were
@@ -252,6 +289,10 @@ export function createFriendHub(deps: FriendHubDeps, options: FriendHubOptions =
       return;
     }
     const friend = conn.visibleFriends.get(friendGameCenterId);
+    if (friend && statusFor(conn, friend.playerKey) === "busy") {
+      inviteError(conn, "FRIEND_BUSY", DO_NOT_DISTURB_MESSAGE);
+      return;
+    }
     const busy = friend && Array.from(invites.values()).some((invite) =>
       invite.toKey === friend.playerKey || invite.fromKey === friend.playerKey);
     if (!friend || busy || statusFor(conn, friend.playerKey) !== "online") {
@@ -282,10 +323,13 @@ export function createFriendHub(deps: FriendHubDeps, options: FriendHubOptions =
       blocked = true;
     }
     if (invites.get(invite.id) !== invite) return;
-    if (blocked) {
+    // The friend may have changed their visibility while blocks were checked.
+    const statusNow = statusFor(conn, friend.playerKey);
+    if (blocked || statusNow !== "online") {
       invites.delete(invite.id);
       clearTimeout(invite.timer);
-      inviteError(conn, "FRIEND_UNAVAILABLE", "This friend can't take an invite right now.");
+      if (!blocked && statusNow === "busy") inviteError(conn, "FRIEND_BUSY", DO_NOT_DISTURB_MESSAGE);
+      else inviteError(conn, "FRIEND_UNAVAILABLE", "This friend can't take an invite right now.");
       return;
     }
 
@@ -376,16 +420,74 @@ export function createFriendHub(deps: FriendHubDeps, options: FriendHubOptions =
     }
   }
 
+  async function setVisibility(conn: SocialConnection, visibility: FriendVisibility): Promise<void> {
+    if (!conn.gameCenterPlayerId) {
+      deps.send(conn, { type: "friends_error", code: "NOT_LINKED", message: "Sign in to Game Center to change how friends see you." });
+      return;
+    }
+    if (!withinLimit(conn.visibilityChangeTimes, visibilityChangesPerMinute)) {
+      deps.send(conn, { type: "friends_error", code: "RATE_LIMITED", message: "You're changing your status too often. Try again in a minute." });
+      return;
+    }
+    const accountKey = conn.sessionKey;
+    const previous = visibilityWrites.get(accountKey) ?? Promise.resolve();
+    const write = previous.then(async () => {
+      let saved: boolean;
+      try {
+        saved = await deps.storage.setFriendVisibility(accountKey, visibility);
+      } catch (error) {
+        console.error("Could not save friend visibility:", error instanceof Error ? error.message : error);
+        deps.send(conn, { type: "friends_error", code: "FAILED", message: "Your status couldn't be saved. Try again." });
+        return;
+      }
+      if (!saved) {
+        deps.send(conn, { type: "friends_error", code: "NOT_LINKED", message: "Sign in to Game Center to change how friends see you." });
+        return;
+      }
+      visibilityVersions.set(accountKey, (visibilityVersions.get(accountKey) ?? 0) + 1);
+      visibilityByAccount.set(accountKey, visibility);
+
+      // Invites waiting for this player end now: Do Not Disturb declines them
+      // politely; Appear Offline makes the player look unavailable.
+      if (visibility !== "visible") {
+        for (const invite of Array.from(invites.values())) {
+          if (invite.toKey !== accountKey) continue;
+          closeInvite(invite, visibility === "do_not_disturb" ? "busy" : "unavailable", "declined");
+        }
+      }
+
+      const update: WsServerMessage = { type: "visibility_status", visibility };
+      deps.send(conn, update);
+      for (const other of socialConnectionsOf(accountKey)) {
+        if (other.id !== conn.id) deps.send(other, update);
+      }
+      refreshPresence(accountKey);
+    });
+    visibilityWrites.set(accountKey, write);
+    try {
+      await write;
+    } finally {
+      if (visibilityWrites.get(accountKey) === write) visibilityWrites.delete(accountKey);
+    }
+  }
+
   /** Call after a connection closes or a player's game starts or ends. */
   function playersChanged(accountKeys: string[]): void {
     closeUnavailableInvites();
-    for (const key of new Set(accountKeys)) refreshPresence(key);
+    for (const key of new Set(accountKeys)) {
+      refreshPresence(key);
+      // Forget the loaded visibility once the account has no friends session left.
+      if (key && socialConnectionsOf(key).length === 0) visibilityByAccount.delete(key);
+    }
   }
 
   function closeAll(): void {
     for (const invite of invites.values()) clearTimeout(invite.timer);
     invites.clear();
     inviteTimesByAccount.clear();
+    visibilityByAccount.clear();
+    visibilityVersions.clear();
+    visibilityWrites.clear();
   }
 
   return {
@@ -393,6 +495,7 @@ export function createFriendHub(deps: FriendHubDeps, options: FriendHubOptions =
     inviteFriend,
     respondToInvite,
     cancelInvite,
+    setVisibility,
     applyBlock,
     playersChanged,
     closeAll,
@@ -402,7 +505,13 @@ export function createFriendHub(deps: FriendHubDeps, options: FriendHubOptions =
 /** Initial friend fields for a new connection. */
 export function initialSocialState(): Pick<
   SocialConnection,
-  "gameCenterPlayerId" | "friendIds" | "visibleFriends" | "sentStatus" | "friendListVersion" | "friendUploadTimes"
+  | "gameCenterPlayerId"
+  | "friendIds"
+  | "visibleFriends"
+  | "sentStatus"
+  | "friendListVersion"
+  | "friendUploadTimes"
+  | "visibilityChangeTimes"
 > {
   return {
     gameCenterPlayerId: null,
@@ -411,5 +520,6 @@ export function initialSocialState(): Pick<
     sentStatus: new Map(),
     friendListVersion: 0,
     friendUploadTimes: [],
+    visibilityChangeTimes: [],
   };
 }

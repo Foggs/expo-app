@@ -1171,6 +1171,9 @@ function dispatchMessage(conn: PlayerConnection, msg: WsClientMessage): void {
     case "cancel_invite":
       friendHub.cancelInvite(conn, msg.inviteId);
       break;
+    case "set_visibility":
+      void friendHub.setVisibility(conn, msg.visibility);
+      break;
   }
 }
 

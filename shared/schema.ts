@@ -68,6 +68,8 @@ export const playerAccounts = pgTable("player_accounts", {
   playerKey: text("player_key").notNull().unique(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   lastSignedInAt: timestamp("last_signed_in_at").defaultNow().notNull(),
+  /** How this player appears to Game Center friends: visible, appear_offline or do_not_disturb. */
+  friendVisibility: text("friend_visibility").notNull().default("visible"),
 });
 
 /**
@@ -208,6 +210,9 @@ export const strokeSchema = z.object({
 export const gameCenterPlayerIdSchema = z.string().min(1).max(128).regex(/^[A-Za-z0-9:_.\-]+$/);
 export const MAX_UPLOADED_FRIENDS = 500;
 export const friendInviteIdSchema = z.string().regex(/^[a-f0-9]{32}$/);
+/** How a player appears to Game Center friends. */
+export const friendVisibilitySchema = z.enum(["visible", "appear_offline", "do_not_disturb"]);
+export type FriendVisibility = z.infer<typeof friendVisibilitySchema>;
 
 export const wsClientMessageSchema = z.discriminatedUnion("type", [
   z.object({
@@ -255,15 +260,24 @@ export const wsClientMessageSchema = z.discriminatedUnion("type", [
     accept: z.boolean(),
   }).strict(),
   z.object({ type: z.literal("cancel_invite"), inviteId: friendInviteIdSchema }).strict(),
+  z.object({ type: z.literal("set_visibility"), visibility: friendVisibilitySchema }).strict(),
 ]);
 
-export type FriendPresenceStatus = "online" | "in_game" | "offline";
-export type FriendInviteClosedReason = "declined" | "expired" | "cancelled" | "unavailable" | "answered_elsewhere";
+/** "busy" is a friend with Do Not Disturb on. Appear Offline shows as "offline". */
+export type FriendPresenceStatus = "online" | "in_game" | "busy" | "offline";
+export type FriendInviteClosedReason =
+  | "declined"
+  | "expired"
+  | "cancelled"
+  | "unavailable"
+  | "answered_elsewhere"
+  | "busy";
 export type FriendInviteErrorCode =
   | "NOT_LINKED"
   | "RATE_LIMITED"
   | "ALREADY_INVITING"
   | "FRIEND_UNAVAILABLE"
+  | "FRIEND_BUSY"
   | "IN_GAME"
   | "INVITE_NOT_FOUND";
 
@@ -311,7 +325,8 @@ export type WsServerMessage =
   | { type: "invite_received"; inviteId: string; playerId: string; expiresInMs: number }
   | { type: "invite_accepted"; inviteId: string; roomCode: string }
   | { type: "invite_closed"; inviteId: string; reason: FriendInviteClosedReason }
-  | { type: "invite_error"; code: FriendInviteErrorCode; message: string };
+  | { type: "invite_error"; code: FriendInviteErrorCode; message: string }
+  | { type: "visibility_status"; visibility: FriendVisibility };
 
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type User = typeof users.$inferSelect;

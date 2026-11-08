@@ -102,7 +102,49 @@ describe("friends state", () => {
     expect(state.notice).toEqual({ kind: "error", message: "Slow down." });
   });
 
+  it("tracks the player's own visibility and settles a pending change", () => {
+    let state = apply(INITIAL_FRIENDS_STATE, { type: "visibility_status", visibility: "visible" });
+    expect(state.visibility).toBe("visible");
+    state = friendsReducer(state, { type: "visibility_requested", visibility: "do_not_disturb" });
+    expect(state.visibilitySaving).toBe("do_not_disturb");
+    // Another device's earlier change arrives first: shown, but this device's choice stays pending.
+    state = apply(state, { type: "visibility_status", visibility: "appear_offline" });
+    expect(state).toMatchObject({ visibility: "appear_offline", visibilitySaving: "do_not_disturb" });
+    state = apply(state, { type: "visibility_status", visibility: "do_not_disturb" });
+    expect(state).toMatchObject({ visibility: "do_not_disturb", visibilitySaving: null });
+
+    state = friendsReducer(state, { type: "visibility_requested", visibility: "visible" });
+    state = apply(state, { type: "friends_error", code: "RATE_LIMITED", message: "Too often." });
+    expect(state).toMatchObject({ visibility: "do_not_disturb", visibilitySaving: null });
+    expect(state.notice).toEqual({ kind: "error", message: "Too often." });
+
+    state = friendsReducer(state, { type: "visibility_requested", visibility: "visible" });
+    state = friendsReducer(state, { type: "connection_lost" });
+    expect(state).toMatchObject({ visibility: "do_not_disturb", visibilitySaving: null });
+  });
+
+  it("tells the sender politely when a friend has Do Not Disturb on", () => {
+    let state = friendsReducer(INITIAL_FRIENDS_STATE, { type: "invite_requested", playerId: ALICE });
+    state = apply(state, { type: "invite_error", code: "FRIEND_BUSY", message: "Busy." });
+    expect(state.sending).toBeNull();
+    expect(state.notice).toEqual({ kind: "invite_closed", role: "sender", playerId: ALICE, reason: "busy" });
+    expect(describeNotice(state.notice!, "Alice")).toBe(
+      "Alice has Do Not Disturb on, so they're not taking invites right now. Try again later.",
+    );
+
+    // A pending invite closed because the friend turned on Do Not Disturb reads the same way.
+    state = friendsReducer(state, { type: "invite_requested", playerId: BOB });
+    state = apply(
+      state,
+      { type: "invite_sent", inviteId: "i9", playerId: BOB, expiresInMs: 30_000 },
+      { type: "invite_closed", inviteId: "i9", reason: "busy" },
+    );
+    expect(describeNotice(state.notice!, "Bob")).toMatch(/^Bob has Do Not Disturb on/);
+  });
+
   it("ignores messages that do not match the schema", () => {
+    expect(socialServerMessageSchema.safeParse({ type: "visibility_status", visibility: "hidden" }).success).toBe(false);
+    expect(socialServerMessageSchema.safeParse({ type: "friend_presence", playerId: ALICE, status: "busy" }).success).toBe(true);
     expect(socialServerMessageSchema.safeParse({ type: "friend_presence", playerId: ALICE, status: "away" }).success).toBe(false);
     expect(socialServerMessageSchema.safeParse({ type: "match_found" }).success).toBe(false);
   });
@@ -113,13 +155,15 @@ describe("friends state", () => {
         { playerId: "T:_zed", displayName: "Zed" },
         { playerId: ALICE, displayName: "Alice" },
         { playerId: BOB, displayName: "Bob" },
+        { playerId: "T:_dee", displayName: "Dee" },
         { playerId: "T:_no-app", displayName: "No App" },
       ],
-      { [ALICE]: "offline", [BOB]: "in_game", "T:_zed": "online" },
+      { [ALICE]: "offline", [BOB]: "in_game", "T:_zed": "online", "T:_dee": "busy" },
     );
     expect(list.map((friend) => [friend.displayName, friend.status])).toEqual([
       ["Zed", "online"],
       ["Bob", "in_game"],
+      ["Dee", "busy"],
       ["Alice", "offline"],
     ]);
   });

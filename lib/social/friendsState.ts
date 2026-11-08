@@ -1,9 +1,13 @@
 import { z } from "zod";
 
-export type FriendPresenceStatus = "online" | "in_game" | "offline";
-export type InviteClosedReason = "declined" | "expired" | "cancelled" | "unavailable" | "answered_elsewhere";
+/** "busy" is a friend with Do Not Disturb on. */
+export type FriendPresenceStatus = "online" | "in_game" | "busy" | "offline";
+export type InviteClosedReason = "declined" | "expired" | "cancelled" | "unavailable" | "answered_elsewhere" | "busy";
 
-const presenceSchema = z.enum(["online", "in_game", "offline"]);
+const presenceSchema = z.enum(["online", "in_game", "busy", "offline"]);
+export const friendVisibilitySchema = z.enum(["visible", "appear_offline", "do_not_disturb"]);
+/** How this player appears to their friends. */
+export type FriendVisibility = z.infer<typeof friendVisibilitySchema>;
 
 /** Messages the server sends on the friends connection. Anything else is ignored. */
 export const socialServerMessageSchema = z.discriminatedUnion("type", [
@@ -20,9 +24,10 @@ export const socialServerMessageSchema = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("invite_closed"),
     inviteId: z.string(),
-    reason: z.enum(["declined", "expired", "cancelled", "unavailable", "answered_elsewhere"]),
+    reason: z.enum(["declined", "expired", "cancelled", "unavailable", "answered_elsewhere", "busy"]),
   }),
   z.object({ type: z.literal("invite_error"), code: z.string(), message: z.string() }),
+  z.object({ type: z.literal("visibility_status"), visibility: friendVisibilitySchema }),
 ]);
 
 export type SocialServerMessage = z.infer<typeof socialServerMessageSchema>;
@@ -46,6 +51,10 @@ export type FriendsState = {
   /** A match room both players should join, set when an invite is accepted. */
   acceptedRoom: { roomCode: string; playerId: string } | null;
   notice: FriendsNotice | null;
+  /** This player's saved visibility, once the server has sent it. */
+  visibility: FriendVisibility | null;
+  /** A visibility change waiting for the server to confirm it. */
+  visibilitySaving: FriendVisibility | null;
 };
 
 export const INITIAL_FRIENDS_STATE: FriendsState = {
@@ -56,11 +65,14 @@ export const INITIAL_FRIENDS_STATE: FriendsState = {
   incoming: [],
   acceptedRoom: null,
   notice: null,
+  visibility: null,
+  visibilitySaving: null,
 };
 
 export type FriendsAction =
   | { type: "server"; message: SocialServerMessage; now: number }
   | { type: "invite_requested"; playerId: string }
+  | { type: "visibility_requested"; visibility: FriendVisibility }
   | { type: "accepted_room_consumed" }
   | { type: "notice_cleared" }
   | { type: "connection_lost" }
@@ -72,6 +84,8 @@ export function friendsReducer(state: FriendsState, action: FriendsAction): Frie
       return INITIAL_FRIENDS_STATE;
     case "invite_requested":
       return { ...state, sending: action.playerId, notice: null };
+    case "visibility_requested":
+      return { ...state, visibilitySaving: action.visibility, notice: null };
     case "accepted_room_consumed":
       return { ...state, acceptedRoom: null };
     case "notice_cleared":
@@ -83,7 +97,7 @@ export function friendsReducer(state: FriendsState, action: FriendsAction): Frie
         : state.sending
           ? { kind: "error", message: "Lost connection. The invite was not sent." }
           : state.notice;
-      return { ...state, loaded: false, sending: null, outgoing: null, incoming: [], notice };
+      return { ...state, loaded: false, sending: null, outgoing: null, incoming: [], notice, visibilitySaving: null };
     }
     case "server":
       return applyServerMessage(state, action.message, action.now);
@@ -111,7 +125,14 @@ function applyServerMessage(state: FriendsState, message: SocialServerMessage, n
       };
     }
     case "friends_error":
-      return { ...state, notice: { kind: "error", message: message.message } };
+      return { ...state, visibilitySaving: null, notice: { kind: "error", message: message.message } };
+    case "visibility_status":
+      return {
+        ...state,
+        visibility: message.visibility,
+        // Another device's change, or this one's confirmation, settles any pending choice.
+        visibilitySaving: state.visibilitySaving === message.visibility ? null : state.visibilitySaving,
+      };
     case "invite_sent":
       return {
         ...state,
@@ -161,6 +182,13 @@ function applyServerMessage(state: FriendsState, message: SocialServerMessage, n
       };
     }
     case "invite_error":
+      if (message.code === "FRIEND_BUSY" && state.sending) {
+        return {
+          ...state,
+          sending: null,
+          notice: { kind: "invite_closed", role: "sender", playerId: state.sending, reason: "busy" },
+        };
+      }
       return { ...state, sending: null, notice: { kind: "error", message: message.message } };
   }
 }
@@ -176,6 +204,8 @@ export function describeNotice(notice: FriendsNotice, name: string): string {
         return `${name} didn't answer in time.`;
       case "cancelled":
         return "Invite cancelled.";
+      case "busy":
+        return `${name} has Do Not Disturb on, so they're not taking invites right now. Try again later.`;
       case "unavailable":
       case "answered_elsewhere":
         return `${name} isn't available right now.`;
@@ -193,11 +223,11 @@ export function describeNotice(notice: FriendsNotice, name: string): string {
 
 export type FriendListEntry = { playerId: string; displayName: string; status: FriendPresenceStatus };
 
-const STATUS_ORDER: Record<FriendPresenceStatus, number> = { online: 0, in_game: 1, offline: 2 };
+const STATUS_ORDER: Record<FriendPresenceStatus, number> = { online: 0, in_game: 1, busy: 2, offline: 3 };
 
 /**
  * Friends to show: Game Center friends from this device that the server
- * listed. Online first, then in a game, then offline; alphabetical within.
+ * listed. Online first, then in a game, then busy, then offline; alphabetical within.
  */
 export function buildFriendList(
   deviceFriends: { playerId: string; displayName: string }[],

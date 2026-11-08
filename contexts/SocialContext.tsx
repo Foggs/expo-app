@@ -19,6 +19,7 @@ import {
   socialServerMessageSchema,
   type FriendListEntry,
   type FriendsState,
+  type FriendVisibility,
 } from "@/lib/social/friendsState";
 import {
   getGameCenterFriendsAccess,
@@ -40,6 +41,8 @@ type SocialContextValue = FriendsState & {
   refreshFriends(options: { prompt: boolean }): Promise<void>;
   inviteFriend(playerId: string): boolean;
   cancelInvite(): void;
+  /** Changes how friends see this player, on every device. */
+  setVisibility(visibility: FriendVisibility): void;
   respondToInvite(inviteId: string, accept: boolean): void;
   consumeAcceptedRoom(): void;
   clearNotice(): void;
@@ -240,6 +243,13 @@ export function SocialProvider({ children }: { children: React.ReactNode }) {
     if (state.outgoing) send({ type: "cancel_invite", inviteId: state.outgoing.inviteId });
   }, [send, state.outgoing]);
 
+  const setVisibility = useCallback((visibility: FriendVisibility) => {
+    if (visibility === (state.visibilitySaving ?? state.visibility)) return;
+    if (send({ type: "set_visibility", visibility })) {
+      dispatch({ type: "visibility_requested", visibility });
+    }
+  }, [send, state.visibility, state.visibilitySaving]);
+
   const respondToInvite = useCallback((inviteId: string, accept: boolean) => {
     if (!send({ type: "respond_invite", inviteId, accept })) {
       dispatch({ type: "connection_lost" });
@@ -261,11 +271,12 @@ export function SocialProvider({ children }: { children: React.ReactNode }) {
     refreshFriends,
     inviteFriend,
     cancelInvite,
+    setVisibility,
     respondToInvite,
     consumeAcceptedRoom: () => dispatch({ type: "accepted_room_consumed" }),
     clearNotice: () => dispatch({ type: "notice_cleared" }),
     openSettings: () => void Linking.openSettings().catch(() => undefined),
-  }), [state, availability, connected, friends, nameFor, refreshFriends, inviteFriend, cancelInvite, respondToInvite]);
+  }), [state, availability, connected, friends, nameFor, refreshFriends, inviteFriend, cancelInvite, setVisibility, respondToInvite]);
 
   return <SocialContext.Provider value={value}>{children}</SocialContext.Provider>;
 }

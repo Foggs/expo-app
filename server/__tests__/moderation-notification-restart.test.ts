@@ -84,7 +84,8 @@ describe("moderation alert recovery after a real server restart", () => {
         game_center_player_id text NOT NULL UNIQUE,
         player_key text NOT NULL UNIQUE,
         created_at timestamptz NOT NULL DEFAULT now(),
-        last_signed_in_at timestamptz NOT NULL DEFAULT now()
+        last_signed_in_at timestamptz NOT NULL DEFAULT now(),
+        friend_visibility text NOT NULL DEFAULT 'visible'
       );
       CREATE TABLE player_device_links (
         device_key text PRIMARY KEY,

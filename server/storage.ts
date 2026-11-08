@@ -10,11 +10,13 @@ import {
   playerAccounts,
   playerDeviceLinks,
   gameCenterProofUses,
+  friendVisibilitySchema,
   type User,
   type InsertUser,
   type Game,
   type Turn,
   type GalleryDrawing,
+  type FriendVisibility,
 } from "@shared/schema";
 import { filterDisplayName } from "@shared/contentFilter";
 
@@ -90,6 +92,10 @@ export interface IStorage {
   resolvePlayerIdentity(key: string): Promise<PlayerIdentity>;
   findFriendAccounts(gameCenterPlayerIds: string[]): Promise<FriendAccount[]>;
   findBlockedPlayerKeys(playerKeys: string[], others: Pick<FriendAccount, "playerKey" | "aliasKeys">[]): Promise<Set<string>>;
+  /** The account's friend visibility, or null if this key is not a Game Center account. */
+  getFriendVisibility(playerKey: string): Promise<FriendVisibility | null>;
+  /** Saves the account's friend visibility. Returns false if this key is not a Game Center account. */
+  setFriendVisibility(playerKey: string, visibility: FriendVisibility): Promise<boolean>;
   linkGameCenterPlayer(data: {
     gameCenterPlayerId: string;
     deviceKey: string;
@@ -392,6 +398,24 @@ export class DatabaseStorage implements IStorage {
       if (account) blocked.add(account);
     }
     return blocked;
+  }
+
+  async getFriendVisibility(playerKey: string): Promise<FriendVisibility | null> {
+    const [account] = await db.select({ friendVisibility: playerAccounts.friendVisibility })
+      .from(playerAccounts)
+      .where(eq(playerAccounts.playerKey, playerKey));
+    if (!account) return null;
+    const parsed = friendVisibilitySchema.safeParse(account.friendVisibility);
+    // An unexpected stored value hides the player rather than showing them.
+    return parsed.success ? parsed.data : "appear_offline";
+  }
+
+  async setFriendVisibility(playerKey: string, visibility: FriendVisibility): Promise<boolean> {
+    const rows = await db.update(playerAccounts)
+      .set({ friendVisibility: visibility })
+      .where(eq(playerAccounts.playerKey, playerKey))
+      .returning({ playerKey: playerAccounts.playerKey });
+    return rows.length > 0;
   }
 
   async linkGameCenterPlayer(data: {

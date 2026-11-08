@@ -423,3 +423,145 @@ describe("Game Center friends", () => {
     await Promise.all([kimSocial.close(), leeSocial.close()]);
   }, TEST_TIMEOUT_MS);
 });
+
+describe("Friend visibility", () => {
+  async function setVisibility(client: Client, visibility: string): Promise<void> {
+    client.send({ type: "set_visibility", visibility });
+    expect(await client.take("visibility_status", (message) => message.visibility === visibility))
+      .toMatchObject({ visibility });
+  }
+
+  it("Appear Offline shows the player as offline and stops invites to them", async () => {
+    const [opal, pete] = await Promise.all([linkedDevice("T:_hide-opal"), linkedDevice("T:_hide-pete")]);
+    const opalSocial = await Client.social(opal, [pete.gcId]);
+    const peteSocial = await Client.social(pete, [opal.gcId]);
+    expect(await opalSocial.presence(pete)).toBe("online");
+    expect(await peteSocial.take("visibility_status")).toMatchObject({ visibility: "visible" });
+
+    // An invite waiting when the player hides ends as if they had gone.
+    opalSocial.send({ type: "invite_friend", playerId: pete.gcId });
+    const pending = await peteSocial.take("invite_received");
+    await setVisibility(peteSocial, "appear_offline");
+    expect(await opalSocial.take("invite_closed")).toMatchObject({ inviteId: pending.inviteId, reason: "unavailable" });
+    expect(await peteSocial.take("invite_closed")).toMatchObject({ inviteId: pending.inviteId, reason: "declined" });
+    expect(await opalSocial.presence(pete)).toBe("offline");
+
+    // Opal's friend list (even reloaded) shows Pete offline, and the server refuses invites to him.
+    expect(statuses(await opalSocial.uploadFriends([pete.gcId]))).toEqual({ [pete.gcId]: "offline" });
+    opalSocial.send({ type: "invite_friend", playerId: pete.gcId });
+    expect(await opalSocial.take("invite_error")).toMatchObject({ code: "FRIEND_UNAVAILABLE" });
+    expect(await peteSocial.quiet("invite_received")).toEqual([]);
+
+    // Pete still sees Opal and can invite her himself.
+    peteSocial.send({ type: "invite_friend", playerId: opal.gcId });
+    const outgoing = await peteSocial.take("invite_sent");
+    peteSocial.send({ type: "cancel_invite", inviteId: outgoing.inviteId });
+    await peteSocial.take("invite_closed");
+
+    await setVisibility(peteSocial, "visible");
+    expect(await opalSocial.presence(pete)).toBe("online");
+    await Promise.all([opalSocial.close(), peteSocial.close()]);
+  }, TEST_TIMEOUT_MS);
+
+  it("Do Not Disturb shows the player as busy and declines invites politely", async () => {
+    const [quinn, rosa] = await Promise.all([linkedDevice("T:_dnd-quinn"), linkedDevice("T:_dnd-rosa")]);
+    const quinnSocial = await Client.social(quinn, [rosa.gcId]);
+    const rosaSocial = await Client.social(rosa, [quinn.gcId]);
+    expect(await quinnSocial.presence(rosa)).toBe("online");
+
+    quinnSocial.send({ type: "invite_friend", playerId: rosa.gcId });
+    const pending = await rosaSocial.take("invite_received");
+    await setVisibility(rosaSocial, "do_not_disturb");
+    expect(await quinnSocial.take("invite_closed")).toMatchObject({ inviteId: pending.inviteId, reason: "busy" });
+    expect(await rosaSocial.take("invite_closed")).toMatchObject({ inviteId: pending.inviteId, reason: "declined" });
+    expect(await quinnSocial.presence(rosa)).toBe("busy");
+
+    quinnSocial.send({ type: "invite_friend", playerId: rosa.gcId });
+    const declined = await quinnSocial.take("invite_error");
+    expect(declined).toMatchObject({ code: "FRIEND_BUSY" });
+    expect(declined.message).toMatch(/Do Not Disturb/);
+    expect(await rosaSocial.quiet("invite_received")).toEqual([]);
+
+    // A game does not change what friends see while Do Not Disturb is on.
+    const rosaGame = await Client.open(rosa.token);
+    const quinnGame = await Client.open(quinn.token);
+    rosaGame.send({ type: "create_room" });
+    const { roomCode } = await rosaGame.take("room_created");
+    quinnGame.send({ type: "join_room", roomCode });
+    await rosaGame.take("match_found");
+    expect(await quinnSocial.quiet("friend_presence")).toEqual([]);
+    await Promise.all([rosaGame.close(), quinnGame.close()]);
+
+    await Promise.all([quinnSocial.close(), rosaSocial.close()]);
+  }, TEST_TIMEOUT_MS);
+
+  it("keeps the choice across reconnects and on every device, and updates other devices live", async () => {
+    const sam = await linkedDevice("T:_sync-sam");
+    const samPhone = sam;
+    const samTablet = await linkedDevice("T:_sync-sam");
+    const tess = await linkedDevice("T:_sync-tess");
+    const tessSocial = await Client.social(tess, [sam.gcId]);
+
+    let phone = await Client.social(samPhone, [tess.gcId]);
+    expect(await phone.take("visibility_status")).toMatchObject({ visibility: "visible" });
+    expect(await tessSocial.presence(sam)).toBe("online");
+    await setVisibility(phone, "do_not_disturb");
+    expect(await tessSocial.presence(sam)).toBe("busy");
+    await phone.close();
+    expect(await tessSocial.presence(sam)).toBe("offline");
+
+    const saved = await appPool.query<{ friend_visibility: string }>(
+      "select friend_visibility from player_accounts where game_center_player_id = $1",
+      [sam.gcId],
+    );
+    expect(saved.rows).toEqual([{ friend_visibility: "do_not_disturb" }]);
+
+    // Reconnecting, on the same device or another one, restores the saved choice.
+    phone = await Client.social(samPhone, [tess.gcId]);
+    expect(await phone.take("visibility_status")).toMatchObject({ visibility: "do_not_disturb" });
+    expect(await tessSocial.presence(sam)).toBe("busy");
+    const tablet = await Client.social(samTablet, [tess.gcId]);
+    expect(await tablet.take("visibility_status")).toMatchObject({ visibility: "do_not_disturb" });
+    // Friends who load their list now see the saved choice straight away.
+    expect(statuses(await tessSocial.uploadFriends([sam.gcId]))).toEqual({ [sam.gcId]: "busy" });
+
+    // A change on one device reaches the other at once.
+    await setVisibility(tablet, "appear_offline");
+    expect(await phone.take("visibility_status", (message) => message.visibility === "appear_offline"))
+      .toMatchObject({ visibility: "appear_offline" });
+    expect(await tessSocial.presence(sam)).toBe("offline");
+    await setVisibility(phone, "visible");
+    expect(await tablet.take("visibility_status", (message) => message.visibility === "visible"))
+      .toMatchObject({ visibility: "visible" });
+    expect(await tessSocial.presence(sam)).toBe("online");
+
+    await Promise.all([tessSocial.close(), phone.close(), tablet.close()]);
+  }, TEST_TIMEOUT_MS);
+
+  it("refuses the setting without Game Center and limits how often it changes", async () => {
+    const unlinked = await Client.open(randomBytes(32).toString("hex"));
+    unlinked.send({ type: "set_visibility", visibility: "appear_offline" });
+    expect(await unlinked.take("friends_error")).toMatchObject({ code: "NOT_LINKED" });
+    expect(await unlinked.quiet("visibility_status")).toEqual([]);
+
+    const uma = await linkedDevice("T:_visibility-limit-uma");
+    const umaSocial = await Client.social(uma, []);
+    await umaSocial.take("visibility_status");
+    for (let i = 0; i < 10; i++) {
+      umaSocial.send({ type: "set_visibility", visibility: i % 2 === 0 ? "do_not_disturb" : "visible" });
+    }
+    umaSocial.send({ type: "set_visibility", visibility: "appear_offline" });
+    expect(await umaSocial.take("friends_error")).toMatchObject({ code: "RATE_LIMITED" });
+    // Changes are applied in order, so the last accepted one (visible) is what was saved.
+    const updates = (await umaSocial.quiet("visibility_status")).map((message) => message.visibility);
+    expect(updates).toHaveLength(10);
+    expect(updates.at(-1)).toBe("visible");
+    const saved = await appPool.query<{ friend_visibility: string }>(
+      "select friend_visibility from player_accounts where game_center_player_id = $1",
+      [uma.gcId],
+    );
+    expect(saved.rows).toEqual([{ friend_visibility: "visible" }]);
+
+    await Promise.all([unlinked.close(), umaSocial.close()]);
+  }, TEST_TIMEOUT_MS);
+});

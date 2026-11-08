@@ -14,19 +14,47 @@ import { useSocial } from "@/contexts/SocialContext";
 import { useScreenPadding } from "@/hooks/useScreenPadding";
 import { useThemeColors, type ThemeColors } from "@/hooks/useThemeColors";
 import { impactLight } from "@/lib/platformFeedback";
-import type { FriendListEntry, FriendPresenceStatus } from "@/lib/social/friendsState";
+import type { FriendListEntry, FriendPresenceStatus, FriendVisibility } from "@/lib/social/friendsState";
 
 const STATUS_LABEL: Record<FriendPresenceStatus, string> = {
   online: "Online",
   in_game: "In a game",
+  busy: "Do Not Disturb",
   offline: "Offline",
 };
 
 function statusColor(status: FriendPresenceStatus, colors: ThemeColors): string {
   if (status === "online") return colors.success;
   if (status === "in_game") return colors.warning;
+  if (status === "busy") return colors.error;
   return colors.tabIconDefault;
 }
+
+const VISIBILITY_OPTIONS: {
+  value: FriendVisibility;
+  label: string;
+  description: string;
+  icon: React.ComponentProps<typeof Ionicons>["name"];
+}[] = [
+  {
+    value: "visible",
+    label: "Visible",
+    description: "Friends see when you're online or in a game, and can invite you.",
+    icon: "eye-outline",
+  },
+  {
+    value: "appear_offline",
+    label: "Appear Offline",
+    description: "You show as offline and friends can't invite you. You can still invite them.",
+    icon: "eye-off-outline",
+  },
+  {
+    value: "do_not_disturb",
+    label: "Do Not Disturb",
+    description: "Friends see you're busy. Their invites are declined for you with a polite note.",
+    icon: "moon-outline",
+  },
+];
 
 /** Seconds left until `expiresAt`, updated every second. */
 function useSecondsLeft(expiresAt: number | null): number {
@@ -139,18 +167,26 @@ export default function FriendListScreen() {
           <ActivityIndicator size="large" color={colors.tint} />
           <Text style={[styles.hint, { color: colors.textSecondary }]}>Checking who&apos;s online…</Text>
         </Centered>
-      ) : social.friends.length === 0 ? (
-        <Explanation
-          icon="people-outline"
-          title="No friends here yet"
-          body="None of your Game Center friends play SketchDuel yet. Share a room code to play with someone."
-        />
       ) : (
         <FlatList
           data={social.friends}
           keyExtractor={(item) => item.playerId}
           renderItem={({ item }) => <FriendRow friend={item} />}
-          ListHeaderComponent={<OutgoingInvite />}
+          ListHeaderComponent={
+            <>
+              <VisibilitySetting />
+              <OutgoingInvite />
+            </>
+          }
+          ListEmptyComponent={
+            <View style={styles.emptyList}>
+              <Ionicons name="people-outline" size={40} color={colors.border} />
+              <Text style={[styles.emptyTitle, { color: colors.text }]}>No friends here yet</Text>
+              <Text style={[styles.hint, { color: colors.textSecondary }]}>
+                None of your Game Center friends play SketchDuel yet. Share a room code to play with someone.
+              </Text>
+            </View>
+          }
           ListFooterComponent={
             <Pressable onPress={openRoomCodeInstead} style={styles.footerLink} accessibilityRole="button">
               <Text style={[styles.linkText, { color: colors.tint }]}>Play with a room code instead</Text>
@@ -200,6 +236,65 @@ function Explanation({
         <Text style={[styles.linkText, { color: colors.tint }]}>Use a room code</Text>
       </Pressable>
     </Centered>
+  );
+}
+
+/** How friends see this player. Shown only to players signed in with Game Center. */
+function VisibilitySetting() {
+  const { colors } = useThemeColors();
+  const { visibility, visibilitySaving, setVisibility, connected } = useSocial();
+  if (!visibility) return null;
+  const selected = visibilitySaving ?? visibility;
+
+  return (
+    <View style={[styles.settingCard, { backgroundColor: colors.card }]}>
+      <View style={styles.settingHeader}>
+        <Text style={[styles.settingTitle, { color: colors.text }]} accessibilityRole="header">
+          How friends see you
+        </Text>
+        {visibilitySaving && <ActivityIndicator size="small" color={colors.tint} accessibilityLabel="Saving" />}
+      </View>
+      <View accessibilityRole="radiogroup" style={styles.optionList}>
+        {VISIBILITY_OPTIONS.map((option) => {
+          const isSelected = selected === option.value;
+          return (
+            <Pressable
+              key={option.value}
+              onPress={() => {
+                impactLight();
+                setVisibility(option.value);
+              }}
+              disabled={!connected}
+              style={[
+                styles.option,
+                {
+                  borderColor: isSelected ? colors.tint : colors.border,
+                  backgroundColor: isSelected ? colors.background : "transparent",
+                },
+              ]}
+              accessibilityRole="radio"
+              accessibilityLabel={option.label}
+              accessibilityHint={option.description}
+              accessibilityState={{ checked: isSelected, disabled: !connected }}
+            >
+              <Ionicons name={option.icon} size={20} color={isSelected ? colors.tint : colors.textSecondary} />
+              <View style={styles.optionText}>
+                <Text style={[styles.optionLabel, { color: colors.text }]}>{option.label}</Text>
+                <Text style={[styles.optionDescription, { color: colors.textSecondary }]}>{option.description}</Text>
+              </View>
+              <Ionicons
+                name={isSelected ? "radio-button-on" : "radio-button-off"}
+                size={20}
+                color={isSelected ? colors.tint : colors.border}
+              />
+            </Pressable>
+          );
+        })}
+      </View>
+      <Text style={[styles.settingFootnote, { color: colors.textSecondary }]}>
+        Applies on all your devices signed in to this Game Center account.
+      </Text>
+    </View>
   );
 }
 
@@ -259,7 +354,7 @@ function FriendRow({ friend }: { friend: FriendListEntry }) {
           <Text style={[styles.statusText, { color: colors.textSecondary }]}>{STATUS_LABEL[friend.status]}</Text>
         </View>
       </View>
-      {friend.status === "online" &&
+      {(friend.status === "online" || friend.status === "busy") &&
         (isSending || isInvited ? (
           <View style={styles.invitedTag}>
             <Text style={[styles.statusText, { color: colors.textSecondary }]}>
@@ -305,6 +400,16 @@ const styles = StyleSheet.create({
   footerLink: { alignSelf: "center", paddingVertical: 12, paddingHorizontal: 12 },
   linkText: { fontSize: 14, fontFamily: "Inter_500Medium" },
   list: { paddingHorizontal: 16, paddingTop: 8, gap: 10 },
+  emptyList: { alignItems: "center", gap: 10, paddingVertical: 32, paddingHorizontal: 20 },
+  settingCard: { padding: 14, borderRadius: 14, gap: 10, marginBottom: 6 },
+  settingHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  settingTitle: { fontSize: 16, fontFamily: "Inter_600SemiBold" },
+  optionList: { gap: 8 },
+  option: { flexDirection: "row", alignItems: "center", gap: 12, padding: 12, borderRadius: 12, borderWidth: 1 },
+  optionText: { flex: 1, gap: 2 },
+  optionLabel: { fontSize: 15, fontFamily: "Inter_600SemiBold" },
+  optionDescription: { fontSize: 13, fontFamily: "Inter_400Regular", lineHeight: 18 },
+  settingFootnote: { fontSize: 12, fontFamily: "Inter_400Regular", lineHeight: 16 },
   waitingCard: {
     flexDirection: "row",
     alignItems: "center",
