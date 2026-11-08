@@ -3,17 +3,15 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { getRandomBytes } from "expo-crypto";
 import { Platform } from "react-native";
 import type { StoredGameCenterLink } from "@/lib/identity/gameCenterLink";
+import { createIdentityGate } from "@/lib/identity/identityGate";
 
 const SESSION_TOKEN_KEY = "sketchduel_session_token";
 const ASYNC_STORAGE_FALLBACK_KEY = "sketchduel_session_token_fallback";
 const GAME_CENTER_LINK_KEY = "sketchduel_game_center_link";
 const GAME_CENTER_LINK_FALLBACK_KEY = "sketchduel_game_center_link_fallback";
 
-/** Longest that requests wait for the launch-time Game Center check. */
-const IDENTITY_CHECK_WAIT_MS = 15_000;
-
 let cachedToken: string | null = null;
-let identityCheck: Promise<unknown> | null = null;
+const identityGate = createIdentityGate();
 
 function generateToken(): string {
   const bytes = getRandomBytes(32);
@@ -89,22 +87,24 @@ export async function getDeviceSessionToken(): Promise<string> {
   return token;
 }
 
+/**
+ * The device token, once any running Game Center check has settled. Waits
+ * without a time limit: sending the token early could act as a player who
+ * has just signed out.
+ */
 export async function getSessionToken(): Promise<string> {
-  if (identityCheck) {
-    await Promise.race([
-      identityCheck.catch(() => undefined),
-      new Promise((resolveWait) => setTimeout(resolveWait, IDENTITY_CHECK_WAIT_MS)),
-    ]);
-  }
+  await identityGate.waitForIdentityCheck();
   return getDeviceSessionToken();
 }
 
-/** Makes getSessionToken wait (up to 15 s) until this identity check settles. */
+/** Makes getSessionToken wait until this identity check settles. */
 export function holdSessionTokenUntil(check: Promise<unknown>): void {
-  identityCheck = check;
-  void check.catch(() => undefined).finally(() => {
-    if (identityCheck === check) identityCheck = null;
-  });
+  identityGate.hold(check);
+}
+
+/** Calls the listener whenever the device token is replaced. Returns an unsubscribe function. */
+export function onSessionTokenRotated(listener: () => void): () => void {
+  return identityGate.onTokenRotated(listener);
 }
 
 /**
@@ -115,6 +115,9 @@ export function holdSessionTokenUntil(check: Promise<unknown>): void {
 export async function rotateSessionToken(): Promise<void> {
   const token = generateToken();
   cachedToken = token;
+  // Announce straight away: this launch now uses the new token even if a
+  // later step (saving it, or the rest of the sign-in) fails.
+  identityGate.notifyTokenRotated();
   const saved = await writeValue(SESSION_TOKEN_KEY, ASYNC_STORAGE_FALLBACK_KEY, token);
   if (!saved) throw new Error("Could not save a new device identity");
 }

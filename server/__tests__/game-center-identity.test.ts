@@ -237,6 +237,7 @@ describe("Game Center sign-in", () => {
     expect(await storage.resolvePlayerIdentity(keyA)).toEqual({
       playerKey: accountKey,
       aliasKeys: expect.arrayContaining([accountKey, keyA]),
+      gameCenterPlayerId: PLAYER,
     });
   }, TEST_TIMEOUT_MS);
 

@@ -3,7 +3,7 @@ import * as Linking from "expo-linking";
 import { router, useLocalSearchParams } from "expo-router";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { useIsFocused } from "@react-navigation/native";
-import { StyleSheet, View } from "react-native";
+import { Platform, StyleSheet, View } from "react-native";
 import { ROOM_CODE_LENGTH } from "@shared/friendRoom";
 import {
   useAnimatedStyle,
@@ -17,8 +17,10 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import FriendsMatchModal from "@/components/FriendsMatchModal";
 import HomeHero from "@/components/HomeHero";
 import HomePrimaryActions from "@/components/HomePrimaryActions";
+import InviteMatchModal from "@/components/InviteMatchModal";
 import MatchmakingModal from "@/components/MatchmakingModal";
 import { usePlayerIdentity } from "@/contexts/PlayerIdentityContext";
+import { useSocial } from "@/contexts/SocialContext";
 import { useGameWebSocket } from "@/contexts/WebSocketContext";
 import { useScreenPadding } from "@/hooks/useScreenPadding";
 import { useThemeColors } from "@/hooks/useThemeColors";
@@ -29,7 +31,7 @@ import {
 } from "@/lib/friendInvite";
 
 export default function HomeScreen() {
-  const { inviteCode } = useLocalSearchParams<{ inviteCode?: string }>();
+  const { inviteCode, useRoomCode } = useLocalSearchParams<{ inviteCode?: string; useRoomCode?: string }>();
   const isFocused = useIsFocused();
   const insets = useSafeAreaInsets();
   const { isDark, colors } = useThemeColors();
@@ -42,6 +44,9 @@ export default function HomeScreen() {
   const [isFriendsModalOpen, setIsFriendsModalOpen] = useState(false);
   const [friendRoomInput, setFriendRoomInput] = useState("");
   const playerIdentity = usePlayerIdentity();
+  const { acceptedRoom, consumeAcceptedRoom, nameFor } = useSocial();
+  /** Set while joining the room reserved by an accepted friend invite. */
+  const [inviteMatch, setInviteMatch] = useState<{ friendName: string } | null>(null);
 
   const {
     setCallbacks,
@@ -64,13 +69,17 @@ export default function HomeScreen() {
 
   const isSearching = matchStatus === "queueing" || matchStatus === "matched";
   const isFriendFlowActive = friendRoomStatus !== "idle";
-  const showFriendsModal = isFriendsModalOpen || isFriendFlowActive;
+  const showFriendsModal = (isFriendsModalOpen || isFriendFlowActive) && !inviteMatch;
 
+  // Registered whenever home is in front; the game screen registers its own
+  // while it is open and clears them when it closes.
   useEffect(() => {
+    if (!isFocused) return;
     setCallbacks({
       onMatchFound: (info) => {
         if (navigatedRef.current) return;
         navigatedRef.current = true;
+        setInviteMatch(null);
         setIsFriendsModalOpen(false);
         setFriendRoomInput("");
         if (info.matchType === "friend") {
@@ -91,11 +100,28 @@ export default function HomeScreen() {
         console.warn("WebSocket error:", message);
       },
     });
+  }, [isFocused, requestGameState, setCallbacks]);
 
-    return () => {
-      setCallbacks({});
-    };
-  }, [requestGameState, setCallbacks]);
+  useEffect(() => () => setCallbacks({}), [setCallbacks]);
+
+  // A friend invite was accepted (here or by the friend): join the reserved room.
+  useEffect(() => {
+    if (!isFocused || !acceptedRoom) return;
+    consumeAcceptedRoom();
+    navigatedRef.current = false;
+    setIsFriendsModalOpen(false);
+    setFriendRoomInput("");
+    clearFriendRoomError();
+    setInviteMatch({ friendName: nameFor(acceptedRoom.playerId) });
+    joinFriendRoom(acceptedRoom.roomCode);
+  }, [isFocused, acceptedRoom, consumeAcceptedRoom, clearFriendRoomError, joinFriendRoom, nameFor]);
+
+  const handleCancelInviteMatch = useCallback(() => {
+    impactLight();
+    leaveFriendRoom();
+    clearFriendRoomError();
+    setInviteMatch(null);
+  }, [leaveFriendRoom, clearFriendRoomError]);
 
   const isErrorState =
     flowState === "error_recoverable" ||
@@ -275,6 +301,14 @@ export default function HomeScreen() {
     handleIncomingInviteCode(inviteCode);
   }, [handleIncomingInviteCode, inviteCode]);
 
+  // The Friends screen's "use a room code" fallback.
+  useEffect(() => {
+    if (useRoomCode !== "1") return;
+    router.setParams({ useRoomCode: undefined });
+    clearFriendRoomError();
+    setIsFriendsModalOpen(true);
+  }, [useRoomCode, clearFriendRoomError]);
+
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}> 
       <LinearGradient
@@ -306,6 +340,14 @@ export default function HomeScreen() {
             router.push("/gallery");
           }}
           onOpenFriends={handleOpenFriends}
+          onOpenFriendList={
+            Platform.OS === "ios"
+              ? () => {
+                  impactLight();
+                  router.push("/friend-list");
+                }
+              : undefined
+          }
           onFindMatch={handleFindMatch}
           onPressIn={handlePressIn}
           onPressOut={handlePressOut}
@@ -326,6 +368,16 @@ export default function HomeScreen() {
             disconnect();
             setTimeout(() => handleFindMatch(), 100);
           }}
+        />
+      )}
+
+      {isFocused && (
+        <InviteMatchModal
+          visible={inviteMatch !== null}
+          colors={colors}
+          friendName={inviteMatch?.friendName ?? "your friend"}
+          error={inviteMatch && friendRoomStatus === "idle" ? friendRoomError : null}
+          onCancel={handleCancelInviteMatch}
         />
       )}
 

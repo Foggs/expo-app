@@ -7,3 +7,4 @@
 - [Social feature scope](social-scope.md) — rivalry records/friend leaderboards deferred to a future release; social scope is sign-in, friends/invites, privacy.
 
 - [Player identity model](player-identity-model.md) — canonical key for new records, alias sets for comparisons; account key is random, history follows via aliases.
+- [Social connection design](social-connection-design.md) — friends/invites use a separate foreground socket; accepted invites reserve a room joined via the normal flow.

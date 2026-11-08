@@ -13,6 +13,7 @@ export default defineConfig({
       "lib/state/__tests__/**/*.test.ts",
       "lib/network/__tests__/**/*.test.ts",
       "lib/identity/__tests__/**/*.test.ts",
+      "lib/social/__tests__/**/*.test.ts",
       "server/__tests__/**/*.test.ts",
       "shared/__tests__/**/*.test.ts",
     ],

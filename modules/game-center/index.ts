@@ -13,9 +13,19 @@ export type GameCenterIdentityProof = {
   timestamp: string;
 };
 
+/** Whether the player lets SketchDuel see their Game Center friends. */
+export type GameCenterFriendsAccess = "authorized" | "denied" | "restricted" | "notDetermined" | "unavailable";
+
+/** A Game Center friend. The display name stays on the device; only playerId is sent to the server. */
+export type GameCenterFriend = { playerId: string; displayName: string };
+
+export type GameCenterFriendsResult = { access: GameCenterFriendsAccess; friends: GameCenterFriend[] };
+
 type GameCenterNativeModule = {
   authenticate(): Promise<GameCenterAuthResult>;
   fetchIdentityProof(): Promise<GameCenterIdentityProof>;
+  getFriendsAccess?(): Promise<GameCenterFriendsAccess>;
+  loadFriends?(): Promise<GameCenterFriendsResult>;
 };
 
 // Null in Expo Go, on Android and anywhere the native module is not built in.
@@ -33,4 +43,19 @@ export async function authenticateGameCenter(): Promise<GameCenterAuthResult> {
 export async function fetchGameCenterIdentityProof(): Promise<GameCenterIdentityProof> {
   if (!nativeModule) throw new Error("Game Center is not available on this device");
   return nativeModule.fetchIdentityProof();
+}
+
+/** The current friend-list permission, without asking the player. */
+export async function getGameCenterFriendsAccess(): Promise<GameCenterFriendsAccess> {
+  if (!nativeModule?.getFriendsAccess) return "unavailable";
+  return nativeModule.getFriendsAccess();
+}
+
+/**
+ * Loads the player's Game Center friends. Shows Apple's permission prompt
+ * the first time; afterwards returns the saved choice.
+ */
+export async function loadGameCenterFriends(): Promise<GameCenterFriendsResult> {
+  if (!nativeModule?.loadFriends) return { access: "unavailable", friends: [] };
+  return nativeModule.loadFriends();
 }

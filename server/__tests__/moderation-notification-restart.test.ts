@@ -79,6 +79,13 @@ describe("moderation alert recovery after a real server restart", () => {
         owner_player_key text,
         created_at timestamptz NOT NULL DEFAULT now()
       );
+      CREATE TABLE player_accounts (
+        id varchar PRIMARY KEY DEFAULT gen_random_uuid(),
+        game_center_player_id text NOT NULL UNIQUE,
+        player_key text NOT NULL UNIQUE,
+        created_at timestamptz NOT NULL DEFAULT now(),
+        last_signed_in_at timestamptz NOT NULL DEFAULT now()
+      );
       CREATE TABLE player_device_links (
         device_key text PRIMARY KEY,
         player_key text NOT NULL,

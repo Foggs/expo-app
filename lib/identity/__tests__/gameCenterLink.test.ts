@@ -15,7 +15,7 @@ function proofFor(playerId: string): GameCenterIdentityProof {
 
 /** A fake device: a token, a stored link record, and a server that remembers device links. */
 function fakeDevice(options: {
-  auth: GameCenterAuthResult;
+  auth: GameCenterAuthResult | "throws";
   stored?: StoredGameCenterLink | null;
   serverLinks?: Map<string, string>;
   linkFails?: boolean;
@@ -26,11 +26,15 @@ function fakeDevice(options: {
     serverLinks: options.serverLinks ?? new Map<string, string>(),
     linkCalls: [] as string[],
     tokenCount: 1,
+    rotations: 0,
   };
   const deps = {
-    authenticate: async () => options.auth,
+    authenticate: async () => {
+      if (options.auth === "throws") throw new Error("GameKit failed");
+      return options.auth;
+    },
     fetchProof: async () => {
-      if (!options.auth.authenticated) throw new Error("not signed in");
+      if (options.auth === "throws" || !options.auth.authenticated) throw new Error("not signed in");
       return proofFor(options.auth.playerId);
     },
     getStoredLink: async () => state.stored,
@@ -38,6 +42,7 @@ function fakeDevice(options: {
       state.stored = link;
     },
     rotateDeviceToken: async () => {
+      state.rotations += 1;
       state.tokenCount += 1;
       state.token = `token-${state.tokenCount}`;
     },
@@ -140,5 +145,39 @@ describe("Game Center sign-in on a device", () => {
     await expect(runGameCenterSignIn(deps, { relinkWhenUnchanged: true })).rejects.toThrow("503");
     expect(state.stored).toEqual({ playerId: ALICE, confirmed: false });
     expect(state.token).toBe("token-1");
+  });
+
+  it("fails closed when Game Center cannot confirm the linked player", async () => {
+    const serverLinks = new Map([["token-1", ALICE]]);
+    const { state, deps } = fakeDevice({
+      auth: "throws",
+      stored: { playerId: ALICE, confirmed: true },
+      serverLinks,
+    });
+    const result = await runGameCenterSignIn(deps, { relinkWhenUnchanged: false });
+    expect(result).toEqual({ status: "unavailable", rotatedToken: true });
+    expect(state.token).toBe("token-2");
+    expect(state.stored).toBeNull();
+  });
+
+  it("keeps the identity of an unlinked device when the Game Center check fails", async () => {
+    const { state, deps } = fakeDevice({ auth: "throws" });
+    expect(await runGameCenterSignIn(deps, { relinkWhenUnchanged: true }))
+      .toEqual({ status: "unavailable", rotatedToken: false });
+    expect(state.token).toBe("token-1");
+  });
+
+  it("has already replaced the token when a later step of the same check fails", async () => {
+    // Bob signs in on Alice's device, but the link request fails afterwards.
+    const { state, deps } = fakeDevice({
+      auth: signedIn(BOB),
+      stored: { playerId: ALICE, confirmed: true },
+      linkFails: true,
+    });
+    await expect(runGameCenterSignIn(deps, { relinkWhenUnchanged: false })).rejects.toThrow("503");
+    // The rotation happened (and was announced by the real token store) before the failure.
+    expect(state.rotations).toBe(1);
+    expect(state.token).toBe("token-2");
+    expect(state.stored).toEqual({ playerId: BOB, confirmed: false });
   });
 });

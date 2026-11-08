@@ -14,6 +14,8 @@ interface HomePrimaryActionsProps {
   isSearching: boolean;
   onOpenGallery: () => void;
   onOpenFriends: () => void;
+  /** Opens the Game Center friends list. Omitted where Game Center is not available. */
+  onOpenFriendList?: () => void;
   onFindMatch: () => void;
   onPressIn: () => void;
   onPressOut: () => void;
@@ -26,6 +28,7 @@ export default function HomePrimaryActions({
   isSearching,
   onOpenGallery,
   onOpenFriends,
+  onOpenFriendList,
   onFindMatch,
   onPressIn,
   onPressOut,
@@ -55,6 +58,19 @@ export default function HomePrimaryActions({
         <Ionicons name="people" size={20} color={colors.tint} />
         <Text style={[styles.friendButtonText, { color: colors.text }]}>Friends Match</Text>
       </Pressable>
+
+      {onOpenFriendList && (
+        <Pressable
+          onPress={onOpenFriendList}
+          style={[styles.galleryButton, { backgroundColor: colors.card }]}
+          accessibilityRole="button"
+          accessibilityLabel="Game Center friends"
+          accessibilityHint="See which friends are online and invite them to a match"
+        >
+          <Ionicons name="person-add" size={20} color={colors.tint} />
+          <Text style={[styles.galleryButtonText, { color: colors.text }]}>Game Center Friends</Text>
+        </Pressable>
+      )}
 
       <View style={styles.footer}>
         <Animated.View style={[styles.pulseRing, pulseStyle]}>

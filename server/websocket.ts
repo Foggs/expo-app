@@ -10,6 +10,14 @@ import {
 import { storage, type PlayerIdentity } from "./storage";
 import { randomInt } from "crypto";
 import { getSessionKey } from "./sessionIdentity";
+import {
+  createFriendHub,
+  initialSocialState,
+  type FriendHub,
+  type FriendHubDeps,
+  type FriendHubOptions,
+  type SocialConnection,
+} from "./friendHub";
 
 const MAX_MESSAGE_SIZE = 512 * 1024; // 512KB
 const HEARTBEAT_INTERVAL = 30_000;
@@ -26,8 +34,10 @@ const MAX_ROOM_CODE_ATTEMPTS = 25;
 const MAX_CONNECTIONS = 500;
 const MAX_ROOM_JOINS_PER_MINUTE = 10;
 const MAX_PENDING_AUTH_MESSAGES = 20;
+/** How long both players have to reach a room reserved by an accepted invite. */
+const INVITE_ROOM_TTL = 60_000;
 
-interface PlayerConnection {
+interface PlayerConnection extends SocialConnection {
   ws: WebSocket;
   id: string;
   playerName: string;
@@ -71,8 +81,11 @@ interface GameRoom {
 
 interface FriendRoom {
   roomCode: string;
-  hostId: string;
+  /** Null for a room reserved by an accepted invite until the first player arrives. */
+  hostId: string | null;
   guestId: string | null;
+  /** Set for invite rooms: only these accounts may join. */
+  allowedPlayerKeys: string[] | null;
   createdAt: number;
   expiresAt: number;
 }
@@ -94,6 +107,27 @@ function withLock(locks: Map<string, Promise<void>>, key: string, fn: () => Prom
     if (locks.get(key) === next) locks.delete(key);
   });
 }
+const friendHubDeps: FriendHubDeps = {
+  connections: () => connections.values(),
+  isOpen: (conn) => (conn as PlayerConnection).ws.readyState === WebSocket.OPEN,
+  send: (conn, message) => sendMessage(conn as PlayerConnection, message),
+  createInviteRoom: (firstPlayerKey, secondPlayerKey) => {
+    const roomCode = generateUniqueRoomCode();
+    if (!roomCode) return null;
+    const now = Date.now();
+    friendRooms.set(roomCode, {
+      roomCode,
+      hostId: null,
+      guestId: null,
+      allowedPlayerKeys: [firstPlayerKey, secondPlayerKey],
+      createdAt: now,
+      expiresAt: now + INVITE_ROOM_TTL,
+    });
+    return roomCode;
+  },
+  storage,
+};
+let friendHub: FriendHub = createFriendHub(friendHubDeps);
 let heartbeatTimer: ReturnType<typeof setInterval> | null = null;
 let matchmakingTimer: ReturnType<typeof setInterval> | null = null;
 let roomCleanupTimer: ReturnType<typeof setInterval> | null = null;
@@ -301,7 +335,7 @@ function removeFriendRoom(roomCode: string): void {
   const room = friendRooms.get(roomCode);
   if (!room) return;
 
-  const hostConn = connections.get(room.hostId);
+  const hostConn = room.hostId ? connections.get(room.hostId) : undefined;
   if (hostConn) {
     clearFriendRoomCode(hostConn, roomCode);
   }
@@ -397,6 +431,7 @@ function abandonGame(conn: PlayerConnection, notifyOtherPlayer = true): void {
   }
 
   gameRooms.delete(gameId);
+  friendHub.playersChanged([conn.sessionKey, otherConn?.sessionKey ?? ""]);
 }
 
 function cleanupConnection(connId: string): void {
@@ -408,6 +443,7 @@ function cleanupConnection(connId: string): void {
   abandonGame(conn, true);
 
   connections.delete(connId);
+  if (conn.friendIds) friendHub.playersChanged([conn.sessionKey]);
 }
 
 async function startGameForPlayers(
@@ -444,6 +480,7 @@ async function startGameForPlayers(
     player2.playerRole = "player2";
 
     await storage.updateGame(gameId, { status: "active" });
+    friendHub.playersChanged([player1.sessionKey, player2.sessionKey]);
   } catch (err) {
     // Roll back in-memory state so players are not left in a ghost game.
     if (gameId) {
@@ -570,6 +607,7 @@ function handleCreateRoom(conn: PlayerConnection): void {
     roomCode,
     hostId: conn.id,
     guestId: null,
+    allowedPlayerKeys: null,
     createdAt: now,
     expiresAt: now + FRIEND_ROOM_TTL,
   };
@@ -627,6 +665,15 @@ async function handleJoinRoom(conn: PlayerConnection, roomCode: string): Promise
     return;
   }
 
+  if (room.allowedPlayerKeys && !room.allowedPlayerKeys.includes(conn.sessionKey)) {
+    sendMessage(conn, {
+      type: "room_error",
+      message: "Room not found.",
+      code: "ROOM_NOT_FOUND",
+    });
+    return;
+  }
+
   if (room.hostId === conn.id) {
     sendMessage(conn, {
       type: "room_error",
@@ -646,6 +693,14 @@ async function handleJoinRoom(conn: PlayerConnection, roomCode: string): Promise
     return;
   }
 
+  if (room.hostId === null) {
+    // First of the two invited players to arrive: wait for the other.
+    room.hostId = conn.id;
+    conn.friendRoomCode = roomCode;
+    sendMessage(conn, { type: "room_joined", roomCode });
+    return;
+  }
+
   const hostConn = getOpenConnection(room.hostId);
   if (!hostConn) {
     removeFriendRoom(roomCode);
@@ -662,6 +717,15 @@ async function handleJoinRoom(conn: PlayerConnection, roomCode: string): Promise
       type: "room_error",
       message: "Room is full.",
       code: "ROOM_FULL",
+    });
+    return;
+  }
+
+  if (room.allowedPlayerKeys && hostConn.sessionKey === conn.sessionKey) {
+    sendMessage(conn, {
+      type: "room_error",
+      message: "You're already joining this match on another device.",
+      code: "STATE_BLOCKED",
     });
     return;
   }
@@ -802,6 +866,7 @@ async function handleSubmitTurn(conn: PlayerConnection, strokes: unknown[]): Pro
           room.player2.playerRole = null;
         }
         gameRooms.delete(completedGameId);
+        friendHub.playersChanged([room.player1?.sessionKey ?? "", room.player2?.sessionKey ?? ""]);
 
         console.log(`Game ${completedGameId} completed`);
       } else {
@@ -953,6 +1018,7 @@ async function authenticateConnection(conn: PlayerConnection, deviceKey: string)
     if (conn.ws.readyState !== WebSocket.OPEN) return;
     conn.sessionKey = identity.playerKey;
     conn.playerKeys = identity.aliasKeys;
+    conn.gameCenterPlayerId = identity.gameCenterPlayerId ?? null;
     conn.authState = "done";
   } catch (error) {
     console.error("Could not resolve player identity:", error instanceof Error ? error.message : error);
@@ -1093,6 +1159,18 @@ function dispatchMessage(conn: PlayerConnection, msg: WsClientMessage): void {
     case "request_game_state":
       handleRequestGameState(conn);
       break;
+    case "set_friends":
+      void friendHub.setFriends(conn, msg.friendIds);
+      break;
+    case "invite_friend":
+      void friendHub.inviteFriend(conn, msg.playerId);
+      break;
+    case "respond_invite":
+      void friendHub.respondToInvite(conn, msg.inviteId, msg.accept);
+      break;
+    case "cancel_invite":
+      friendHub.cancelInvite(conn, msg.inviteId);
+      break;
   }
 }
 
@@ -1112,10 +1190,21 @@ export function applyLinkedIdentity(deviceKey: string, identity: PlayerIdentity)
     if (conn.deviceKey !== deviceKey && !identity.aliasKeys.includes(conn.sessionKey)) continue;
     conn.sessionKey = identity.playerKey;
     conn.playerKeys = identity.aliasKeys;
+    conn.gameCenterPlayerId = identity.gameCenterPlayerId ?? null;
   }
 }
 
-export function setupWebSocket(server: Server): WebSocketServer {
+/** Hides two players from each other's friend lists and closes invites between them. */
+export function applyPlayerBlock(firstKeys: string[], secondKeys: string[]): void {
+  friendHub.applyBlock(firstKeys, secondKeys);
+}
+
+export type WebSocketOptions = FriendHubOptions;
+
+export function setupWebSocket(server: Server, options: WebSocketOptions = {}): WebSocketServer {
+  friendHub.closeAll();
+  friendHub = createFriendHub(friendHubDeps, options);
+
   const wss = new WebSocketServer({
     server,
     path: "/ws",
@@ -1181,12 +1270,14 @@ export function setupWebSocket(server: Server): WebSocketServer {
           room.player2.playerRole = null;
         }
         gameRooms.delete(gameId);
+        friendHub.playersChanged([room.player1?.sessionKey ?? "", room.player2?.sessionKey ?? ""]);
       }
     }
 
     for (const [roomCode, room] of friendRooms) {
-      const hostConn = connections.get(room.hostId);
-      const hostAlive = Boolean(hostConn && hostConn.ws.readyState === WebSocket.OPEN);
+      const hostConn = room.hostId ? connections.get(room.hostId) : undefined;
+      // A reserved invite room has no host until the first player arrives.
+      const hostAlive = room.hostId === null || Boolean(hostConn && hostConn.ws.readyState === WebSocket.OPEN);
       const guestConn = room.guestId ? connections.get(room.guestId) : null;
       const guestAlive = Boolean(guestConn && guestConn.ws.readyState === WebSocket.OPEN);
 
@@ -1247,6 +1338,7 @@ export function setupWebSocket(server: Server): WebSocketServer {
       gameId: null,
       playerRole: null,
       friendRoomCode: null,
+      ...initialSocialState(),
       isAlive: true,
       messageCount: 0,
       drawMessageCount: 0,
@@ -1289,6 +1381,7 @@ export function setupWebSocket(server: Server): WebSocketServer {
     if (heartbeatTimer) clearInterval(heartbeatTimer);
     if (matchmakingTimer) clearInterval(matchmakingTimer);
     if (roomCleanupTimer) clearInterval(roomCleanupTimer);
+    friendHub.closeAll();
   });
 
   console.log("WebSocket server ready on /ws");

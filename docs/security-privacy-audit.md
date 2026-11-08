@@ -71,6 +71,9 @@ This audit lowers rejection and incident risk; it does **not** guarantee App Sto
 | Session token (random 256-bit) | Generated on device; Keychain (SecureStore), AsyncStorage fallback | Sent with gallery saves, deletes, reports and blocks, and on WebSocket connect. The server keeps only a one-way hash (the device key); new gallery rows store an owner key, not the token. Older gallery rows still hold the raw token. | Recognize the device; gallery ownership | Device keys: indefinite; legacy tokens: until the gallery item is deleted | With gallery item |
 | Game Center player ID (team-scoped, e.g. `T:_…`) | Apple, after the player signs into Game Center on iOS and the server verifies Apple's signed identity proof | `player_accounts`, linked to a random account key; `player_device_links` maps each device key to that account | Recognize the same player on every iPhone so blocks, reports and gallery ownership follow them | Indefinite (no deletion flow yet; see 5.1.1(v) below) | Manual database deletion only |
 | Game Center display name | Apple (on device) | Shown on the player's own home screen only. **Not sent to the server.** | Show who is signed in | Not stored | n/a |
+| Game Center friend IDs (team-scoped) | Apple, on device, after the player allows friend-list access | Sent over WSS while the app is in the foreground; held on that connection **in server memory only** | Show which friends play and are online; direct invites | Until the connection closes | Automatic |
+| Game Center friend names | Apple (on device) | Shown on the player's own Friends screen and invite banner. **Not sent to the server.** | Show friends by name | Not stored | n/a |
+| Friend invites | User action | In memory only; the friend's open app sessions | Start a match with a friend | 30 s, or until answered | Automatic |
 | Friend room codes | Server | In memory only | Private matches | 10 min TTL | Automatic |
 | IP address | Network | Rate limiter memory; hosting infrastructure | Abuse prevention | Transient in app | n/a |
 | Share invite link | User action | OS share sheet / SMS / Messenger (user-initiated) | Invite friends | n/a | n/a |
@@ -80,7 +83,7 @@ Not collected: email, passwords, contacts, location, photos, camera, microphone,
 Recommendations (not release-blocking): add a retention purge for `turns` and abandoned `games`. Stop storing `session_token` on gallery rows, since it no longer controls access; this would let you drop the identifier from labels and the manifest.
 
 ## 5. iOS configuration review
-- **Permissions**: none requested. `LSApplicationQueriesSchemes` (`fb-messenger`, `sms`) is used by the friend-invite share buttons (`canOpenURL`) and is kept.
+- **Permissions**: Game Center friend list only (`NSGKFriendListUsageDescription`), requested when the player taps **Show My Friends**, never at launch. `LSApplicationQueriesSchemes` (`fb-messenger`, `sms`) is used by the friend-invite share buttons (`canOpenURL`) and is kept.
 - **Export compliance**: `ITSAppUsesNonExemptEncryption: false` added. The app uses only OS HTTPS/WSS; `expo-crypto` is used for random bytes, not encryption. The owner should confirm this answer in App Store Connect.
 - **ATS**: no `NSAppTransportSecurity` overrides. Production uses `https`/`wss`; plain `ws://` is used only for LAN dev hosts.
 - **Privacy manifest** (`ios.privacyManifests`, merged into `PrivacyInfo.xcprivacy` at prebuild):
@@ -96,6 +99,7 @@ Recommendations (not release-blocking): add a retention purge for `turns` and ab
 - **User Content → Other User Content**: collected; **linked** (drawings are tied to the player's account once they sign into Game Center); not used for tracking; purpose: App Functionality.
 - **Identifiers → Device ID**: collected (one-way hash of the app-generated random token; older gallery posts still store the raw token); **linked**; not used for tracking; purpose: App Functionality.
 - **Identifiers → User ID**: collected (Game Center team-scoped player ID, only for players who sign into Game Center); **linked**; not used for tracking; purpose: App Functionality.
+- Game Center friend IDs are processed only transiently (in memory, for the session) to show presence and deliver invites. **Owner review needed**: confirm with Apple's definitions whether this counts as collecting "Contacts" or "Other Data"; data processed only in real time and not retained is often not "collected", but the decision is yours.
 - All other categories: **Not collected.**
 - Tracking: **No.**
 - Age rating questionnaire: answer **Yes** to user-generated content and anonymous interaction with strangers. Expect a higher age rating unless UGC is moderated or restricted.

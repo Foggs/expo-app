@@ -19,10 +19,21 @@ A linked device token acts as the player, so the app never lets it outlive that 
 
 - If the linked player is no longer signed in (signed out in Settings, declined, or Game Center unavailable), the app replaces the device token with a new random one at launch and whenever it returns to the foreground. The next person on the phone starts as a new anonymous player. The old token's history stays with the previous player's account.
 - If a different Game Center player signs in, the app replaces the token before linking. The server also refuses to move an already-linked device to a different player (`409 DEVICE_LINKED_TO_OTHER_PLAYER`); the app then replaces its token and retries.
-- Requests wait (up to 15 seconds) for the launch-time check, so nothing is sent with a token that is about to be replaced. A player waiting for a match when the token changes is taken out of the queue; a game already in progress finishes.
+- Requests wait for the launch-time check (and any check that starts while they wait), so nothing is sent with a token that is about to be replaced. If the check fails partway, the app treats Game Center as unavailable and replaces a linked token rather than keeping it. A player waiting for a match when the token changes is taken out of the queue; a game already in progress finishes.
 - When a device links while connected, the server updates its open connections (and the account's other devices) right away, so account-level blocks apply without reconnecting.
 
 The server stores only Apple's team-scoped player ID, a random account key and the device links. It does **not** store or show the Game Center display name; the name appears only on the player's own home screen. Opponents still see random names.
+
+## Friends and direct invites
+
+On iOS, the **Game Center Friends** button on the home screen opens a list of the player's Game Center friends who also play SketchDuel, each shown as **Online**, **In a game** or **Offline**.
+
+- **Permission**: iOS asks for friend-list access (`NSGKFriendListUsageDescription` in `app.json`) the first time the player taps **Show My Friends**. The app never asks on its own at launch. If access is denied or restricted, the screen explains how to change it in Settings and offers room codes instead.
+- **What is sent**: only the friends' team-scoped Game Center player IDs, over a separate WebSocket connection that is open while the app is in the foreground. Friends' names stay on the device. The server keeps the list on that connection, in memory, and forgets it when the connection closes; nothing is written to the database.
+- **Who appears**: friends with a SketchDuel account (signed in to Game Center at least once). A friend is shown as Online or In a game only when each player's list includes the other; otherwise they appear Offline. Players who have blocked each other (in either direction) never see each other, and a new block removes them from each other's list immediately.
+- **Invites**: an **Invite** button appears next to online friends. The friend sees an Accept/Decline banner on any screen, including over open dialogs. Accepting reserves a private room only those two accounts can join; both apps return to the home screen and join it, which starts the match through the normal friend-room flow. A decline, the 30-second expiry, the sender cancelling or leaving, or either player starting another game closes the invite on both sides with a short message.
+- **Limits**: one waiting invite per player, 5 invites per player per minute, 6 friend-list uploads per connection per minute, at most 500 friend IDs per upload. Every message is validated (`shared/schema.ts`).
+- Room codes and invite links keep working for everyone, including Android and web players.
 
 ### Configuration
 
@@ -64,6 +75,8 @@ First, install the EAS CLI, sign in, and create the build profiles (this project
 4. **Decline**: On a phone signed out of Game Center, cancel the sign-in sheet. The app keeps working, no name is shown, and you can still play, save and delete your own drawings.
 5. **Sign out**: Sign out of Game Center in Settings, return to the app, and decline the sign-in. The name disappears, and drawings saved while signed in can no longer be deleted from this phone. Sign back in and relaunch: they can be deleted again.
 6. **Android/web**: The app behaves exactly as before, with no sign-in prompt.
+7. **Friends**: With two iPhones signed into Game Center accounts that are friends with each other, open **Game Center Friends** on both and allow access. Each shows the other as Online. Invite from one phone; the other shows the banner. Accept, and both phones go into the same match. Try Decline, waiting 30 seconds, and Cancel; both phones should show a message each time. During the match, a third friend sees both as "In a game".
+8. **Friend access denied**: Deny the friend-list prompt. The Friends screen explains how to allow access and offers a room code instead.
 
 iOS only shows the sign-in sheet once per launch. After cancelling it, sign in from Settings → Game Center and relaunch the app.
 
@@ -71,4 +84,6 @@ iOS only shows the sign-in sheet once per launch. After cancelling it, sign in f
 
 - `server/__tests__/gameCenterVerifier.test.ts` generates certificate chains with openssl and checks a valid proof, a wrong bundle ID, a tampered signature, a different player ID, stale and future timestamps, non-Apple and non-HTTPS key URLs, untrusted chains, a non-Apple subject, untrusted issuer hosts, expired certificates and malformed fields.
 - `lib/identity/__tests__/gameCenterLink.test.ts` covers the on-device decisions: when the token is kept, replaced after sign-out or a player change, and retried after a `409`.
+- `server/__tests__/game-center-friends.test.ts` runs friends and invites against the real server and a throwaway database: mutual-only presence, unlinked friends hidden, friend IDs never written to the database, live "In a game" status, reserved rooms that outsiders and second devices cannot use, blocks hiding both players, decline/cancel/expiry/sender-leaving, two simultaneous accepts, one waiting invite at a time, and the per-minute invite limit.
+- `lib/social/__tests__/friendsState.test.ts` covers the app's friend and invite state and the messages it shows.
 - `server/__tests__/game-center-identity.test.ts` runs the real routes and WebSocket server against a throwaway Postgres database. It covers first-device linking with history carried over, forged/stale/replayed proofs, second-device recognition (gallery, reports, blocks, matchmaking), a shared phone switching players, a link applied to an already-queued connection, and players who never sign in.

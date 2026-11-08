@@ -15,3 +15,10 @@ Spawn test servers as `node --import tsx server/index.ts`, never via the tsx CLI
 **Why:** The tsx CLI runs the app in a child process. SIGKILL to the wrapper cannot be relayed, so the real server survived "crashes" as an orphan and kept retrying webhooks, producing extra deliveries that failed exact-count assertions.
 
 **How to apply:** Any test that SIGKILLs a spawned server process must load tsx in-process.
+
+## The restart test uses a hand-written schema
+The restart test creates its tables with raw SQL, not from `shared/schema.ts`. Any table the report/identity path reads (e.g. `player_accounts` for identity lookups) must be added there too.
+
+**Why:** A new identity lookup made report submission fail inside the spawned server, which only showed up as "Timed out waiting for first webhook attempt".
+
+**How to apply:** When storage code starts reading a table or column on the reports/identity path, mirror it in that test's CREATE TABLE block.

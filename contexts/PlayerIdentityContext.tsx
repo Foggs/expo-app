@@ -1,7 +1,7 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { AppState } from "react-native";
 import { signInWithGameCenter } from "@/lib/gameCenter";
-import { holdSessionTokenUntil } from "@/lib/sessionToken";
+import { holdSessionTokenUntil, onSessionTokenRotated } from "@/lib/sessionToken";
 
 export type PlayerIdentityStatus = "checking" | "linked" | "declined" | "unavailable" | "error";
 
@@ -37,7 +37,6 @@ export function PlayerIdentityProvider({ children }: { children: React.ReactNode
     holdSessionTokenUntil(check);
     void check
       .then((result) => {
-        if (result.rotatedToken) setTokenGeneration((generation) => generation + 1);
         statusRef.current = result.status;
         setStatus(result.status);
         setDisplayName(result.status === "linked" ? result.displayName : null);
@@ -55,6 +54,10 @@ export function PlayerIdentityProvider({ children }: { children: React.ReactNode
         inFlightRef.current = false;
       });
   }, []);
+
+  // Bumped for every replacement as it happens, including when a later step
+  // of the same sign-in check fails.
+  useEffect(() => onSessionTokenRotated(() => setTokenGeneration((generation) => generation + 1)), []);
 
   useEffect(() => {
     attemptSignIn(true);

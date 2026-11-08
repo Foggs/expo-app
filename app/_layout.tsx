@@ -13,9 +13,11 @@ import { useColorScheme } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { KeyboardProvider } from "react-native-keyboard-controller";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
+import FriendInviteBanner from "@/components/FriendInviteBanner";
 import { LoadingScreen } from "@/components/LoadingScreen";
 import { queryClient } from "@/lib/query-client";
 import { PlayerIdentityProvider } from "@/contexts/PlayerIdentityContext";
+import { SocialProvider } from "@/contexts/SocialContext";
 import { WebSocketProvider } from "@/contexts/WebSocketContext";
 import Colors from "@/constants/colors";
 
@@ -50,6 +52,7 @@ function RootLayoutNav() {
           headerBackVisible: false,
         }}
       />
+      <Stack.Screen name="friend-list" />
       <Stack.Screen
         name="gallery"
         options={{
@@ -112,7 +115,10 @@ export default function RootLayout() {
           <KeyboardProvider>
             <PlayerIdentityProvider>
               <WebSocketProvider>
-                <RootLayoutNav />
+                <SocialProvider>
+                  <RootLayoutNav />
+                  <FriendInviteBanner />
+                </SocialProvider>
               </WebSocketProvider>
             </PlayerIdentityProvider>
           </KeyboardProvider>

@@ -15,7 +15,7 @@ vi.mock("../storage", () => ({
     get: (_target, method: string) => async (key?: unknown) => {
       storageCalls.push(method);
       if (method === "resolvePlayerIdentity") {
-        return { playerKey: key, aliasKeys: [key] };
+        return { playerKey: key, aliasKeys: [key], gameCenterPlayerId: null };
       }
       return undefined;
     },
@@ -198,6 +198,49 @@ describe("WebSocket message validation", () => {
     client.ws.send(JSON.stringify({ type: "authenticate", sessionToken: SESSION_TOKEN }));
     client.ws.send(JSON.stringify({ type: "ping" }));
     expect(await client.next()).toEqual({ type: "pong" });
+    client.ws.close();
+  });
+
+  it("rejects malformed friend and invite messages", async () => {
+    const client = await connect();
+    client.ws.send(JSON.stringify({ type: "authenticate", sessionToken: SESSION_TOKEN }));
+    for (const message of [
+      { type: "set_friends" },
+      { type: "set_friends", friendIds: "T:_a" },
+      { type: "set_friends", friendIds: ["T:_ok", ""] },
+      { type: "set_friends", friendIds: ["T:_bad id"] },
+      { type: "set_friends", friendIds: ["T:_" + "a".repeat(126)] },
+      { type: "set_friends", friendIds: Array.from({ length: 501 }, (_, i) => `T:_${i}`) },
+      { type: "set_friends", friendIds: [], displayNames: ["Alice"] },
+      { type: "invite_friend" },
+      { type: "invite_friend", playerId: 42 },
+      { type: "invite_friend", playerId: "<script>" },
+      { type: "invite_friend", playerId: "T:_a", roomCode: "ABC123" },
+      { type: "respond_invite", inviteId: "a".repeat(32) },
+      { type: "respond_invite", inviteId: "a".repeat(32), accept: "yes" },
+      { type: "respond_invite", inviteId: "not-an-invite", accept: true },
+      { type: "respond_invite", inviteId: "A".repeat(32), accept: true },
+      { type: "cancel_invite" },
+      { type: "cancel_invite", inviteId: "a".repeat(31) },
+      { type: "cancel_invite", inviteId: "a".repeat(32), reason: "x" },
+    ]) {
+      client.ws.send(JSON.stringify(message));
+      expect(await client.next()).toMatchObject({ type: "error", code: "VALIDATION_FAILED" });
+    }
+    client.ws.close();
+  });
+
+  it("accepts well-formed friend and invite messages and refuses sessions without Game Center", async () => {
+    const client = await connect();
+    client.ws.send(JSON.stringify({ type: "authenticate", sessionToken: SESSION_TOKEN }));
+    client.ws.send(JSON.stringify({ type: "set_friends", friendIds: Array.from({ length: 500 }, (_, i) => `T:_${i}`) }));
+    expect(await client.next()).toMatchObject({ type: "friends_error", code: "NOT_LINKED" });
+    client.ws.send(JSON.stringify({ type: "invite_friend", playerId: "T:_friend.1-x" }));
+    expect(await client.next()).toMatchObject({ type: "invite_error", code: "NOT_LINKED" });
+    client.ws.send(JSON.stringify({ type: "respond_invite", inviteId: "a".repeat(32), accept: true }));
+    expect(await client.next()).toMatchObject({ type: "invite_error", code: "INVITE_NOT_FOUND" });
+    client.ws.send(JSON.stringify({ type: "cancel_invite", inviteId: "b".repeat(32) }));
+    expect(await client.next()).toMatchObject({ type: "invite_error", code: "INVITE_NOT_FOUND" });
     client.ws.close();
   });
 

@@ -19,7 +19,8 @@
       "buildNumber": "1",
       "infoPlist": {
         "LSApplicationQueriesSchemes": ["fb-messenger", "sms"],
-        "ITSAppUsesNonExemptEncryption": false
+        "ITSAppUsesNonExemptEncryption": false,
+        "NSGKFriendListUsageDescription": "SketchDuel shows which of your Game Center friends play, so you can see who's online and invite them to a match."
       },
       "entitlements": {
         "com.apple.developer.game-center": true

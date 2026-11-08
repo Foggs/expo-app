@@ -46,7 +46,15 @@ export async function runGameCenterSignIn(
     rotatedToken = true;
   };
 
-  const auth = await deps.authenticate();
+  let auth: GameCenterAuthResult;
+  try {
+    auth = await deps.authenticate();
+  } catch (error) {
+    // Fail closed: if Game Center cannot confirm the player is still signed
+    // in, the token must not keep acting as them.
+    console.warn("[GameCenter] Sign-in check failed; treating Game Center as unavailable:", error);
+    auth = { authenticated: false, reason: "unavailable" };
+  }
   if (!auth.authenticated) {
     if (stored) await rotate();
     return { status: auth.reason, rotatedToken };

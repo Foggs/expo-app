@@ -23,6 +23,15 @@ export type PlayerIdentity = {
   playerKey: string;
   /** Every key whose history belongs to this player, including playerKey. */
   aliasKeys: string[];
+  /** The linked Game Center player (team-scoped ID), or null for a device-only player. */
+  gameCenterPlayerId: string | null;
+};
+
+/** A SketchDuel account found by its Game Center player ID. */
+export type FriendAccount = {
+  gameCenterPlayerId: string;
+  playerKey: string;
+  aliasKeys: string[];
 };
 
 export class ProofAlreadyUsedError extends Error {
@@ -79,6 +88,8 @@ export interface IStorage {
   arePlayersBlocked(firstKeys: string[], secondKeys: string[]): Promise<boolean>;
   havePlayedTogether(firstKeys: string[], secondKeys: string[]): Promise<boolean>;
   resolvePlayerIdentity(key: string): Promise<PlayerIdentity>;
+  findFriendAccounts(gameCenterPlayerIds: string[]): Promise<FriendAccount[]>;
+  findBlockedPlayerKeys(playerKeys: string[], others: Pick<FriendAccount, "playerKey" | "aliasKeys">[]): Promise<Set<string>>;
   linkGameCenterPlayer(data: {
     gameCenterPlayerId: string;
     deviceKey: string;
@@ -324,7 +335,63 @@ export class DatabaseStorage implements IStorage {
       .from(playerDeviceLinks)
       .where(eq(playerDeviceLinks.playerKey, playerKey));
     const aliasKeys = Array.from(new Set([playerKey, ...linkedDevices.map((row) => row.deviceKey)]));
-    return { playerKey, aliasKeys };
+    const [account] = await db.select({ gameCenterPlayerId: playerAccounts.gameCenterPlayerId })
+      .from(playerAccounts)
+      .where(eq(playerAccounts.playerKey, playerKey));
+    return { playerKey, aliasKeys, gameCenterPlayerId: account?.gameCenterPlayerId ?? null };
+  }
+
+  /** The accounts (with every key their history uses) for these Game Center player IDs. */
+  async findFriendAccounts(gameCenterPlayerIds: string[]): Promise<FriendAccount[]> {
+    if (gameCenterPlayerIds.length === 0) return [];
+    const accounts = await db.select({
+      gameCenterPlayerId: playerAccounts.gameCenterPlayerId,
+      playerKey: playerAccounts.playerKey,
+    })
+      .from(playerAccounts)
+      .where(inArray(playerAccounts.gameCenterPlayerId, gameCenterPlayerIds));
+    if (accounts.length === 0) return [];
+    const links = await db.select({ deviceKey: playerDeviceLinks.deviceKey, playerKey: playerDeviceLinks.playerKey })
+      .from(playerDeviceLinks)
+      .where(inArray(playerDeviceLinks.playerKey, accounts.map((account) => account.playerKey)));
+    const devicesByAccount = new Map<string, string[]>();
+    for (const row of links) {
+      const devices = devicesByAccount.get(row.playerKey) ?? [];
+      devices.push(row.deviceKey);
+      devicesByAccount.set(row.playerKey, devices);
+    }
+    return accounts.map((account) => ({
+      ...account,
+      aliasKeys: [account.playerKey, ...(devicesByAccount.get(account.playerKey) ?? [])],
+    }));
+  }
+
+  /** Which of `others` (by playerKey) have a block with this player, in either direction. */
+  async findBlockedPlayerKeys(
+    playerKeys: string[],
+    others: Pick<FriendAccount, "playerKey" | "aliasKeys">[],
+  ): Promise<Set<string>> {
+    const accountByKey = new Map<string, string>();
+    for (const other of others) {
+      for (const key of other.aliasKeys) accountByKey.set(key, other.playerKey);
+    }
+    const otherKeys = Array.from(accountByKey.keys());
+    if (playerKeys.length === 0 || otherKeys.length === 0) return new Set();
+    const rows = await db.select({
+      blocker: playerBlocks.blockerSessionKey,
+      blocked: playerBlocks.blockedPlayerKey,
+    })
+      .from(playerBlocks)
+      .where(or(
+        and(inArray(playerBlocks.blockerSessionKey, playerKeys), inArray(playerBlocks.blockedPlayerKey, otherKeys)),
+        and(inArray(playerBlocks.blockerSessionKey, otherKeys), inArray(playerBlocks.blockedPlayerKey, playerKeys)),
+      ));
+    const blocked = new Set<string>();
+    for (const row of rows) {
+      const account = accountByKey.get(row.blocked) ?? accountByKey.get(row.blocker);
+      if (account) blocked.add(account);
+    }
+    return blocked;
   }
 
   async linkGameCenterPlayer(data: {

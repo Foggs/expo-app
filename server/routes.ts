@@ -9,7 +9,7 @@ import {
   ProofAlreadyUsedError,
   type PlayerIdentity,
 } from "./storage";
-import { applyLinkedIdentity } from "./websocket";
+import { applyLinkedIdentity, applyPlayerBlock } from "./websocket";
 import {
   createGameSchema,
   submitTurnSchema,
@@ -498,6 +498,7 @@ export async function registerRoutes(app: Express, options: RegisterRoutesOption
         return;
       }
       await storage.blockPlayer(blocker.playerKey, blocked.playerKey);
+      applyPlayerBlock(blocker.aliasKeys, blocked.aliasKeys);
       res.status(201).json({ message: "This player will not be matched with you again" });
     }),
   );

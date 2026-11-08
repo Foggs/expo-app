@@ -204,6 +204,11 @@ export const strokeSchema = z.object({
   width: z.number().min(1).max(50),
 }).strict();
 
+/** Game Center team-scoped player IDs, as uploaded by the app (e.g. "T:_abc123"). */
+export const gameCenterPlayerIdSchema = z.string().min(1).max(128).regex(/^[A-Za-z0-9:_.\-]+$/);
+export const MAX_UPLOADED_FRIENDS = 500;
+export const friendInviteIdSchema = z.string().regex(/^[a-f0-9]{32}$/);
+
 export const wsClientMessageSchema = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("authenticate"),
@@ -239,7 +244,28 @@ export const wsClientMessageSchema = z.discriminatedUnion("type", [
   }).strict(),
   z.object({ type: z.literal("ping") }).strict(),
   z.object({ type: z.literal("request_game_state") }).strict(),
+  z.object({
+    type: z.literal("set_friends"),
+    friendIds: z.array(gameCenterPlayerIdSchema).max(MAX_UPLOADED_FRIENDS),
+  }).strict(),
+  z.object({ type: z.literal("invite_friend"), playerId: gameCenterPlayerIdSchema }).strict(),
+  z.object({
+    type: z.literal("respond_invite"),
+    inviteId: friendInviteIdSchema,
+    accept: z.boolean(),
+  }).strict(),
+  z.object({ type: z.literal("cancel_invite"), inviteId: friendInviteIdSchema }).strict(),
 ]);
+
+export type FriendPresenceStatus = "online" | "in_game" | "offline";
+export type FriendInviteClosedReason = "declined" | "expired" | "cancelled" | "unavailable" | "answered_elsewhere";
+export type FriendInviteErrorCode =
+  | "NOT_LINKED"
+  | "RATE_LIMITED"
+  | "ALREADY_INVITING"
+  | "FRIEND_UNAVAILABLE"
+  | "IN_GAME"
+  | "INVITE_NOT_FOUND";
 
 export type WsClientMessage = z.infer<typeof wsClientMessageSchema>;
 
@@ -276,7 +302,16 @@ export type WsServerMessage =
         | "RATE_LIMITED";
     }
   | { type: "error"; message: string; code?: string }
-  | { type: "pong" };
+  | { type: "pong" }
+  | { type: "friends_status"; friends: { playerId: string; status: FriendPresenceStatus }[] }
+  | { type: "friend_presence"; playerId: string; status: FriendPresenceStatus }
+  | { type: "friend_removed"; playerId: string }
+  | { type: "friends_error"; code: "NOT_LINKED" | "RATE_LIMITED" | "FAILED"; message: string }
+  | { type: "invite_sent"; inviteId: string; playerId: string; expiresInMs: number }
+  | { type: "invite_received"; inviteId: string; playerId: string; expiresInMs: number }
+  | { type: "invite_accepted"; inviteId: string; roomCode: string }
+  | { type: "invite_closed"; inviteId: string; reason: FriendInviteClosedReason }
+  | { type: "invite_error"; code: FriendInviteErrorCode; message: string };
 
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type User = typeof users.$inferSelect;
