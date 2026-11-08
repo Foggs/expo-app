@@ -7,7 +7,7 @@ import {
   ROOM_CODE_LENGTH,
   isValidRoomCode,
 } from "@shared/friendRoom";
-import { storage } from "./storage";
+import { storage, type PlayerIdentity } from "./storage";
 import { randomInt } from "crypto";
 import { getSessionKey } from "./sessionIdentity";
 
@@ -25,12 +25,23 @@ const FRIEND_ROOM_TTL = 10 * 60_000; // 10 minutes
 const MAX_ROOM_CODE_ATTEMPTS = 25;
 const MAX_CONNECTIONS = 500;
 const MAX_ROOM_JOINS_PER_MINUTE = 10;
+const MAX_PENDING_AUTH_MESSAGES = 20;
 
 interface PlayerConnection {
   ws: WebSocket;
   id: string;
   playerName: string;
+  /** Canonical player key: the Game Center account key once linked, otherwise the device key. */
   sessionKey: string;
+  /** Every key whose history (games, blocks) belongs to this player. */
+  playerKeys: string[];
+  authState: "none" | "pending" | "done";
+  /** One-way key of the device token this connection authenticated with. */
+  deviceKey: string;
+  /** Set when a link changed this player's identity while authentication was resolving. */
+  identityStale: boolean;
+  /** Messages received while authentication is resolving, replayed in order. */
+  pendingMessages: WsClientMessage[];
   gameId: string | null;
   playerRole: "player1" | "player2" | null;
   friendRoomCode: string | null;
@@ -503,7 +514,7 @@ async function attemptMatchmaking(): Promise<void> {
             const first = available[i].conn;
             const second = available[j].conn;
             if (first.sessionKey === second.sessionKey) continue;
-            if (await storage.arePlayersBlocked(first.sessionKey, second.sessionKey)) continue;
+            if (await storage.arePlayersBlocked(first.playerKeys, second.playerKeys)) continue;
             selectedPair = [available[i].index, available[j].index, first, second];
             break;
           }
@@ -896,24 +907,70 @@ function handleMessage(conn: PlayerConnection, data: Buffer | ArrayBuffer | Buff
   }
 
   if (msg.type === "authenticate") {
-    if (conn.sessionKey) {
+    if (conn.authState !== "none") {
       sendMessage(conn, { type: "error", message: "Session is already authenticated", code: "ALREADY_AUTHENTICATED" });
       return;
     }
-    const sessionKey = getSessionKey(msg.sessionToken);
-    if (!sessionKey) {
+    const deviceKey = getSessionKey(msg.sessionToken);
+    if (!deviceKey) {
       conn.ws.close(1008, "Valid device session required");
       return;
     }
-    conn.sessionKey = sessionKey;
+    conn.authState = "pending";
+    conn.deviceKey = deviceKey;
+    void authenticateConnection(conn, deviceKey);
     return;
   }
 
-  if (!conn.sessionKey) {
+  if (conn.authState === "pending") {
+    if (conn.pendingMessages.length >= MAX_PENDING_AUTH_MESSAGES) {
+      conn.ws.close(1008, "Too many messages before authentication finished");
+      return;
+    }
+    conn.pendingMessages.push(msg);
+    return;
+  }
+
+  if (conn.authState !== "done") {
     conn.ws.close(1008, "Authenticate before sending game actions");
     return;
   }
 
+  dispatchMessage(conn, msg);
+}
+
+/**
+ * Resolves the device key to its player (a linked Game Center account or the
+ * device itself), then replays any messages that arrived meanwhile.
+ */
+async function authenticateConnection(conn: PlayerConnection, deviceKey: string): Promise<void> {
+  try {
+    let identity = await storage.resolvePlayerIdentity(deviceKey);
+    while (conn.identityStale) {
+      conn.identityStale = false;
+      identity = await storage.resolvePlayerIdentity(deviceKey);
+    }
+    if (conn.ws.readyState !== WebSocket.OPEN) return;
+    conn.sessionKey = identity.playerKey;
+    conn.playerKeys = identity.aliasKeys;
+    conn.authState = "done";
+  } catch (error) {
+    console.error("Could not resolve player identity:", error instanceof Error ? error.message : error);
+    conn.pendingMessages = [];
+    if (conn.ws.readyState === WebSocket.OPEN) {
+      conn.ws.close(1011, "Could not verify session");
+    }
+    return;
+  }
+  const queued = conn.pendingMessages;
+  conn.pendingMessages = [];
+  for (const queuedMessage of queued) {
+    if (conn.ws.readyState !== WebSocket.OPEN) return;
+    dispatchMessage(conn, queuedMessage);
+  }
+}
+
+function dispatchMessage(conn: PlayerConnection, msg: WsClientMessage): void {
   switch (msg.type) {
     case "ping":
       sendMessage(conn, { type: "pong" });
@@ -1036,6 +1093,25 @@ function handleMessage(conn: PlayerConnection, data: Buffer | ArrayBuffer | Buff
     case "request_game_state":
       handleRequestGameState(conn);
       break;
+  }
+}
+
+/**
+ * Applies a new Game Center link to open connections, so a player who links
+ * while connected (or is connected on another of their devices) is matched
+ * and block-checked as the account straight away, without reconnecting.
+ */
+export function applyLinkedIdentity(deviceKey: string, identity: PlayerIdentity): void {
+  for (const conn of connections.values()) {
+    if (conn.authState === "pending") {
+      // Its lookup may have read the links before this one was committed.
+      conn.identityStale = true;
+      continue;
+    }
+    if (conn.authState !== "done") continue;
+    if (conn.deviceKey !== deviceKey && !identity.aliasKeys.includes(conn.sessionKey)) continue;
+    conn.sessionKey = identity.playerKey;
+    conn.playerKeys = identity.aliasKeys;
   }
 }
 
@@ -1163,6 +1239,11 @@ export function setupWebSocket(server: Server): WebSocketServer {
       id: connId,
       playerName: generatePlayerName(),
       sessionKey: "",
+      playerKeys: [],
+      authState: "none",
+      deviceKey: "",
+      identityStale: false,
+      pendingMessages: [],
       gameId: null,
       playerRole: null,
       friendRoomCode: null,

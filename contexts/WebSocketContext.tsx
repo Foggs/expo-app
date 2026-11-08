@@ -35,6 +35,7 @@ import {
 import { resolveNativeWsUrl } from "@/lib/network/endpoints";
 import { wsServerMessageSchema } from "@/lib/network/serverMessages";
 import { getSessionToken } from "@/lib/sessionToken";
+import { usePlayerIdentity } from "@/contexts/PlayerIdentityContext";
 import type {
   MatchFlowStateId,
   MatchFlowEvent,
@@ -771,6 +772,19 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
     },
     [switchToMode],
   );
+
+  // When the device identity is replaced (the Game Center player signed out
+  // or changed), stop waiting for a match under the old identity. A game
+  // already in progress finishes; the next connection uses the new token.
+  const { tokenGeneration } = usePlayerIdentity();
+  const seenTokenGenerationRef = useRef(tokenGeneration);
+  useEffect(() => {
+    if (seenTokenGenerationRef.current === tokenGeneration) return;
+    seenTokenGenerationRef.current = tokenGeneration;
+    const waitingForMatch =
+      flowSnapshot.stateId === "queueing" || friendRoomStatus !== "idle";
+    if (waitingForMatch) stopCurrentMode();
+  }, [tokenGeneration, flowSnapshot.stateId, friendRoomStatus, stopCurrentMode]);
 
   const leaveFriendRoom = useCallback(() => {
     stopCurrentMode();

@@ -5,9 +5,11 @@ import type { ThemeColors } from "@/hooks/useThemeColors";
 
 interface HomeHeroProps {
   colors: ThemeColors;
+  /** Game Center name of the signed-in player, when available. */
+  playerName?: string | null;
 }
 
-export default function HomeHero({ colors }: HomeHeroProps) {
+export default function HomeHero({ colors, playerName }: HomeHeroProps) {
   return (
     <>
       <View style={styles.header}>
@@ -25,6 +27,22 @@ export default function HomeHero({ colors }: HomeHeroProps) {
         <Text style={[styles.title, { color: colors.text }]} accessibilityRole="header">
           SketchDuel
         </Text>
+
+        {playerName ? (
+          <View
+            style={[styles.playerBadge, { backgroundColor: colors.card }]}
+            accessible={true}
+            accessibilityLabel={`Signed in to Game Center as ${playerName}`}
+          >
+            <Ionicons name="game-controller" size={16} color={colors.tint} />
+            <Text
+              style={[styles.playerName, { color: colors.text }]}
+              numberOfLines={1}
+            >
+              {playerName}
+            </Text>
+          </View>
+        ) : null}
       </View>
 
       <View style={styles.centerContent}>
@@ -80,6 +98,21 @@ const styles = StyleSheet.create({
     fontSize: 42,
     fontFamily: "Inter_700Bold",
     letterSpacing: -1,
+  },
+  playerBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    maxWidth: 260,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 999,
+    marginTop: -4,
+  },
+  playerName: {
+    flexShrink: 1,
+    fontSize: 15,
+    fontFamily: "Inter_600SemiBold",
   },
   centerContent: {
     flex: 1,

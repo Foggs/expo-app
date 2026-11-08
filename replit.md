@@ -60,7 +60,8 @@ Preferred communication style: Simple, everyday language.
 - **Rate Limiting**: On API and WebSocket endpoints.
 - **Body Size Limits**: Configured for JSON bodies and content-length checks.
 - **Input Validation**: Zod schemas for all WebSocket messages and gallery submissions, SVG path sanitization, hex color validation.
-- **Gallery Ownership**: Session tokens for drawing deletion.
+- **Gallery Ownership**: Drawings are owned by the saving player's key (Game Center account or device); legacy rows are matched by a hash of the stored device token.
+- **Player Identity**: iOS signs into Game Center automatically (`modules/game-center` native module, `contexts/PlayerIdentityContext.tsx`). The server verifies Apple's identity proof (`server/gameCenterVerifier.ts`) and links the device key to the account, so blocks, reports, matchmaking and gallery ownership follow the player across iPhones. Devices without Game Center keep their device identity. See `docs/game-center.md`.
 - **CORS & WebSocket Origin**: Dynamic and secure origin validation.
 - **Game Abandonment**: Database status updates for disconnected players.
 - **Matchmaking Timeout**: Accurate tracking of queue wait time.

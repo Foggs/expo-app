@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, integer, jsonb, timestamp, uniqueIndex } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, integer, jsonb, timestamp, uniqueIndex, index } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 import { isValidRoomCode, normalizeRoomCode } from "./friendRoom";
@@ -54,7 +54,39 @@ export const galleryDrawings = pgTable("gallery_drawings", {
   strokes: jsonb("strokes").notNull().default([]),
   roundCount: integer("round_count").notNull().default(3),
   sessionToken: text("session_token"),
+  ownerPlayerKey: text("owner_player_key"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+/**
+ * A verified Game Center player. playerKey is the canonical player identifier
+ * used for games, blocks, reports and gallery ownership once a device links.
+ */
+export const playerAccounts = pgTable("player_accounts", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  gameCenterPlayerId: text("game_center_player_id").notNull().unique(),
+  playerKey: text("player_key").notNull().unique(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  lastSignedInAt: timestamp("last_signed_in_at").defaultNow().notNull(),
+});
+
+/**
+ * Maps a device's own player key (derived from its device token) to the
+ * account it signed in with. History recorded under the device key stays
+ * attached to the account through this link.
+ */
+export const playerDeviceLinks = pgTable("player_device_links", {
+  deviceKey: text("device_key").primaryKey(),
+  playerKey: text("player_key").notNull(),
+  linkedAt: timestamp("linked_at").defaultNow().notNull(),
+}, (table) => ({
+  playerKeyIdx: index("player_device_links_player_key_idx").on(table.playerKey),
+}));
+
+/** Identity proofs already accepted, so a captured proof cannot be replayed. */
+export const gameCenterProofUses = pgTable("game_center_proof_uses", {
+  proofHash: text("proof_hash").primaryKey(),
+  usedAt: timestamp("used_at").defaultNow().notNull(),
 });
 
 export const playerBlocks = pgTable("player_blocks", {
@@ -130,6 +162,16 @@ export const insertGalleryDrawingSchema = z.object({
   roundCount: z.number().min(1).max(10).optional(),
   sessionToken: z.string().max(100).optional(),
 }).strict();
+
+export const gameCenterIdentityProofSchema = z.object({
+  playerId: z.string().min(1).max(128),
+  publicKeyUrl: z.string().min(1).max(512),
+  signature: z.string().min(1).max(2048).regex(/^[A-Za-z0-9+/]+={0,2}$/),
+  salt: z.string().min(1).max(128).regex(/^[A-Za-z0-9+/]+={0,2}$/),
+  timestamp: z.string().regex(/^\d{1,16}$/),
+}).strict();
+
+export type GameCenterIdentityProof = z.infer<typeof gameCenterIdentityProofSchema>;
 
 export const insertUserSchema = createInsertSchema(users).pick({
   username: true,

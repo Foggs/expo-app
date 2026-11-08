@@ -18,6 +18,7 @@ import FriendsMatchModal from "@/components/FriendsMatchModal";
 import HomeHero from "@/components/HomeHero";
 import HomePrimaryActions from "@/components/HomePrimaryActions";
 import MatchmakingModal from "@/components/MatchmakingModal";
+import { usePlayerIdentity } from "@/contexts/PlayerIdentityContext";
 import { useGameWebSocket } from "@/contexts/WebSocketContext";
 import { useScreenPadding } from "@/hooks/useScreenPadding";
 import { useThemeColors } from "@/hooks/useThemeColors";
@@ -40,6 +41,7 @@ export default function HomeScreen() {
   const navigatedRef = useRef(false);
   const [isFriendsModalOpen, setIsFriendsModalOpen] = useState(false);
   const [friendRoomInput, setFriendRoomInput] = useState("");
+  const playerIdentity = usePlayerIdentity();
 
   const {
     setCallbacks,
@@ -292,7 +294,7 @@ export default function HomeScreen() {
           { paddingTop: topPadding + 40, paddingBottom: bottomPadding + 20 },
         ]}
       >
-        <HomeHero colors={colors} />
+        <HomeHero colors={colors} playerName={playerIdentity.displayName} />
 
         <HomePrimaryActions
           colors={colors}

@@ -1,9 +1,15 @@
 import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import { z } from "zod";
-import { timingSafeEqual } from "crypto";
+import { randomBytes, timingSafeEqual } from "crypto";
 import rateLimit from "express-rate-limit";
-import { storage } from "./storage";
+import {
+  storage,
+  DeviceLinkedToOtherPlayerError,
+  ProofAlreadyUsedError,
+  type PlayerIdentity,
+} from "./storage";
+import { applyLinkedIdentity } from "./websocket";
 import {
   createGameSchema,
   submitTurnSchema,
@@ -11,9 +17,15 @@ import {
   createReportSchema,
   createPlayerBlockSchema,
   reviewReportSchema,
+  gameCenterIdentityProofSchema,
 } from "@shared/schema";
 import { getRequestSessionKey, getSessionKey } from "./sessionIdentity";
 import { filterDisplayName } from "@shared/contentFilter";
+import {
+  createDefaultGameCenterVerifier,
+  GameCenterVerificationError,
+  type GameCenterVerifier,
+} from "./gameCenterVerifier";
 import { moderationPage } from "./moderation-page";
 import {
   getModerationNotificationStatus,
@@ -109,7 +121,22 @@ function isValidAdminToken(supplied: string | undefined): boolean {
   return expectedBytes.length === suppliedBytes.length && timingSafeEqual(expectedBytes, suppliedBytes);
 }
 
-export async function registerRoutes(app: Express): Promise<Server> {
+/** Resolves the device token header to the player it belongs to (Game Center account or device). */
+async function getRequestPlayer(value: string | string[] | undefined): Promise<PlayerIdentity | null> {
+  const deviceKey = getRequestSessionKey(value);
+  if (!deviceKey) return null;
+  return storage.resolvePlayerIdentity(deviceKey);
+}
+
+export type RegisterRoutesOptions = {
+  gameCenterVerifier?: GameCenterVerifier;
+  /** Game Center link attempts allowed per IP per minute. Defaults to 10. */
+  identityLinksPerMinute?: number;
+};
+
+export async function registerRoutes(app: Express, options: RegisterRoutesOptions = {}): Promise<Server> {
+  const gameCenterVerifier = options.gameCenterVerifier ?? createDefaultGameCenterVerifier();
+
   // The game REST endpoints are unauthenticated debugging helpers; the app
   // plays games exclusively over the WebSocket. Never expose them in
   // production, where they would let anyone list active games, read
@@ -293,12 +320,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return;
       }
 
+      const ownerDeviceKey = getSessionKey(parsed.data.sessionToken);
+      const owner = ownerDeviceKey ? await storage.resolvePlayerIdentity(ownerDeviceKey) : null;
       const drawing = await storage.saveToGallery({
         playerName: parsed.data.playerName ? filterDisplayName(parsed.data.playerName) : undefined,
         opponentName: parsed.data.opponentName ? filterDisplayName(parsed.data.opponentName) : undefined,
         strokes: parsed.data.strokes,
         roundCount: parsed.data.roundCount,
-        sessionToken: parsed.data.sessionToken,
+        ownerPlayerKey: owner?.playerKey,
       });
       res.status(201).json({
         id: drawing.id,
@@ -321,7 +350,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       );
       const drawings = await storage.getGalleryDrawings(limit);
       res.json(
-        drawings.map(({ sessionToken, ...rest }) => rest)
+        drawings.map(({ sessionToken: _sessionToken, ownerPlayerKey: _ownerPlayerKey, ...rest }) => rest)
       );
     }),
   );
@@ -336,8 +365,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return;
       }
 
-      const sessionToken = req.headers["x-session-token"] as string | undefined;
-      if (!sessionToken) {
+      const player = await getRequestPlayer(req.headers["x-session-token"]);
+      if (!player) {
         res.status(401).json({ message: "Session token required" });
         return;
       }
@@ -348,7 +377,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return;
       }
 
-      const deleted = await storage.deleteGalleryDrawingOwned(id, sessionToken);
+      const deleted = await storage.deleteGalleryDrawingOwned(id, player.aliasKeys);
       if (!deleted) {
         res.status(403).json({ message: "You can only delete drawings saved on this device" });
         return;
@@ -369,8 +398,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     "/api/reports",
     safetyRateLimit,
     asyncHandler(async (req: Request, res: Response) => {
-      const reporterSessionKey = getRequestSessionKey(req.headers["x-session-token"]);
-      if (!reporterSessionKey) {
+      const reporterDeviceKey = getRequestSessionKey(req.headers["x-session-token"]);
+      if (!reporterDeviceKey) {
         res.status(401).json({ message: "A valid device session is required" });
         return;
       }
@@ -380,6 +409,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         res.status(400).json({ message: "Invalid report", errors: z.flattenError(parsed.error).fieldErrors });
         return;
       }
+      const reporter = await storage.resolvePlayerIdentity(reporterDeviceKey);
+      const reporterSessionKey = reporter.playerKey;
 
       let reportId: string;
       if (parsed.data.reportType === "gallery") {
@@ -388,11 +419,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
           res.status(404).json({ message: "Drawing not found" });
           return;
         }
+        const ownerKey = drawing.ownerPlayerKey ?? getSessionKey(drawing.sessionToken);
+        const targetPlayerKey = ownerKey ? (await storage.resolvePlayerIdentity(ownerKey)).playerKey : null;
         reportId = await storage.createModerationReport({
           reportType: "gallery",
           reason: parsed.data.reason,
           reporterSessionKey,
-          targetPlayerKey: getSessionKey(drawing.sessionToken),
+          targetPlayerKey,
           targetName: filterDisplayName(drawing.playerName || "Unknown"),
           galleryDrawingId: drawing.id,
           evidence: {
@@ -409,18 +442,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
           res.status(404).json({ message: "Match not found" });
           return;
         }
-        const targetPlayerKey =
-          game.player1SessionKey === reporterSessionKey
-            ? game.player2SessionKey
-            : game.player2SessionKey === reporterSessionKey
-              ? game.player1SessionKey
-              : null;
-        if (!targetPlayerKey) {
+        const isPlayer1 = Boolean(game.player1SessionKey && reporter.aliasKeys.includes(game.player1SessionKey));
+        const isPlayer2 = Boolean(game.player2SessionKey && reporter.aliasKeys.includes(game.player2SessionKey));
+        const opponentKey = isPlayer1 ? game.player2SessionKey : isPlayer2 ? game.player1SessionKey : null;
+        if (!opponentKey) {
           res.status(403).json({ message: "You can only report a player from your own match" });
           return;
         }
-        const opponentRole =
-          game.player1SessionKey === reporterSessionKey ? "player2" : "player1";
+        const targetPlayerKey = (await storage.resolvePlayerIdentity(opponentKey)).playerKey;
+        const opponentRole = isPlayer1 ? "player2" : "player1";
         const matchTurns = await storage.getTurnsByGame(parsed.data.gameId);
         reportId = await storage.createModerationReport({
           reportType: "match",
@@ -448,8 +478,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     "/api/blocks",
     safetyRateLimit,
     asyncHandler(async (req: Request, res: Response) => {
-      const blockerKey = getRequestSessionKey(req.headers["x-session-token"]);
-      if (!blockerKey) {
+      const blockerDeviceKey = getRequestSessionKey(req.headers["x-session-token"]);
+      if (!blockerDeviceKey) {
         res.status(401).json({ message: "A valid device session is required" });
         return;
       }
@@ -458,12 +488,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
         res.status(400).json({ message: "Invalid player block" });
         return;
       }
-      const { blockedPlayerId } = parsed.data;
-      if (blockerKey === blockedPlayerId || !(await storage.havePlayedTogether(blockerKey, blockedPlayerId))) {
+      const blocker = await storage.resolvePlayerIdentity(blockerDeviceKey);
+      const blocked = await storage.resolvePlayerIdentity(parsed.data.blockedPlayerId);
+      if (
+        blocker.playerKey === blocked.playerKey ||
+        !(await storage.havePlayedTogether(blocker.aliasKeys, blocked.aliasKeys))
+      ) {
         res.status(403).json({ message: "You can only block someone you have played with" });
         return;
       }
-      await storage.blockPlayer(blockerKey, blockedPlayerId);
+      await storage.blockPlayer(blocker.playerKey, blocked.playerKey);
       res.status(201).json({ message: "This player will not be matched with you again" });
     }),
   );
@@ -577,6 +611,76 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return;
       }
       res.json({ message: "Report updated" });
+    }),
+  );
+
+  const identityRateLimit = rateLimit({
+    windowMs: 60 * 1000,
+    max: options.identityLinksPerMinute ?? 10,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { message: "Too many sign-in attempts, please wait a moment" },
+  });
+
+  app.post(
+    "/api/identity/game-center",
+    identityRateLimit,
+    asyncHandler(async (req: Request, res: Response) => {
+      const deviceKey = getRequestSessionKey(req.headers["x-session-token"]);
+      if (!deviceKey) {
+        res.status(401).json({ message: "A valid device session is required" });
+        return;
+      }
+      const parsed = gameCenterIdentityProofSchema.safeParse(req.body);
+      if (!parsed.success) {
+        res.status(400).json({ message: "Invalid Game Center identity proof" });
+        return;
+      }
+
+      let verified;
+      try {
+        verified = await gameCenterVerifier(parsed.data);
+      } catch (error) {
+        if (error instanceof GameCenterVerificationError) {
+          console.warn(`Game Center proof rejected: ${error.reason}`);
+          const status = error.reason === "certificate_unavailable" ? 503 : 401;
+          res.status(status).json({ message: "Game Center sign-in could not be verified" });
+          return;
+        }
+        throw error;
+      }
+
+      try {
+        const linked = await storage.linkGameCenterPlayer({
+          gameCenterPlayerId: verified.playerId,
+          deviceKey,
+          proofHash: verified.proofHash,
+          newPlayerKey: randomBytes(32).toString("hex"),
+        });
+        try {
+          applyLinkedIdentity(deviceKey, await storage.resolvePlayerIdentity(deviceKey));
+        } catch (refreshError) {
+          // The link is saved; open connections pick it up when they reconnect.
+          console.error(
+            "Could not refresh connections after a Game Center link:",
+            refreshError instanceof Error ? refreshError.message : refreshError,
+          );
+        }
+        res.json({ linked: true, isNewAccount: linked.isNewAccount });
+      } catch (error) {
+        if (error instanceof ProofAlreadyUsedError) {
+          res.status(401).json({ message: "Game Center sign-in could not be verified" });
+          return;
+        }
+        if (error instanceof DeviceLinkedToOtherPlayerError) {
+          res.status(409).json({
+            message: "This device is linked to a different player",
+            code: "DEVICE_LINKED_TO_OTHER_PLAYER",
+          });
+          return;
+        }
+        throw error;
+      }
     }),
   );
 

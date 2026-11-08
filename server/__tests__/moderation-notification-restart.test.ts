@@ -76,7 +76,13 @@ describe("moderation alert recovery after a real server restart", () => {
         strokes jsonb NOT NULL DEFAULT '[]'::jsonb,
         round_count integer NOT NULL DEFAULT 3,
         session_token text,
+        owner_player_key text,
         created_at timestamptz NOT NULL DEFAULT now()
+      );
+      CREATE TABLE player_device_links (
+        device_key text PRIMARY KEY,
+        player_key text NOT NULL,
+        linked_at timestamptz NOT NULL DEFAULT now()
       );
       CREATE TABLE moderation_reports (
         id varchar PRIMARY KEY DEFAULT gen_random_uuid(),

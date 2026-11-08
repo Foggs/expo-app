@@ -1,4 +1,4 @@
-import { eq, and, desc, or, notExists, lte, sql } from "drizzle-orm";
+import { eq, and, desc, or, notExists, lte, lt, sql, inArray, isNull } from "drizzle-orm";
 import { db } from "./db";
 import {
   users,
@@ -7,6 +7,9 @@ import {
   galleryDrawings,
   playerBlocks,
   moderationReports,
+  playerAccounts,
+  playerDeviceLinks,
+  gameCenterProofUses,
   type User,
   type InsertUser,
   type Game,
@@ -14,6 +17,34 @@ import {
   type GalleryDrawing,
 } from "@shared/schema";
 import { filterDisplayName } from "@shared/contentFilter";
+
+export type PlayerIdentity = {
+  /** Canonical key for new records (games, blocks, reports, gallery ownership). */
+  playerKey: string;
+  /** Every key whose history belongs to this player, including playerKey. */
+  aliasKeys: string[];
+};
+
+export class ProofAlreadyUsedError extends Error {
+  constructor() {
+    super("This identity proof has already been used");
+    this.name = "ProofAlreadyUsedError";
+  }
+}
+
+/**
+ * The device token is already linked to a different Game Center player. A
+ * device never moves between players: its history belongs to the first one,
+ * so the app must start a fresh device identity instead.
+ */
+export class DeviceLinkedToOtherPlayerError extends Error {
+  constructor() {
+    super("This device is linked to a different player");
+    this.name = "DeviceLinkedToOtherPlayerError";
+  }
+}
+
+const PROOF_RETENTION_MS = 15 * 60_000;
 
 export interface IStorage {
   getUser(id: string): Promise<User | undefined>;
@@ -40,13 +71,20 @@ export interface IStorage {
     opponentName?: string;
     strokes: unknown;
     roundCount?: number;
-    sessionToken?: string;
+    ownerPlayerKey?: string;
   }): Promise<GalleryDrawing>;
   getGalleryDrawings(limit?: number): Promise<GalleryDrawing[]>;
   getGalleryDrawing(id: string): Promise<GalleryDrawing | undefined>;
-  deleteGalleryDrawingOwned(id: string, sessionToken: string): Promise<boolean>;
-  arePlayersBlocked(firstKey: string, secondKey: string): Promise<boolean>;
-  havePlayedTogether(firstKey: string, secondKey: string): Promise<boolean>;
+  deleteGalleryDrawingOwned(id: string, ownerKeys: string[]): Promise<boolean>;
+  arePlayersBlocked(firstKeys: string[], secondKeys: string[]): Promise<boolean>;
+  havePlayedTogether(firstKeys: string[], secondKeys: string[]): Promise<boolean>;
+  resolvePlayerIdentity(key: string): Promise<PlayerIdentity>;
+  linkGameCenterPlayer(data: {
+    gameCenterPlayerId: string;
+    deviceKey: string;
+    proofHash: string;
+    newPlayerKey: string;
+  }): Promise<{ playerKey: string; isNewAccount: boolean }>;
   blockPlayer(blockerKey: string, blockedPlayerKey: string): Promise<void>;
   createModerationReport(data: {
     reportType: string;
@@ -173,7 +211,7 @@ export class DatabaseStorage implements IStorage {
     opponentName?: string;
     strokes: unknown;
     roundCount?: number;
-    sessionToken?: string;
+    ownerPlayerKey?: string;
   }): Promise<GalleryDrawing> {
     const [drawing] = await db
       .insert(galleryDrawings)
@@ -182,7 +220,7 @@ export class DatabaseStorage implements IStorage {
         opponentName: filterDisplayName(data.opponentName || "Unknown"),
         strokes: data.strokes,
         roundCount: data.roundCount || 3,
-        sessionToken: data.sessionToken || null,
+        ownerPlayerKey: data.ownerPlayerKey || null,
       })
       .returning();
     return drawing;
@@ -220,49 +258,124 @@ export class DatabaseStorage implements IStorage {
     return drawing;
   }
 
-  async deleteGalleryDrawingOwned(id: string, sessionToken: string): Promise<boolean> {
+  async deleteGalleryDrawingOwned(id: string, ownerKeys: string[]): Promise<boolean> {
+    if (ownerKeys.length === 0) return false;
+    // Older rows stored the raw device token instead of an owner key; derive
+    // the same one-way key in SQL so those drawings stay deletable by their owner.
+    const legacyOwnerKey = sql`encode(sha256(convert_to(lower(${galleryDrawings.sessionToken}), 'UTF8')), 'hex')`;
     const result = await db.delete(galleryDrawings)
       .where(and(
         eq(galleryDrawings.id, id),
-        eq(galleryDrawings.sessionToken, sessionToken),
+        or(
+          inArray(galleryDrawings.ownerPlayerKey, ownerKeys),
+          and(
+            isNull(galleryDrawings.ownerPlayerKey),
+            inArray(legacyOwnerKey, ownerKeys),
+          ),
+        ),
       ))
       .returning({ id: galleryDrawings.id });
     return result.length > 0;
   }
 
-  async arePlayersBlocked(firstKey: string, secondKey: string): Promise<boolean> {
+  async arePlayersBlocked(firstKeys: string[], secondKeys: string[]): Promise<boolean> {
+    if (firstKeys.length === 0 || secondKeys.length === 0) return false;
     const [block] = await db
       .select({ id: playerBlocks.id })
       .from(playerBlocks)
       .where(or(
         and(
-          eq(playerBlocks.blockerSessionKey, firstKey),
-          eq(playerBlocks.blockedPlayerKey, secondKey),
+          inArray(playerBlocks.blockerSessionKey, firstKeys),
+          inArray(playerBlocks.blockedPlayerKey, secondKeys),
         ),
         and(
-          eq(playerBlocks.blockerSessionKey, secondKey),
-          eq(playerBlocks.blockedPlayerKey, firstKey),
+          inArray(playerBlocks.blockerSessionKey, secondKeys),
+          inArray(playerBlocks.blockedPlayerKey, firstKeys),
         ),
       ))
       .limit(1);
     return Boolean(block);
   }
 
-  async havePlayedTogether(firstKey: string, secondKey: string): Promise<boolean> {
+  async havePlayedTogether(firstKeys: string[], secondKeys: string[]): Promise<boolean> {
+    if (firstKeys.length === 0 || secondKeys.length === 0) return false;
     const [game] = await db.select({ id: games.id })
       .from(games)
       .where(or(
         and(
-          eq(games.player1SessionKey, firstKey),
-          eq(games.player2SessionKey, secondKey),
+          inArray(games.player1SessionKey, firstKeys),
+          inArray(games.player2SessionKey, secondKeys),
         ),
         and(
-          eq(games.player1SessionKey, secondKey),
-          eq(games.player2SessionKey, firstKey),
+          inArray(games.player1SessionKey, secondKeys),
+          inArray(games.player2SessionKey, firstKeys),
         ),
       ))
       .limit(1);
     return Boolean(game);
+  }
+
+  async resolvePlayerIdentity(key: string): Promise<PlayerIdentity> {
+    const [link] = await db.select({ playerKey: playerDeviceLinks.playerKey })
+      .from(playerDeviceLinks)
+      .where(eq(playerDeviceLinks.deviceKey, key));
+    const playerKey = link?.playerKey ?? key;
+    const linkedDevices = await db.select({ deviceKey: playerDeviceLinks.deviceKey })
+      .from(playerDeviceLinks)
+      .where(eq(playerDeviceLinks.playerKey, playerKey));
+    const aliasKeys = Array.from(new Set([playerKey, ...linkedDevices.map((row) => row.deviceKey)]));
+    return { playerKey, aliasKeys };
+  }
+
+  async linkGameCenterPlayer(data: {
+    gameCenterPlayerId: string;
+    deviceKey: string;
+    proofHash: string;
+    newPlayerKey: string;
+  }): Promise<{ playerKey: string; isNewAccount: boolean }> {
+    return db.transaction(async (tx) => {
+      await tx.delete(gameCenterProofUses)
+        .where(lt(gameCenterProofUses.usedAt, new Date(Date.now() - PROOF_RETENTION_MS)));
+      const proofRows = await tx.insert(gameCenterProofUses)
+        .values({ proofHash: data.proofHash })
+        .onConflictDoNothing()
+        .returning({ proofHash: gameCenterProofUses.proofHash });
+      if (proofRows.length === 0) throw new ProofAlreadyUsedError();
+
+      const created = await tx.insert(playerAccounts)
+        .values({ gameCenterPlayerId: data.gameCenterPlayerId, playerKey: data.newPlayerKey })
+        .onConflictDoNothing({ target: playerAccounts.gameCenterPlayerId })
+        .returning({ playerKey: playerAccounts.playerKey });
+      let playerKey: string;
+      if (created.length > 0) {
+        playerKey = created[0].playerKey;
+      } else {
+        const [account] = await tx.update(playerAccounts)
+          .set({ lastSignedInAt: new Date() })
+          .where(eq(playerAccounts.gameCenterPlayerId, data.gameCenterPlayerId))
+          .returning({ playerKey: playerAccounts.playerKey });
+        playerKey = account.playerKey;
+      }
+
+      const inserted = await tx.insert(playerDeviceLinks)
+        .values({ deviceKey: data.deviceKey, playerKey })
+        .onConflictDoNothing({ target: playerDeviceLinks.deviceKey })
+        .returning({ playerKey: playerDeviceLinks.playerKey });
+      if (inserted.length === 0) {
+        const [existing] = await tx.select({ playerKey: playerDeviceLinks.playerKey })
+          .from(playerDeviceLinks)
+          .where(eq(playerDeviceLinks.deviceKey, data.deviceKey))
+          .for("update");
+        // Rolls back the whole transaction, including the proof use and any
+        // new account, so the app can retry the same proof with a fresh token.
+        if (existing.playerKey !== playerKey) throw new DeviceLinkedToOtherPlayerError();
+        await tx.update(playerDeviceLinks)
+          .set({ linkedAt: new Date() })
+          .where(eq(playerDeviceLinks.deviceKey, data.deviceKey));
+      }
+
+      return { playerKey, isNewAccount: created.length > 0 };
+    });
   }
 
   async blockPlayer(blockerKey: string, blockedPlayerKey: string): Promise<void> {

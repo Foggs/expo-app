@@ -12,8 +12,11 @@ const storageCalls = vi.hoisted(() => [] as string[]);
 
 vi.mock("../storage", () => ({
   storage: new Proxy({}, {
-    get: (_target, method: string) => async () => {
+    get: (_target, method: string) => async (key?: unknown) => {
       storageCalls.push(method);
+      if (method === "resolvePlayerIdentity") {
+        return { playerKey: key, aliasKeys: [key] };
+      }
       return undefined;
     },
   }),
@@ -113,7 +116,7 @@ describe("HTTP route validation", () => {
       reason: "spam",
     }, { "x-session-token": SESSION_TOKEN });
     expect(response.status).toBe(404);
-    expect(storageCalls).toEqual(["getGalleryDrawing"]);
+    expect(storageCalls).toEqual(["resolvePlayerIdentity", "getGalleryDrawing"]);
   });
 });
 

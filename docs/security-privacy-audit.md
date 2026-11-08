@@ -68,12 +68,14 @@ This audit lowers rejection and incident risk; it does **not** guarantee App Sto
 | Drawings (stroke paths, colors, widths) | User | Live to opponent over WSS; stored in `turns` per game | Gameplay | Indefinite (no purge job) | None |
 | Gallery drawings + display names | User taps save on results | `gallery_drawings`; **publicly visible to all users** | Gallery feature | Until deleted | Any user can delete any item |
 | Display name | Server-generated random (e.g. "SwiftArtist42"); gallery stores "You" and opponent's random name | Opponent, gallery, server logs | Gameplay | Logs per host policy; gallery as above | With gallery item |
-| Session token (random 256-bit) | Generated on device; Keychain (SecureStore), AsyncStorage fallback | Sent with gallery save (stored in `session_token`) and as delete header | Originally ownership; now only a non-empty check | Until gallery item is deleted | With gallery item |
+| Session token (random 256-bit) | Generated on device; Keychain (SecureStore), AsyncStorage fallback | Sent with gallery saves, deletes, reports and blocks, and on WebSocket connect. The server keeps only a one-way hash (the device key); new gallery rows store an owner key, not the token. Older gallery rows still hold the raw token. | Recognize the device; gallery ownership | Device keys: indefinite; legacy tokens: until the gallery item is deleted | With gallery item |
+| Game Center player ID (team-scoped, e.g. `T:_…`) | Apple, after the player signs into Game Center on iOS and the server verifies Apple's signed identity proof | `player_accounts`, linked to a random account key; `player_device_links` maps each device key to that account | Recognize the same player on every iPhone so blocks, reports and gallery ownership follow them | Indefinite (no deletion flow yet; see 5.1.1(v) below) | Manual database deletion only |
+| Game Center display name | Apple (on device) | Shown on the player's own home screen only. **Not sent to the server.** | Show who is signed in | Not stored | n/a |
 | Friend room codes | Server | In memory only | Private matches | 10 min TTL | Automatic |
 | IP address | Network | Rate limiter memory; hosting infrastructure | Abuse prevention | Transient in app | n/a |
 | Share invite link | User action | OS share sheet / SMS / Messenger (user-initiated) | Invite friends | n/a | n/a |
 
-Not collected: accounts, email, contacts, location, photos, camera, microphone, health, payments, advertising ID, analytics, crash reporting. No third-party SDKs send data off device. Processors: Replit (hosting) and the Postgres database provider.
+Not collected: email, passwords, contacts, location, photos, camera, microphone, health, payments, advertising ID, analytics, crash reporting. No third-party SDKs send data off device. Processors: Replit (hosting) and the Postgres database provider.
 
 Recommendations (not release-blocking): add a retention purge for `turns` and abandoned `games`. Stop storing `session_token` on gallery rows, since it no longer controls access; this would let you drop the identifier from labels and the manifest.
 
@@ -84,19 +86,22 @@ Recommendations (not release-blocking): add a retention purge for `turns` and ab
 - **Privacy manifest** (`ios.privacyManifests`, merged into `PrivacyInfo.xcprivacy` at prebuild):
   - `NSPrivacyTracking: false`, no tracking domains.
   - Required-reason APIs, copied from verified SDK manifests: UserDefaults `CA92.1` (React Native, expo-constants, expo-system-ui); FileTimestamp `C617.1` (React Native, AsyncStorage), `0A2A.1`/`3B52.1` (expo-file-system); DiskSpace `E174.1`/`85F4.1` (expo-file-system).
-  - Collected data: Other User Content and Device ID (the session token), both not linked, not tracking, App Functionality.
+  - Collected data: Other User Content, Device ID (the session token) and User ID (the Game Center player ID), all **linked to the user**, not tracking, App Functionality. They are marked linked because, once a player signs into Game Center, their drawings and device identity are tied to a persistent account. Updated 2026-11-08.
+- **Game Center**: `com.apple.developer.game-center` entitlement set in `app.json`. Game Center must also be enabled for the app in App Store Connect. See `docs/game-center.md`.
 - **ATT**: not required. No tracking, no IDFA, no `NSUserTrackingUsageDescription`.
-- **Account deletion (5.1.1(v))**: not applicable. There is no account creation; the `users` table is unused.
+- **Account deletion (5.1.1(v))**: **Owner decision needed.** Game Center sign-in creates a server-side player record (`player_accounts`) linked to the Game Center player ID. Apple requires apps that support account creation to offer account deletion in the app. Game Center identity may be judged lower risk than a username/password account, but there is no in-app way to remove the link yet. Add one before release or be ready to explain the decision to App Review. The `users` table is still unused.
 
 ## 6. Draft App Store Connect privacy answers
 - Do you or your partners collect data from this app? **Yes.**
-- **User Content → Other User Content**: collected; not linked to the user; not used for tracking; purpose: App Functionality.
-- **Identifiers → Device ID**: collected (app-generated random token saved with gallery posts); not linked; not used for tracking; purpose: App Functionality. *Drop this if the token is no longer stored server-side.*
+- **User Content → Other User Content**: collected; **linked** (drawings are tied to the player's account once they sign into Game Center); not used for tracking; purpose: App Functionality.
+- **Identifiers → Device ID**: collected (one-way hash of the app-generated random token; older gallery posts still store the raw token); **linked**; not used for tracking; purpose: App Functionality.
+- **Identifiers → User ID**: collected (Game Center team-scoped player ID, only for players who sign into Game Center); **linked**; not used for tracking; purpose: App Functionality.
 - All other categories: **Not collected.**
 - Tracking: **No.**
 - Age rating questionnaire: answer **Yes** to user-generated content and anonymous interaction with strangers. Expect a higher age rating unless UGC is moderated or restricted.
 
 ## 7. Residual risks
+- No in-app way to delete a Game Center–linked player record (see 5.1.1(v) in §5).
 - UGC moderation gap (Guideline 1.2); see owner action 2.
 - Public, anyone-can-delete gallery (F7).
 - Build-time dependency advisories pinned by Expo SDK 54.

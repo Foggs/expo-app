@@ -15,6 +15,7 @@ import { KeyboardProvider } from "react-native-keyboard-controller";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { LoadingScreen } from "@/components/LoadingScreen";
 import { queryClient } from "@/lib/query-client";
+import { PlayerIdentityProvider } from "@/contexts/PlayerIdentityContext";
 import { WebSocketProvider } from "@/contexts/WebSocketContext";
 import Colors from "@/constants/colors";
 
@@ -109,9 +110,11 @@ export default function RootLayout() {
       <QueryClientProvider client={queryClient}>
         <GestureHandlerRootView style={{ flex: 1 }}>
           <KeyboardProvider>
-            <WebSocketProvider>
-              <RootLayoutNav />
-            </WebSocketProvider>
+            <PlayerIdentityProvider>
+              <WebSocketProvider>
+                <RootLayoutNav />
+              </WebSocketProvider>
+            </PlayerIdentityProvider>
           </KeyboardProvider>
         </GestureHandlerRootView>
       </QueryClientProvider>

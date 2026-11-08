@@ -6,3 +6,4 @@
 - [Moderation alert recovery tests](moderation-alert-recovery-tests.md) — gate webhook responses; spawn servers with node --import tsx so SIGKILL crashes are real.
 - [Social feature scope](social-scope.md) — rivalry records/friend leaderboards deferred to a future release; social scope is sign-in, friends/invites, privacy.
 
+- [Player identity model](player-identity-model.md) — canonical key for new records, alias sets for comparisons; account key is random, history follows via aliases.
