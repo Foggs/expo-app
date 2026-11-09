@@ -18,6 +18,7 @@ import FriendsMatchModal from "@/components/FriendsMatchModal";
 import HomeHero from "@/components/HomeHero";
 import HomePrimaryActions from "@/components/HomePrimaryActions";
 import InviteMatchModal from "@/components/InviteMatchModal";
+import { INVITE_MATCH_TIMEOUT_MS, inviteMatchFailure } from "@/lib/social/inviteMatchGuard";
 import MatchmakingModal from "@/components/MatchmakingModal";
 import { usePlayerIdentity } from "@/contexts/PlayerIdentityContext";
 import { useSocial } from "@/contexts/SocialContext";
@@ -47,6 +48,8 @@ export default function HomeScreen() {
   const { acceptedRoom, consumeAcceptedRoom, nameFor } = useSocial();
   /** Set while joining the room reserved by an accepted friend invite. */
   const [inviteMatch, setInviteMatch] = useState<{ friendName: string } | null>(null);
+  /** Why joining the invited match stopped, when the server gave no reason. */
+  const [inviteMatchFailureMessage, setInviteMatchFailureMessage] = useState<string | null>(null);
 
   const {
     setCallbacks,
@@ -112,12 +115,37 @@ export default function HomeScreen() {
     setIsFriendsModalOpen(false);
     setFriendRoomInput("");
     clearFriendRoomError();
+    setInviteMatchFailureMessage(null);
     setInviteMatch({ friendName: nameFor(acceptedRoom.playerId) });
     joinFriendRoom(acceptedRoom.roomCode);
   }, [isFocused, acceptedRoom, consumeAcceptedRoom, clearFriendRoomError, joinFriendRoom, nameFor]);
 
+  // Never leave "Starting match" up forever: stop on a failed connection or
+  // when the friend does not arrive in time.
+  useEffect(() => {
+    if (!inviteMatch || inviteMatchFailureMessage || friendRoomError) return;
+    const startedAt = Date.now();
+    const fail = () => {
+      const message = inviteMatchFailure({
+        flowState,
+        roomError: null,
+        elapsedMs: Date.now() - startedAt >= INVITE_MATCH_TIMEOUT_MS ? INVITE_MATCH_TIMEOUT_MS : 0,
+      });
+      if (!message) return;
+      leaveFriendRoom();
+      setInviteMatchFailureMessage(message);
+    };
+    if (inviteMatchFailure({ flowState, roomError: null, elapsedMs: 0 })) {
+      fail();
+      return;
+    }
+    const timer = setTimeout(fail, INVITE_MATCH_TIMEOUT_MS);
+    return () => clearTimeout(timer);
+  }, [inviteMatch, inviteMatchFailureMessage, friendRoomError, flowState, leaveFriendRoom]);
+
   const handleCancelInviteMatch = useCallback(() => {
     impactLight();
+    setInviteMatchFailureMessage(null);
     leaveFriendRoom();
     clearFriendRoomError();
     setInviteMatch(null);
@@ -376,7 +404,7 @@ export default function HomeScreen() {
           visible={inviteMatch !== null}
           colors={colors}
           friendName={inviteMatch?.friendName ?? "your friend"}
-          error={inviteMatch && friendRoomStatus === "idle" ? friendRoomError : null}
+          error={inviteMatch ? inviteMatchFailureMessage ?? (friendRoomStatus === "idle" ? friendRoomError : null) : null}
           onCancel={handleCancelInviteMatch}
         />
       )}
