@@ -8,3 +8,4 @@
 
 - [Player identity model](player-identity-model.md) — canonical key for new records, alias sets for comparisons; account key is random, history follows via aliases.
 - [Social connection design](social-connection-design.md) — separate foreground socket; invites reserve a room; visibility is per account and fails closed.
+- [Remaining npm audit advisories](audit-remaining-advisories.md) — leftovers need Expo SDK upgrades; image-size 2.x override breaks Metro.

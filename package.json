@@ -85,5 +85,12 @@
     "vite": "^7.3.7",
     "vitest": "^4.1.12"
   },
-  "private": true
+  "private": true,
+  "overrides": {
+    "brace-expansion@^1.1.7": "1.1.21",
+    "decode-uri-component": "0.5.1",
+    "@expo/metro-config": {
+      "postcss": "8.5.32"
+    }
+  }
 }
