@@ -42,7 +42,7 @@ export default function ResultsActionButtons({
               onPress={rematch.onPress}
               disabled={rematch.state === "sending"}
               accessibilityRole="button"
-              accessibilityLabel={`Challenge ${rematch.friendName} again`}
+              accessibilityLabel={`Rematch ${rematch.friendName}`}
             >
               <LinearGradient
                 colors={[colors.accentSecondary, colors.tint]}
@@ -56,7 +56,7 @@ export default function ResultsActionButtons({
                   <Ionicons name="flash" size={22} color="#fff" />
                 )}
                 <Text style={styles.primaryButtonText} numberOfLines={1}>
-                  Challenge {rematch.friendName} again
+                  Rematch
                 </Text>
               </LinearGradient>
             </Pressable>
