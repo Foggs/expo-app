@@ -21,3 +21,12 @@ authorize a cloud build, submission, SDK migration, or merge.
 
 **How to apply:** Finish the approved step, report what was actually verified,
 and obtain confirmation before starting the next external action.
+
+The intended sequence is to upgrade Expo and then build/test the upgraded app.
+An SDK 54 baseline build is optional, not a prerequisite.
+
+**Why:** The owner corrected a diversion into baseline-build preparation and
+chose to return to the SDK upgrade review.
+
+**How to apply:** Do not resume the baseline build implicitly. Keep preparation,
+SDK migration, cloud build, and submission as distinct approval checkpoints.

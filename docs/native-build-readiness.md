@@ -1,5 +1,10 @@
 # SketchDuel native-build readiness
 
+> Current plan: [Expo upgrade checklist](expo-upgrade-checklist.md).
+> The owner chose to upgrade first, then build/test the upgraded app. The SDK 54
+> baseline route below is optional historical preparation, not a prerequisite
+> or authorization to start a build. The checklist controls the sequence.
+
 ## Scope
 
 Prepare a native SDK 54 baseline before considering an SDK upgrade. Keep Game
@@ -18,14 +23,14 @@ This document does not authorize a cloud build, SDK migration, or publication.
   pod in this workspace. That is discovery evidence, not compilation evidence.
 - The app declares its Game Center entitlement and friend-list permission text.
 - The app config references the owner-provided Expo project ID
-  `29068319-a247-48ad-bc51-575c0c773ecd`. Account ownership/access has not been
-  verified through authenticated EAS CLI.
+  `29068319-a247-48ad-bc51-575c0c773ecd`. The owner confirmed the dashboard ID
+  matches and EAS device login succeeded with the correct account.
 - `eas.json` now contains a production store-distribution profile for a physical
   iPhone Release build, not a Simulator or development-client build.
 - EAS manages build numbers remotely, with iOS auto-increment enabled. Before
-  the first build, compare the remote build number with any existing TestFlight
-  builds for version 1.0.0 and initialize it appropriately if needed; remote
-  numbering does not discover prior App Store Connect uploads automatically.
+  the first build, recheck the remote number. The owner reported highest Apple
+  build 2 and confirmed initializing the remote number to 2; the next increment
+  is expected to be 3. Do not lower a number that has since advanced.
 - The profile sets the public backend address to
   `https://sketch-duel.replit.app`, obtained from deployment metadata. Its
   `/api/health` endpoint responded successfully during preparation. This is
@@ -59,11 +64,13 @@ autolinking success alone is not compilation or upload evidence.
 - A reachable HTTPS backend containing the current identity and social endpoints.
   Confirm its actual address separately before configuring the build.
 
-Account access, signing, App Store Connect settings, and an SDK-54-compatible
-cloud build image have not been verified. Never paste account credentials,
+The owner confirmed Apple membership, certificate/profile portal access, and
+Game Center enabled in both Apple portals. Usable signing credentials,
+provisioning entitlements, and a compatible cloud image remain unverified.
+Never paste account credentials,
 signing files, or session tokens into chat or this document.
 
-## Recommended external route: SDK 54 TestFlight baseline
+## Optional historical route: SDK 54 TestFlight baseline
 
 Use a separate external checkout of this branch containing the native source.
 A standalone TestFlight build includes the custom native module and
@@ -137,9 +144,10 @@ for device acceptance. No Simulator or iPhone tests have been performed here.
 
 ## Later upgrade checkpoints
 
-Only after native SDK 54 acceptance, ask the owner whether to proceed.
-Migration belongs in an external native-build-capable workflow; the supported
-Expo Go-only workflow here does not cover this custom module.
+Native SDK 54 acceptance is optional, not required before upgrading. Follow the
+current upgrade checklist and obtain approval between stages. Migration belongs
+in a native-build-capable workflow; the supported Expo Go-only workflow here
+does not cover this custom module.
 
 Recheck current official compatibility and release guidance before executing.
 The proposed route is SDK 54 → SDK 57 at 57.0.9 or newer → SDK 58. Do not use

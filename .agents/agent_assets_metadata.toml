@@ -6,45 +6,67 @@ id = "u_CDuCfpioBq4s1jU54GP"
 uri = "file://attached_assets/app-store/INDEX.md"
 type = "text"
 title = "App Store Screenshots — README"
+logical_id = "72318bf1-42a7-4fce-8824-4a529a71c039"
 
 [[outputs]]
 id = "sAWTOPErlmZyEJO21OVfB"
 uri = "file://attached_assets/app-store/raw/01-home.png"
 type = "image"
 title = "Raw 01 — Home"
+logical_id = "5f39d339-e867-43fc-a451-b9e23b699a83"
 
 [[outputs]]
 id = "yW1bjy85LlhOwb-yu41hK"
 uri = "file://attached_assets/app-store/raw/05-your-turn.png"
 type = "image"
 title = "Raw 05 — Your Turn"
+logical_id = "63cc8a10-b712-4164-9250-77b9b48b04e6"
 
 [[outputs]]
 id = "Pr7g60BSa5OwiYJJqua6Z"
 uri = "file://attached_assets/app-store/raw/08-results.png"
 type = "image"
 title = "Raw 08 — Results"
+logical_id = "5bed5d0c-fc26-42a6-b9cd-f9e282094ce7"
 
 [[outputs]]
 id = "c8z6Wj6XJuGF4gnBkNDMU"
 uri = "file://attached_assets/app-store/marketing/1320x2868-portrait/01-home.png"
 type = "image"
 title = "Marketing 1320×2868 — Home"
+logical_id = "641c5a29-1da5-4652-899e-a5cc6a61e648"
 
 [[outputs]]
 id = "t4kH8RHPaFKGdc1djqCga"
 uri = "file://attached_assets/app-store/marketing/1320x2868-portrait/05-your-turn.png"
 type = "image"
 title = "Marketing 1320×2868 — Your Turn"
+logical_id = "8173c138-3231-454a-9dee-84e3e2759cac"
 
 [[outputs]]
 id = "Z_ODyCR2eM6fkWNwhHCgR"
 uri = "file://attached_assets/app-store/marketing/2868x1320-landscape/08-results.png"
 type = "image"
 title = "Marketing 2868×1320 landscape — Results"
+logical_id = "3b26020e-dc5e-4cfa-a81d-661d7c669d33"
 
 [[outputs]]
 id = "AZA3zR5MBup8X9ZZXzgWB"
 uri = "file://attached_assets/app-store/marketing/2736x1260-landscape/09-gallery.png"
 type = "image"
 title = "Marketing 2736×1260 landscape — Gallery"
+logical_id = "24476487-85dd-4d06-9a3f-8f8a4a37b357"
+
+[[outputs]]
+id = "0ew7cN066HiCvIGUyX9jn"
+uri = "file://docs/expo-upgrade-checklist.md"
+type = "text"
+title = "Expo upgrade checklist"
+description = "Shared checklist covering completed setup, native upgrade blockers, staged migration, TestFlight, and iPhone acceptance."
+logical_id = "96023282-0693-4abe-9abe-396106b4e747"
+content_hash = "sha256:113e931097eb2bc66fbdac32be6a07e63983a109d621d72ee664b4d445f4d025"
+size = 8378
+mtime_ms = 1794350519186
+storage_uri = "gcs://replit-rams-assets-spock/rams/assets/repl:2bcd43f9-bde0-49b4-a9a9-3f65fcbaf604/96023282-0693-4abe-9abe-396106b4e747/eba51ac8-1814-40ba-96ba-b4d3e1371b39"
+storage_version_token = "1794350540307625"
+content_type = "text/markdown"
