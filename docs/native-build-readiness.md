@@ -20,7 +20,20 @@ This document does not authorize a cloud build, SDK migration, or publication.
 - The app config references the owner-provided Expo project ID
   `29068319-a247-48ad-bc51-575c0c773ecd`. Account ownership/access has not been
   verified through authenticated EAS CLI.
-- There is no `eas.json`. No `expo-dev-client` dependency is installed.
+- `eas.json` now contains a production store-distribution profile for a physical
+  iPhone Release build, not a Simulator or development-client build.
+- EAS manages build numbers remotely, with iOS auto-increment enabled. Before
+  the first build, compare the remote build number with any existing TestFlight
+  builds for version 1.0.0 and initialize it appropriately if needed; remote
+  numbering does not discover prior App Store Connect uploads automatically.
+- The profile sets the public backend address to
+  `https://sketch-duel.replit.app`, obtained from deployment metadata. Its
+  `/api/health` endpoint responded successfully during preparation. This is
+  not evidence that the latest Game Center server code is deployed.
+- The production `GAME_CENTER_BUNDLE_IDS` override was not present when checked.
+  Deploy the matching server default before Game Center acceptance testing.
+- The profile keeps npm's legacy peer-resolution mode used by this lockfile.
+  No `expo-dev-client` dependency is installed.
 
 ## Native source inclusion
 
@@ -62,12 +75,15 @@ The following are **owner-run external steps**, not commands executed here:
    `npm ci --legacy-peer-deps`.
 2. Use `npx eas-cli@latest login` and `npx eas-cli@latest whoami` to establish
    Expo access. Sign in interactively; do not share credentials.
-3. Run `npx eas-cli@latest build:configure` for iOS. Review generated
-   `eas.json` and project linking changes before proceeding. Preserve existing
-   app identity, permissions, entitlements, and unrelated scripts.
-4. Configure the production profile's build environment with the verified
-   `EXPO_PUBLIC_DOMAIN`. It is a public server address, not a secret. Do not use a
-   guessed production URL or assume localhost will work on an iPhone.
+3. Review the existing `eas.json` production profile and project link. Do not
+   overwrite them with a starter configuration. Use
+   `npx eas-cli@latest project:info` to check authenticated access to the intended
+   Expo project. Preserve app identity, permissions, entitlements, and scripts.
+4. Confirm the configured public backend is the intended test service and has
+   the current identity and social code. Bundled `EXPO_PUBLIC_DOMAIN` is a public
+   address, not a secret. Keep credentials and private signing material out of
+   `eas.json`. The selected EAS production environment may have additional
+   account-managed settings; review them before building.
 5. In Apple's developer portal, verify Game Center is enabled for the app ID and
    included in the provisioning configuration. Also verify Game Center setup in
    App Store Connect. Do not assume EAS automatically handles every capability.
@@ -77,10 +93,13 @@ The following are **owner-run external steps**, not commands executed here:
 7. Only after explicit owner approval of cloud usage and signing changes, run
    `npx eas-cli@latest build --profile production --platform ios`.
    Inspect logs for compilation and linking of `GameCenterModule`.
-8. Review a successful build before separately approving
-   `npx eas-cli@latest submit --profile production --platform ios`.
-   This uploads to App Store Connect; install through internal TestFlight testing.
-   Submission is not public App Store release or a guarantee of Apple acceptance.
+8. Review a successful build before separately preparing and approving a
+   submission profile. Obtain the existing App Store Connect numeric Apple ID
+   (not the bundle ID) to target that record explicitly, and select the reviewed
+   build ID rather than blindly submitting the latest build. No submission
+   profile, automatic submission, or release automation is configured here.
+   Submission uploads to App Store Connect for TestFlight; it is not public
+   App Store release or a guarantee of Apple acceptance.
 
 If production-profile configuration or signing fails, stop and record the
 specific failure. Do not change SDK versions merely to troubleshoot an unrelated

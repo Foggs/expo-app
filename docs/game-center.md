@@ -63,15 +63,22 @@ and the distinction between Simulator coverage and physical-iPhone acceptance.
 1. In the Apple Developer portal, make sure the App ID `app.replit.sketchduel` has **Game Center** enabled and the provisioning profile supports it. Do not assume automatic EAS capability synchronization covers Game Center.
 2. In App Store Connect, open the app → **Features** (or **Services**) → **Game Center** and turn it on for the app version. No leaderboards or achievements are required.
 
-First, install the EAS CLI, sign in, and create the build profiles (this project has no `eas.json` yet): `npm install -g eas-cli`, `eas login`, then `eas build:configure`.
+The project has an `eas.json` production profile for a standalone physical-iPhone
+build. From an external checkout, sign in with `npx eas-cli@latest login` and
+check access with `npx eas-cli@latest project:info`. Review the prerequisites in
+the native-build checklist before starting a build; no development profile or
+submission profile is configured yet.
 
 ### Option A: TestFlight (simplest, closest to release)
 
-1. Build and upload: `eas build --profile production --platform ios`, then `eas submit --platform ios`.
+1. After separate approval, build using `npx eas-cli@latest build --profile production --platform ios`. Review the successful build before preparing submission settings with the existing app's numeric Apple ID and uploading that specific build.
 2. Add yourself as an internal tester in App Store Connect → TestFlight, then install from the TestFlight app.
 3. TestFlight builds talk to the server set by `EXPO_PUBLIC_DOMAIN` at build time, so publish the server with this change first.
 
 ### Option B: development build (faster iteration on code changes)
+
+This alternative is not configured by the production profile and requires
+separate setup in an external native-build-capable environment.
 
 1. Add the dev client: `npx expo install expo-dev-client`.
 2. Register your iPhone (`eas device:create`), then build: `eas build --profile development --platform ios`.

@@ -1,0 +1,21 @@
+{
+  "cli": {
+    "appVersionSource": "remote"
+  },
+  "build": {
+    "production": {
+      "distribution": "store",
+      "developmentClient": false,
+      "environment": "production",
+      "env": {
+        "EXPO_PUBLIC_DOMAIN": "https://sketch-duel.replit.app",
+        "NPM_CONFIG_LEGACY_PEER_DEPS": "true"
+      },
+      "ios": {
+        "simulator": false,
+        "buildConfiguration": "Release",
+        "autoIncrement": true
+      }
+    }
+  }
+}
