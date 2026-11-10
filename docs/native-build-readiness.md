@@ -17,8 +17,10 @@ This document does not authorize a cloud build, SDK migration, or publication.
 - The installed autolinking tool resolves `GameCenterModule` and its `GameCenter`
   pod in this workspace. That is discovery evidence, not compilation evidence.
 - The app declares its Game Center entitlement and friend-list permission text.
-- There is no `eas.json` or configured EAS project ID in the inspected app config.
-  No `expo-dev-client` dependency is installed.
+- The app config references the owner-provided Expo project ID
+  `29068319-a247-48ad-bc51-575c0c773ecd`. Account ownership/access has not been
+  verified through authenticated EAS CLI.
+- There is no `eas.json`. No `expo-dev-client` dependency is installed.
 
 ## Native source inclusion
 

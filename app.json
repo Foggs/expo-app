@@ -93,6 +93,9 @@
       "expo-web-browser"
     ],
     "extra": {
+      "eas": {
+        "projectId": "29068319-a247-48ad-bc51-575c0c773ecd"
+      },
       "privacyPolicyUrl": "https://sketchduel.app/privacy",
       "supportEmail": "support@sketchduel.app"
     },
