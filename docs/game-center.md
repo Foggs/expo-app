@@ -48,9 +48,13 @@ If you change the bundle identifier in `app.json`, set `GAME_CENTER_BUNDLE_IDS` 
 
 Game Center does not work in Expo Go or the iOS Simulator's web preview, and it needs a native build that includes the Game Center capability. Use a development build or a TestFlight build.
 
+Before building, follow [Native-build readiness](native-build-readiness.md).
+It records an ignored-native-source blocker, the external SDK 54 baseline route,
+and the distinction between Simulator coverage and physical-iPhone acceptance.
+
 ### One-time setup in App Store Connect
 
-1. In the Apple Developer portal, make sure the App ID `com.sketchduel.app` has **Game Center** enabled. EAS turns it on automatically from the entitlement when it manages your credentials.
+1. In the Apple Developer portal, make sure the App ID `com.sketchduel.app` has **Game Center** enabled and the provisioning profile supports it. Do not assume automatic EAS capability synchronization covers Game Center.
 2. In App Store Connect, open the app → **Features** (or **Services**) → **Game Center** and turn it on for the app version. No leaderboards or achievements are required.
 
 First, install the EAS CLI, sign in, and create the build profiles (this project has no `eas.json` yet): `npm install -g eas-cli`, `eas login`, then `eas build:configure`.
