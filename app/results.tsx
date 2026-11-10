@@ -14,6 +14,7 @@ import ResultsPlayersInfo from "@/components/ResultsPlayersInfo";
 import ResultsRoundGallery from "@/components/ResultsRoundGallery";
 import ResultsStatsCard from "@/components/ResultsStatsCard";
 import ContentSafetyActions from "@/components/ContentSafetyActions";
+import { useSocial } from "@/contexts/SocialContext";
 import { useScreenPadding } from "@/hooks/useScreenPadding";
 import { useThemeColors } from "@/hooks/useThemeColors";
 import {
@@ -38,6 +39,17 @@ export default function ResultsScreen() {
     ? params.opponentPlayerId[0]
     : params.opponentPlayerId;
   const navigation = useNavigation();
+  const social = useSocial();
+  const rematchFriend = social.rematchFriend;
+  const rematchState = !rematchFriend
+    ? null
+    : social.outgoing?.playerId === rematchFriend
+      ? "waiting"
+      : social.sending === rematchFriend
+        ? "sending"
+        : social.statuses[rematchFriend] === "online" && social.connected && !social.outgoing && !social.sending
+          ? "ready"
+          : "unavailable";
   const insets = useSafeAreaInsets();
   const { isDark, colors } = useThemeColors();
   const { topPadding, bottomPadding } = useScreenPadding(insets);
@@ -186,6 +198,22 @@ export default function ResultsScreen() {
           onPlayAgain={handlePlayAgain}
           onHome={handleHome}
           onViewGallery={() => router.push("/gallery")}
+          rematch={
+            rematchFriend && rematchState
+              ? {
+                  friendName: social.nameFor(rematchFriend),
+                  state: rematchState,
+                  onPress: () => {
+                    impactMedium();
+                    social.inviteFriend(rematchFriend);
+                  },
+                  onCancel: () => {
+                    impactLight();
+                    social.cancelInvite();
+                  },
+                }
+              : undefined
+          }
         />
       </ScrollView>
     </View>

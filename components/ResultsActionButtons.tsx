@@ -13,6 +13,13 @@ interface ResultsActionButtonsProps {
   onPlayAgain: () => void;
   onHome: () => void;
   onViewGallery: () => void;
+  /** One-tap rematch with the friend from an invite match. Omitted when there is none. */
+  rematch?: {
+    friendName: string;
+    state: "ready" | "sending" | "waiting" | "unavailable";
+    onPress: () => void;
+    onCancel: () => void;
+  };
 }
 
 export default function ResultsActionButtons({
@@ -24,9 +31,55 @@ export default function ResultsActionButtons({
   onPlayAgain,
   onHome,
   onViewGallery,
+  rematch,
 }: ResultsActionButtonsProps) {
   return (
     <View style={styles.actions}>
+      {rematch && (
+        <View accessibilityLiveRegion="polite">
+          {rematch.state === "ready" || rematch.state === "sending" ? (
+            <Pressable
+              onPress={rematch.onPress}
+              disabled={rematch.state === "sending"}
+              accessibilityRole="button"
+              accessibilityLabel={`Challenge ${rematch.friendName} again`}
+            >
+              <LinearGradient
+                colors={[colors.accentSecondary, colors.tint]}
+                style={[styles.primaryButton, rematch.state === "sending" && styles.buttonDisabledStyle]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+              >
+                {rematch.state === "sending" ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  <Ionicons name="flash" size={22} color="#fff" />
+                )}
+                <Text style={styles.primaryButtonText} numberOfLines={1}>
+                  Challenge {rematch.friendName} again
+                </Text>
+              </LinearGradient>
+            </Pressable>
+          ) : rematch.state === "waiting" ? (
+            <View style={[styles.secondaryButton, { borderColor: colors.tint }]}>
+              <ActivityIndicator size="small" color={colors.tint} />
+              <Text style={[styles.secondaryButtonText, { color: colors.text }]} numberOfLines={1}>
+                Waiting for {rematch.friendName}…
+              </Text>
+              <Pressable onPress={rematch.onCancel} accessibilityRole="button" accessibilityLabel="Cancel rematch invite">
+                <Text style={[styles.secondaryButtonText, { color: colors.tint }]}>Cancel</Text>
+              </Pressable>
+            </View>
+          ) : (
+            <View style={[styles.secondaryButton, { borderColor: colors.border }]}>
+              <Text style={[styles.secondaryButtonText, { color: colors.textSecondary }]} numberOfLines={1}>
+                {rematch.friendName} isn&apos;t available right now
+              </Text>
+            </View>
+          )}
+        </View>
+      )}
+
       <Pressable
         onPress={onSaveToGallery}
         disabled={isSaving || isSaved || drawingsLength === 0}

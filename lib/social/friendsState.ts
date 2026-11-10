@@ -50,6 +50,8 @@ export type FriendsState = {
   incoming: Invite[];
   /** A match room both players should join, set when an invite is accepted. */
   acceptedRoom: { roomCode: string; playerId: string } | null;
+  /** The friend from the latest invite match, offered as a one-tap rematch after it ends. */
+  rematchFriend: string | null;
   notice: FriendsNotice | null;
   /** This player's saved visibility, once the server has sent it. */
   visibility: FriendVisibility | null;
@@ -64,6 +66,7 @@ export const INITIAL_FRIENDS_STATE: FriendsState = {
   outgoing: null,
   incoming: [],
   acceptedRoom: null,
+  rematchFriend: null,
   notice: null,
   visibility: null,
   visibilitySaving: null,
@@ -74,6 +77,7 @@ export type FriendsAction =
   | { type: "invite_requested"; playerId: string }
   | { type: "visibility_requested"; visibility: FriendVisibility }
   | { type: "accepted_room_consumed" }
+  | { type: "rematch_cleared" }
   | { type: "notice_cleared" }
   | { type: "connection_lost" }
   | { type: "reset" };
@@ -86,6 +90,8 @@ export function friendsReducer(state: FriendsState, action: FriendsAction): Frie
       return { ...state, sending: action.playerId, notice: null };
     case "visibility_requested":
       return { ...state, visibilitySaving: action.visibility, notice: null };
+    case "rematch_cleared":
+      return state.rematchFriend === null ? state : { ...state, rematchFriend: null };
     case "accepted_room_consumed":
       return { ...state, acceptedRoom: null };
     case "notice_cleared":
@@ -120,6 +126,7 @@ function applyServerMessage(state: FriendsState, message: SocialServerMessage, n
       return {
         ...state,
         statuses,
+        rematchFriend: state.rematchFriend === message.playerId ? null : state.rematchFriend,
         outgoing: state.outgoing?.playerId === message.playerId ? null : state.outgoing,
         incoming: state.incoming.filter((invite) => invite.playerId !== message.playerId),
       };
@@ -158,6 +165,7 @@ function applyServerMessage(state: FriendsState, message: SocialServerMessage, n
         outgoing: state.outgoing?.inviteId === message.inviteId ? null : state.outgoing,
         incoming: state.incoming.filter((candidate) => candidate.inviteId !== message.inviteId),
         acceptedRoom: { roomCode: message.roomCode, playerId: invite.playerId },
+        rematchFriend: invite.playerId,
         notice: null,
       };
     }

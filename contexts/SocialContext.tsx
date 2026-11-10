@@ -46,6 +46,8 @@ type SocialContextValue = FriendsState & {
   respondToInvite(inviteId: string, accept: boolean): void;
   consumeAcceptedRoom(): void;
   clearNotice(): void;
+  /** Forget the friend offered for a rematch (the next match was not an invite match). */
+  clearRematchFriend(): void;
   openSettings(): void;
 };
 
@@ -275,6 +277,7 @@ export function SocialProvider({ children }: { children: React.ReactNode }) {
     respondToInvite,
     consumeAcceptedRoom: () => dispatch({ type: "accepted_room_consumed" }),
     clearNotice: () => dispatch({ type: "notice_cleared" }),
+    clearRematchFriend: () => dispatch({ type: "rematch_cleared" }),
     openSettings: () => void Linking.openSettings().catch(() => undefined),
   }), [state, availability, connected, friends, nameFor, refreshFriends, inviteFriend, cancelInvite, setVisibility, respondToInvite]);
 

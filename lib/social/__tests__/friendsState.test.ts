@@ -142,6 +142,29 @@ describe("friends state", () => {
     expect(describeNotice(state.notice!, "Bob")).toMatch(/^Bob has Do Not Disturb on/);
   });
 
+  it("remembers the friend from an invite match for a one-tap rematch", () => {
+    let state = friendsReducer(INITIAL_FRIENDS_STATE, { type: "invite_requested", playerId: ALICE });
+    state = apply(
+      state,
+      { type: "invite_sent", inviteId: "r1", playerId: ALICE, expiresInMs: 30_000 },
+      { type: "invite_accepted", inviteId: "r1", roomCode: "ABC234" },
+    );
+    expect(state.rematchFriend).toBe(ALICE);
+    // The friend who accepted an incoming invite is remembered too, and survives consuming the room.
+    state = friendsReducer(state, { type: "accepted_room_consumed" });
+    expect(state.rematchFriend).toBe(ALICE);
+    state = apply(
+      state,
+      { type: "invite_received", inviteId: "r2", playerId: BOB, expiresInMs: 30_000 },
+      { type: "invite_accepted", inviteId: "r2", roomCode: "XYZ234" },
+    );
+    expect(state.rematchFriend).toBe(BOB);
+    // A block (friend removed) or a non-invite match forgets them.
+    expect(apply(state, { type: "friend_removed", playerId: BOB }).rematchFriend).toBeNull();
+    expect(friendsReducer(state, { type: "rematch_cleared" }).rematchFriend).toBeNull();
+    expect(apply(state, { type: "friend_removed", playerId: ALICE }).rematchFriend).toBe(BOB);
+  });
+
   it("ignores messages that do not match the schema", () => {
     expect(socialServerMessageSchema.safeParse({ type: "visibility_status", visibility: "hidden" }).success).toBe(false);
     expect(socialServerMessageSchema.safeParse({ type: "friend_presence", playerId: ALICE, status: "busy" }).success).toBe(true);

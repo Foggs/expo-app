@@ -45,10 +45,11 @@ export default function HomeScreen() {
   const [isFriendsModalOpen, setIsFriendsModalOpen] = useState(false);
   const [friendRoomInput, setFriendRoomInput] = useState("");
   const playerIdentity = usePlayerIdentity();
-  const { acceptedRoom, consumeAcceptedRoom, nameFor } = useSocial();
+  const { acceptedRoom, consumeAcceptedRoom, clearRematchFriend, nameFor } = useSocial();
   /** Set while joining the room reserved by an accepted friend invite. */
   const [inviteMatch, setInviteMatch] = useState<{ friendName: string } | null>(null);
   /** Why joining the invited match stopped, when the server gave no reason. */
+  const inviteMatchActiveRef = useRef(false);
   const [inviteMatchFailureMessage, setInviteMatchFailureMessage] = useState<string | null>(null);
 
   const {
@@ -82,6 +83,9 @@ export default function HomeScreen() {
       onMatchFound: (info) => {
         if (navigatedRef.current) return;
         navigatedRef.current = true;
+        // Only a match started from an invite can be rematched with one tap.
+        if (!inviteMatchActiveRef.current) clearRematchFriend();
+        inviteMatchActiveRef.current = false;
         setInviteMatch(null);
         setIsFriendsModalOpen(false);
         setFriendRoomInput("");
@@ -103,7 +107,7 @@ export default function HomeScreen() {
         console.warn("WebSocket error:", message);
       },
     });
-  }, [isFocused, requestGameState, setCallbacks]);
+  }, [isFocused, requestGameState, setCallbacks, clearRematchFriend]);
 
   useEffect(() => () => setCallbacks({}), [setCallbacks]);
 
@@ -116,6 +120,7 @@ export default function HomeScreen() {
     setFriendRoomInput("");
     clearFriendRoomError();
     setInviteMatchFailureMessage(null);
+    inviteMatchActiveRef.current = true;
     setInviteMatch({ friendName: nameFor(acceptedRoom.playerId) });
     joinFriendRoom(acceptedRoom.roomCode);
   }, [isFocused, acceptedRoom, consumeAcceptedRoom, clearFriendRoomError, joinFriendRoom, nameFor]);
@@ -148,6 +153,7 @@ export default function HomeScreen() {
     setInviteMatchFailureMessage(null);
     leaveFriendRoom();
     clearFriendRoomError();
+    inviteMatchActiveRef.current = false;
     setInviteMatch(null);
   }, [leaveFriendRoom, clearFriendRoomError]);
 
