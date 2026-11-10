@@ -1,6 +1,8 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import appConfig from "../../app.json";
 import {
   createGameCenterVerifier,
+  DEFAULT_GAME_CENTER_BUNDLE_ID,
   GameCenterVerificationError,
   type GameCenterVerifierOptions,
 } from "../gameCenterVerifier";
@@ -13,7 +15,7 @@ import {
   type TestSigner,
 } from "./support/testCertificates";
 
-const BUNDLE_ID = "com.sketchduel.app";
+const BUNDLE_ID = "app.replit.sketchduel";
 const PLAYER_ID = "T:_test-player-1";
 
 let certs: TestCertificateSet;
@@ -54,6 +56,23 @@ async function expectRejection(promise: Promise<unknown>, reason: GameCenterVeri
 }
 
 describe("Game Center identity proof verification", () => {
+  it("aligns the default verifier and iOS app with the existing Apple app record", () => {
+    expect(DEFAULT_GAME_CENTER_BUNDLE_ID).toBe(BUNDLE_ID);
+    expect(appConfig.expo.ios.bundleIdentifier).toBe(BUNDLE_ID);
+    expect(appConfig.expo.android.package).toBe("com.sketchduel.app");
+  });
+
+  it("rejects a proof signed for the previous placeholder bundle ID", async () => {
+    const { verify } = makeVerifier(certs.appleSigner);
+    const proof = signTestProof({
+      signer: certs.appleSigner,
+      playerId: PLAYER_ID,
+      bundleId: "com.sketchduel.app",
+      timestamp: Date.now(),
+    });
+    await expectRejection(verify(proof), "bad_signature");
+  });
+
   it("accepts a proof signed by an Apple certificate that chains to a trusted root", async () => {
     const { verify, fetchCertificate } = makeVerifier(certs.appleSigner);
     const proof = signTestProof({ signer: certs.appleSigner, playerId: PLAYER_ID, bundleId: BUNDLE_ID, timestamp: Date.now() });

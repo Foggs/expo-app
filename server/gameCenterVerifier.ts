@@ -59,7 +59,7 @@ const DEFAULT_CACHE_TTL_MS = 60 * 60_000;
 const MAX_CERTIFICATE_BYTES = 16 * 1024;
 const MAX_CACHE_ENTRIES = 32;
 
-export const DEFAULT_GAME_CENTER_BUNDLE_ID = "com.sketchduel.app";
+export const DEFAULT_GAME_CENTER_BUNDLE_ID = "app.replit.sketchduel";
 
 let defaultRoots: X509Certificate[] | null = null;
 function getDefaultRoots(): X509Certificate[] {

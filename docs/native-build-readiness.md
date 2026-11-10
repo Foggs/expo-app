@@ -36,7 +36,7 @@ autolinking success alone is not compilation or upload evidence.
 - An Expo account with access to the intended project or organization.
 - Apple Developer team access for a signed physical-iPhone build and App Store
   Connect access for TestFlight. Confirm the existing app record and ownership of
-  `com.sketchduel.app`; do not silently create a replacement identifier.
+  `app.replit.sketchduel`; do not silently create a replacement identifier.
 - An iPhone for final Game Center acceptance. Friends/invite tests need two
   accounts that are Game Center friends, normally on two iPhones.
 - A Mac with Xcode only if using the iOS Simulator or a local iOS build.

@@ -18,7 +18,7 @@ import {
 // throwaway Postgres database. Identity proofs are signed with locally
 // generated certificates and checked by the real verifier.
 
-const BUNDLE_ID = "com.sketchduel.app";
+const BUNDLE_ID = "app.replit.sketchduel";
 const TEST_TIMEOUT_MS = 60_000;
 const MESSAGE_TIMEOUT_MS = 10_000;
 const NO_MATCH_WAIT_MS = 1_500;

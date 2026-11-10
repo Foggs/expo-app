@@ -17,7 +17,7 @@ import {
 // WebSocket server and a throwaway Postgres database. Players are linked with
 // identity proofs signed by locally generated certificates.
 
-const BUNDLE_ID = "com.sketchduel.app";
+const BUNDLE_ID = "app.replit.sketchduel";
 const TEST_TIMEOUT_MS = 60_000;
 const MESSAGE_TIMEOUT_MS = 10_000;
 const QUIET_WAIT_MS = 600;

@@ -39,10 +39,16 @@ On iOS, the **Game Center Friends** button on the home screen opens a list of th
 
 | Setting | Where | Default |
 |---|---|---|
-| Accepted bundle IDs | `GAME_CENTER_BUNDLE_IDS` env var (comma-separated) | `com.sketchduel.app` |
+| Accepted bundle IDs | `GAME_CENTER_BUNDLE_IDS` env var (comma-separated) | `app.replit.sketchduel` |
 | Game Center capability | `ios.entitlements` in `app.json` | `com.apple.developer.game-center: true` |
 
 If you change the bundle identifier in `app.json`, set `GAME_CENTER_BUNDLE_IDS` on the server to match. Otherwise every sign-in is rejected as a bad signature.
+
+The iOS identifier matches the existing App Store Connect record. Android keeps
+`com.sketchduel.app`. Before TestFlight testing, deploy the matching server code
+and check any existing `GAME_CENTER_BUNDLE_IDS` override: environment overrides
+take precedence over this default and must include `app.replit.sketchduel`.
+Changing the source default does not update an already deployed server.
 
 ## Testing on a physical iPhone
 
@@ -54,7 +60,7 @@ and the distinction between Simulator coverage and physical-iPhone acceptance.
 
 ### One-time setup in App Store Connect
 
-1. In the Apple Developer portal, make sure the App ID `com.sketchduel.app` has **Game Center** enabled and the provisioning profile supports it. Do not assume automatic EAS capability synchronization covers Game Center.
+1. In the Apple Developer portal, make sure the App ID `app.replit.sketchduel` has **Game Center** enabled and the provisioning profile supports it. Do not assume automatic EAS capability synchronization covers Game Center.
 2. In App Store Connect, open the app → **Features** (or **Services**) → **Game Center** and turn it on for the app version. No leaderboards or achievements are required.
 
 First, install the EAS CLI, sign in, and create the build profiles (this project has no `eas.json` yet): `npm install -g eas-cli`, `eas login`, then `eas build:configure`.

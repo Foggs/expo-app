@@ -15,7 +15,7 @@
     },
     "ios": {
       "supportsTablet": false,
-      "bundleIdentifier": "com.sketchduel.app",
+      "bundleIdentifier": "app.replit.sketchduel",
       "buildNumber": "1",
       "infoPlist": {
         "LSApplicationQueriesSchemes": ["fb-messenger", "sms"],
