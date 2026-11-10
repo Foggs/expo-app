@@ -20,21 +20,16 @@ This document does not authorize a cloud build, SDK migration, or publication.
 - There is no `eas.json` or configured EAS project ID in the inspected app config.
   No `expo-dev-client` dependency is installed.
 
-## Stop before a build: native source is ignored
+## Native source inclusion
 
-The `.gitignore` entry `ios/` matches nested iOS directories too. Consequently,
-`modules/game-center/ios/GameCenterModule.swift` and
-`modules/game-center/ios/GameCenter.podspec` exist locally but are ignored and
-not tracked by Git.
+The broad `ios/` and `android/` Git ignore entries were narrowed to `/ios/`
+and `/android/`. Generated native projects at the repository root remain
+excluded, while local modules' native source can be included in Git.
 
-A fresh checkout will not contain these files; a cloud build upload can also
-omit them. Local autolinking success is therefore not enough.
-
-**Next approval checkpoint:** preserve these files in version control, using a
-root-only ignore rule for generated native projects or narrowly scoped
-exceptions. Verify the resulting source diff, a clean-checkout module discovery,
-and the external build upload contents. Do not delete or regenerate the module.
-This preparation step has not changed the ignore rules.
+Preserve `modules/game-center/ios/GameCenterModule.swift` and
+`modules/game-center/ios/GameCenter.podspec` in version control. Check the
+external build upload contents before starting a cloud build; local
+autolinking success alone is not compilation or upload evidence.
 
 ## External owner prerequisites
 
@@ -55,8 +50,8 @@ signing files, or session tokens into chat or this document.
 
 ## Recommended external route: SDK 54 TestFlight baseline
 
-Use a separate external checkout of this branch after the ignored-source issue
-is fixed. A standalone TestFlight build includes the custom native module and
+Use a separate external checkout of this branch containing the native source.
+A standalone TestFlight build includes the custom native module and
 does not require Expo Go or `expo-dev-client`.
 
 The following are **owner-run external steps**, not commands executed here:
