@@ -196,19 +196,29 @@ JS exports and a working web preview are not proof of native compatibility.
   used. Deployed identity/social compatibility remains unverified pending
   release provenance or actual device acceptance.
 
-No native build or TestFlight submission has been verified in this work.
+Cloud build 5 has been submitted as recorded below; native compilation success
+and TestFlight submission remain unverified.
 
-## 6. Build and submit the upgraded candidate — not started
+## 6. Build and submit the upgraded candidate — cloud build submitted
 
-- [ ] Confirm SDK 58 candidate, suitable build image, public backend address,
+- [x] Confirm SDK 58 candidate, suitable build image, public backend address,
   native source upload inclusion, and expected build number.
-- [ ] Obtain approval for cloud usage/costs and any required signing changes.
+  Backend reachability was confirmed, not Game Center/social acceptance.
+- [x] Obtain approval for cloud usage/costs and any required signing changes.
 - [ ] Start the approved native build; inspect Swift compilation/linking logs.
+  Submission completed; compilation/linking logs still need review.
 - [ ] Record the exact successful build ID, app version, and build number.
 - [ ] Review submission targeting the existing Apple app and exact build;
   obtain separate submission approval.
 - [ ] Upload to App Store Connect and resolve processing/export-compliance
   requirements. Confirm the build becomes available to the intended testers.
+
+**Submitted candidate:** version 1.0.0, iOS build 5. Rechecked remote number 4,
+then submitted one approved attempt with frozen credentials and no automatic
+submission. EAS uploaded the compressed 56.8 MB archive and computed the
+fingerprint successfully. Build ID: `fddabe5c-571d-4259-8137-ffad31905993`.
+[Build status and logs](https://expo.dev/accounts/mrfoggs/projects/sketchduel/builds/fddabe5c-571d-4259-8137-ffad31905993).
+This is submission evidence, not a successful build or native Game Center test.
 
 TestFlight upload is not public App Store release. Do not submit an unreviewed
 “latest” build or substitute an SDK 54 build for the SDK 58 candidate.
