@@ -46,17 +46,15 @@ completed. Owner confirmations are not independent native verification.
   This Linux workspace cannot run Xcode or verify Swift compilation.
 - [x] Confirm access to the current branch, tracked Swift/podspec source, and
   a recovery checkpoint containing all pre-upgrade work.
-- [ ] Confirm current SDK 57/58 migration guidance, native module requirements,
+- [x] Confirm current SDK 57/58 migration guidance, native module requirements,
   supported Node/Xcode versions, and suitable EAS build images.
   SDK 57/58 release notes and Router migration guidance were reviewed. Local
-  Node 22.23.4 meets both SDKs' Node requirements. Choose and verify the
-  Xcode/EAS image separately before any approved native build; native toolchain
-  selection is not yet complete.
-
-  Readiness review on 2026-11-11 identified the documented
+  Node 22.23.4 meets both SDKs' Node requirements. On 2026-11-11, rechecked
+  Expo's infrastructure reference and pinned the production iOS profile to
   `macos-tahoe-26.6-xcode-27.2` image (Node 22.23.4, CocoaPods 1.17.0)
-  as the proposed SDK 58 candidate. The profile still uses default `auto`;
-  configuring the image and inspecting the actual EAS archive remain pending.
+  with owner approval. Owner previously confirmed all three Game Center files
+  in the inspected EAS archive. Toolchain selection is complete, but its actual
+  native compilation and Game Center compatibility remain unverified.
 - [x] Document the exact dependency/migration commands and stage acceptance
   checks before making changes. Keep npm and the existing lockfile.
 - [x] Obtain owner approval for the SDK 57 dependency-changing stage.
@@ -234,6 +232,12 @@ Do not mark an intended action or a successful JS bundle as a native test pass.
 | 2026-11-11 | SDK 58 stage | Owner approved local SDK 58 work. Installed Expo 58.0.24 / React Native 0.88.1 / React 19.3.0. Dependency check, Doctor 20/20, TypeScript, 172 tests, three-platform exports, clean install, home preview, and isolated results-navigation browser checks passed. Lint: zero errors, ten warnings; audit: 16 moderate, zero high/critical. No native build, signing changes, upload, or merge. |
 | 2026-11-11 | Native readiness review | Reviewed current EAS profile, Apple identity/entitlement, tracked native source and ignore rules, and documented Xcode 27.2 image. Production URL confirmed from deployment metadata; health check passed, deployed Game Center behavior unverified. Current EAS access/build number, actual upload archive, and usable signing remain unverified because no EAS CLI is available in this session. No cloud build, signing change, submission, or backend publication occurred. |
 | 2026-11-11 | Owner-run readiness checks | Owner confirmed device login, matching Expo project ID, remote iOS build number 2, and all three Game Center native/config files in the EAS archive. Owner reported regenerating the invalid provisioning profile and confirmed it is active. EAS signing credentials, actual profile entitlements, native compilation, and device acceptance remain unverified. No cloud build or submission authorized. |
+
+Latest image configuration: pinned production iOS to
+`macos-tahoe-26.6-xcode-27.2` after confirming it remains listed by Expo.
+Validated the JSON and preserved store distribution, Release configuration,
+remote numbering, auto-increment, environment settings, and no auto-submission.
+No cloud build was started.
 
 Latest signing review: the owner inspected the EAS production credentials
 summary and confirmed a listed distribution certificate and matching regenerated

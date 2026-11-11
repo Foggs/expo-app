@@ -30,3 +30,12 @@ chose to return to the SDK upgrade review.
 
 **How to apply:** Do not resume the baseline build implicitly. Keep preparation,
 SDK migration, cloud build, and submission as distinct approval checkpoints.
+
+Use an explicitly reviewed EAS iOS image during native upgrade validation,
+rather than a moving `latest` or implicit `auto` selection.
+
+**Why:** The owner approved pinning the toolchain so SDK and Game Center
+failures can be investigated against a known build environment.
+
+**How to apply:** Recheck Expo's current image availability before changing the
+pin. Image selection is not proof of native compatibility or approval to build.

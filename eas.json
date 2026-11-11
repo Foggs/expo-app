@@ -12,6 +12,7 @@
         "NPM_CONFIG_LEGACY_PEER_DEPS": "true"
       },
       "ios": {
+        "image": "macos-tahoe-26.6-xcode-27.2",
         "simulator": false,
         "buildConfiguration": "Release",
         "autoIncrement": true

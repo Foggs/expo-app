@@ -20,8 +20,9 @@ current candidate.
   final EAS upload archive. Inspect the actual archive before building.
 - Expo's current infrastructure reference lists
   `macos-tahoe-26.6-xcode-27.2` with Node 22.23.4 and CocoaPods 1.17.0.
-  This is the proposed explicit image for the SDK 58 candidate. The profile
-  currently leaves image unset (`auto`); no image configuration was changed.
+  With subsequent owner approval, rechecked this image in Expo's official
+  reference and pinned the production iOS profile to it instead of `auto`.
+  This selects a toolchain; it does not establish successful compilation.
   SDK 58 supplies the scene lifecycle required for Xcode 27/iOS 27.
 - Deployment metadata confirms the profile's backend URL,
   `https://sketch-duel.replit.app`, is the public production deployment, and its
@@ -61,8 +62,8 @@ confirmed a distribution certificate is listed and the profile identifier and
 expiration match the regenerated Apple profile. This does not establish
 certificate/private-key usability, certificate-to-profile pairing, or actual
 Game Center entitlements. No credentials were changed during this inspection.
-Image configuration and deployed backend compatibility still need review before
-a separately approved cloud build.
+Image configuration was subsequently completed with owner approval. Deployed
+backend compatibility still needs review before a separately approved cloud build.
 
 ## Historical SDK 54 scope
 
