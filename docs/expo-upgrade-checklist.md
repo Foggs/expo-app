@@ -196,18 +196,19 @@ JS exports and a working web preview are not proof of native compatibility.
   used. Deployed identity/social compatibility remains unverified pending
   release provenance or actual device acceptance.
 
-Cloud build 5 has been submitted as recorded below; native compilation success
-and TestFlight submission remain unverified.
+Cloud build 5 finished successfully in EAS. TestFlight submission and real-device
+Game Center acceptance remain unverified.
 
-## 6. Build and submit the upgraded candidate — cloud build submitted
+## 6. Build and submit the upgraded candidate — build succeeded, submission preparation
 
 - [x] Confirm SDK 58 candidate, suitable build image, public backend address,
   native source upload inclusion, and expected build number.
   Backend reachability was confirmed, not Game Center/social acceptance.
 - [x] Obtain approval for cloud usage/costs and any required signing changes.
 - [ ] Start the approved native build; inspect Swift compilation/linking logs.
-  Submission completed; compilation/linking logs still need review.
-- [ ] Record the exact successful build ID, app version, and build number.
+  EAS reports the complete build finished successfully; detailed Swift
+  compilation/linking logs have not been independently reviewed.
+- [x] Record the exact successful build ID, app version, and build number.
 - [ ] Review submission targeting the existing Apple app and exact build;
   obtain separate submission approval.
 - [ ] Upload to App Store Connect and resolve processing/export-compliance
@@ -218,7 +219,37 @@ then submitted one approved attempt with frozen credentials and no automatic
 submission. EAS uploaded the compressed 56.8 MB archive and computed the
 fingerprint successfully. Build ID: `fddabe5c-571d-4259-8137-ffad31905993`.
 [Build status and logs](https://expo.dev/accounts/mrfoggs/projects/sketchduel/builds/fddabe5c-571d-4259-8137-ffad31905993).
-This is submission evidence, not a successful build or native Game Center test.
+**Verified result:** EAS `build:view` reports `FINISHED`, iOS, `STORE`
+distribution, production profile, version 1.0.0, build 5; completed
+2026-11-11 at 19:58:16 UTC. This establishes a successful native build, not
+Game Center runtime or backend acceptance.
+
+### TestFlight submission preparation
+
+The owner approved preparation only. No Apple upload or submission has run.
+Use the existing build; do not rebuild, increment its number, use `--latest`,
+or configure automatic submission.
+
+Pending input: the numeric **Apple ID of the SketchDuel app record**, found in
+App Store Connect → Apps → SketchDuel → App Information → General Information.
+This is not an Apple account login, team ID, bundle ID, or Expo project ID.
+After confirming it, add `submit.production.ios.ascAppId` in `eas.json`.
+Submission authentication is separate from build signing: a valid distribution
+certificate/profile does not establish an App Store Connect submission API key.
+If setup is needed, use EAS's interactive credential flow after approval; do not
+copy private keys or passwords into project files or chat.
+
+Prepared command, **not executed**, to be used only after separate upload approval
+and app-target configuration:
+
+```sh
+npx eas-cli@27.7.2 submit --platform ios --profile production --id fddabe5c-571d-4259-8137-ffad31905993 --no-auto-testflight-setup
+```
+
+The explicit build ID prevents selection of a different candidate. Automatic
+TestFlight group setup is disabled; tester access will be reviewed separately.
+After upload, confirm Apple processing and any export-compliance requirements
+before installing through TestFlight.
 
 TestFlight upload is not public App Store release. Do not submit an unreviewed
 “latest” build or substitute an SDK 54 build for the SDK 58 candidate.

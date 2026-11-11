@@ -5,6 +5,15 @@
 > baseline route below is optional historical preparation, not a prerequisite
 > or authorization to start a build. The checklist controls the sequence.
 
+## Latest result — SDK 58 build 5
+
+EAS reports the production iOS store build finished successfully on 2026-11-11:
+version 1.0.0, build 5, ID `fddabe5c-571d-4259-8137-ffad31905993`.
+This supersedes the earlier preparation-only statements below. It does not
+prove Game Center runtime behavior or deployed backend acceptance.
+TestFlight preparation is approved, but upload is not. The checklist records
+the exact-build submission command and pending App Store Connect app ID.
+
 ## SDK 58 readiness review — 2026-11-11
 
 The owner approved readiness checks, not a cloud build or signing changes.
