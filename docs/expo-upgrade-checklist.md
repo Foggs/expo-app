@@ -254,6 +254,15 @@ This is owner-reported setup success, not a successful upload. No private key
 contents were requested or copied into the project. Obtain confirmation before
 retrying submission of the same build 5; no rebuild is needed.
 
+**Approved retry result:** EAS accepted the configured submission API key and
+scheduled iOS submission for the exact build 5, targeting app `6758966766`.
+Submission ID: `6c07c6d3-62f7-483d-ab8b-4cc2985d4e75`.
+[Submission status](https://expo.dev/accounts/mrfoggs/projects/sketchduel/submissions/6c07c6d3-62f7-483d-ab8b-4cc2985d4e75).
+The read-only status check reported `IN_QUEUE`. This is not yet confirmation
+of Apple upload, completed processing, or TestFlight availability.
+No rebuild, signing-credential change, automatic tester-group setup, or public
+release was performed.
+
 Prepared interactive command, not yet executed (the non-interactive attempt
 above stopped before submission):
 
