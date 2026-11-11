@@ -48,9 +48,9 @@ completed. Owner confirmations are not independent native verification.
   a recovery checkpoint containing all pre-upgrade work.
 - [ ] Confirm current SDK 57/58 migration guidance, native module requirements,
   supported Node/Xcode versions, and suitable EAS build images.
-  SDK 57 release notes and migration guidance were reviewed. Local Node
-  22.23.4 meets React Native 0.86.3's Node requirement. Choose and verify the
-  Xcode/EAS image separately before any approved native build; SDK 58 toolchain
+  SDK 57/58 release notes and Router migration guidance were reviewed. Local
+  Node 22.23.4 meets both SDKs' Node requirements. Choose and verify the
+  Xcode/EAS image separately before any approved native build; native toolchain
   selection is not yet complete.
 - [x] Document the exact dependency/migration commands and stage acceptance
   checks before making changes. Keep npm and the existing lockfile.
@@ -65,8 +65,9 @@ directories. Inspect the version-specific asset patch before removing it.
 SDK 57.0.32 is the current stable SDK 57 patch, above both the 57.0.9 memory
 fix and 57.0.17 development-startup fix.
 
-**Stop condition:** stop after SDK 57 checks for owner review. No SDK 58
-dependency changes, cloud builds, signing changes, or uploads are approved.
+**Stage approvals:** owner approved the SDK 57 local stage, then separately
+approved the SDK 58 dependency changes and local checks on 2026-11-11.
+Cloud builds, signing changes, uploads, and merge still require separate approval.
 JS validation is not a substitute for native compatibility validation.
 
 ## 3. Upgrade to SDK 57.0.32 — local checks completed; native unverified
@@ -81,7 +82,8 @@ JS validation is not a substitute for native compatibility validation.
 - [x] Confirm the custom Game Center module is discovered by iOS autolinking;
   evaluated config retains the Apple bundle ID and Game Center entitlement.
 - [ ] In the native-capable route, verify Game Center still compiles and links.
-- [ ] Report intermediate results and obtain approval to continue to SDK 58.
+- [x] Report intermediate results and obtain approval to continue to SDK 58.
+  Owner approved proceeding with the native-compilation limitation disclosed.
 
 **Results:** Expo dependency check passed; online Doctor passed 21/21;
 TypeScript passed; all 172 tests in 22 files passed; iOS/Android Hermes exports
@@ -109,16 +111,47 @@ Native Swift and module registration were preserved unchanged.
 Do not use SDK 55, SDK 56, or SDK 57 before 57.0.9 as intermediate stages in
 this plan. Do not bypass compatibility or package-age checks to force progress.
 
-## 4. Upgrade to SDK 58 — not started
+## 4. Upgrade to SDK 58.0.24 — local checks completed; native unverified
 
-- [ ] Align framework dependencies with Expo CLI and address SDK 58 migrations.
-- [ ] Preserve web output behavior, deep links, native permissions, identity,
+- [x] Align framework dependencies with Expo CLI and address SDK 58 migrations.
+- [x] Preserve web output configuration, deep-link configuration, permissions, identity,
   and required peer dependencies.
-- [ ] Re-run dependency check, online Doctor, TypeScript, lint, all tests, and
+- [x] Re-run dependency check, online Doctor, TypeScript, lint, all tests, and
   both native JS exports. Resolve failures or explicitly document blockers.
-- [ ] Verify the resolved SDK and lockfile and review the complete change set.
+- [x] Verify the resolved SDK and lockfile and review the complete change set.
+- [x] Verify clean public-registry installation including postinstall, and
+  normalize all lockfile tarball URLs without changing versions/integrities.
+- [x] Verify browser results-navigation behavior using isolated in-memory
+  drawings: back is blocked, Gallery/back retains drawings, Home and Play Again
+  reach home, and empty results redirect without looping.
 - [ ] Compile/link Game Center under the target native toolchain.
 - [ ] Report results and obtain approval before a TestFlight candidate build.
+
+**Results:** Expo 58.0.24, React Native 0.88.1, React 19.3.0. Expo dependency
+check passed; online Doctor passed 20/20; TypeScript passed; all 172 tests in
+22 files passed; iOS/Android Hermes exports and web export passed.
+Clean public-registry npm installation including postinstall passed.
+Both workflows restarted successfully, and the mobile-sized web home screen
+rendered. Lint remains zero errors and ten disclosed warnings (same policy
+as the SDK 57 stage). Audit reports 16 moderate findings, none high or critical.
+
+**Migrations:** explicitly retain client-rendered single-page web output and
+synchronous web routes rather than SDK 58's new server-rendering/async defaults.
+Replace removed `beforeRemove` with `usePreventRemove`; block backward removal
+but allow intentional replacements for Home, Play Again, rematch routing, and
+the empty-results redirect. Browser checks verified these exits except native
+friend-rematch acceptance, which requires device testing. Gallery back navigation
+was checked, not gallery record loading.
+
+The browser initially saw a blank page during cold startup; one warm reload
+rendered correctly and the results-navigation checks then passed with no app
+errors. Fixtures were confined to that browser's memory, with no server/database
+or gallery writes.
+
+**Game Center status:** Swift source and registration are unchanged. iOS
+autolinking discovers `GameCenterModule`; evaluated config retains the Apple
+bundle ID, entitlement, and friend permission description. No Swift compilation,
+signing, Expo Go run, native device test, or TestFlight submission occurred.
 
 JS exports and a working web preview are not proof of native compatibility.
 
@@ -185,6 +218,7 @@ Do not mark an intended action or a successful JS bundle as a native test pass.
 | 2026-11-10 | Review and setup | SDK 54 remains installed; custom native limitation identified; owner confirmed Apple/Expo setup and remote number initialization. No upgrade or native build performed. |
 | 2026-11-11 | Safe fallback | Missing Game Center native module now returns unavailable without reading or rotating stored identity. Focused tests (13), TypeScript, targeted lint, and frontend restart passed. No Expo Go/device test or SDK change performed. |
 | 2026-11-11 | SDK 57 stage | Installed Expo 57.0.32 / React Native 0.86.3 / React 19.2.3. Dependency check, online Doctor 21/21, TypeScript, 172 tests, three-platform JS exports, clean npm install, and web home-screen screenshot passed. Lint: zero errors, ten disclosed warnings. Game Center autolinking/config checked, not natively compiled. Paused before SDK 58 and cloud builds for owner approval. |
+| 2026-11-11 | SDK 58 stage | Owner approved local SDK 58 work. Installed Expo 58.0.24 / React Native 0.88.1 / React 19.3.0. Dependency check, Doctor 20/20, TypeScript, 172 tests, three-platform exports, clean install, home preview, and isolated results-navigation browser checks passed. Lint: zero errors, ten warnings; audit: 16 moderate, zero high/critical. No native build, signing changes, upload, or merge. |
 
 ## References
 

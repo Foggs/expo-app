@@ -86,13 +86,17 @@
       }
     },
     "web": {
+      "output": "single",
       "favicon": "./assets/images/favicon.png"
     },
     "plugins": [
       [
         "expo-router",
         {
-          "origin": "https://replit.com/"
+          "origin": "https://replit.com/",
+          "asyncRoutes": {
+            "web": false
+          }
         }
       ],
       "expo-font",

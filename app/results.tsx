@@ -1,5 +1,5 @@
 import { LinearGradient } from "expo-linear-gradient";
-import { router, useLocalSearchParams, useNavigation } from "expo-router";
+import { router, useLocalSearchParams, usePreventRemove } from "expo-router";
 import React, { useEffect, useState } from "react";
 import { ScrollView, StyleSheet, Text, View } from "react-native";
 import {
@@ -38,7 +38,6 @@ export default function ResultsScreen() {
   const opponentPlayerId = Array.isArray(params.opponentPlayerId)
     ? params.opponentPlayerId[0]
     : params.opponentPlayerId;
-  const navigation = useNavigation();
   const social = useSocial();
   const rematchFriend = social.rematchFriend;
   const rematchState = !rematchFriend
@@ -57,16 +56,19 @@ export default function ResultsScreen() {
   const [drawings, setDrawings] = useState<RoundDrawing[]>([]);
   const [isSaving, setIsSaving] = useState(false);
   const [isSaved, setIsSaved] = useState(false);
+  const [preventBack, setPreventBack] = useState(true);
 
   const cardScale = useSharedValue(0.8);
   const cardOpacity = useSharedValue(0);
 
-  useEffect(() => {
-    return navigation.addListener("beforeRemove", (e) => {
-      // Block hardware back button and any programmatic pop on Android.
-      e.preventDefault();
-    });
-  }, [navigation]);
+  usePreventRemove(preventBack, ({ data, repeat }) => {
+    // Never pop back into a completed game. Intentional replacements (Home,
+    // Play Again, accepted rematch, or the empty-results redirect) may leave.
+    if (data.action.type === "REPLACE") {
+      setPreventBack(false);
+      repeat();
+    }
+  });
 
   useEffect(() => {
     const saved = getRoundDrawings();

@@ -8,6 +8,6 @@
 
 - [Player identity model](player-identity-model.md) — canonical key for new records, alias sets for comparisons; account key is random, history follows via aliases.
 - [Social connection design](social-connection-design.md) — separate foreground socket; invites reserve a room; visibility is per account and fails closed.
-- [Remaining npm audit advisories](audit-remaining-advisories.md) — leftovers need Expo SDK upgrades; image-size 2.x override breaks Metro.
+- [Audit compatibility](audit-remaining-advisories.md) — avoid audit-driven framework downgrades; verify Metro compatibility before forcing transitive overrides.
 - [Apple app identity](apple-app-identity.md) — existing App Store Connect record uses app.replit.sketchduel; preserve that record.
 - [Remote Expo authentication](remote-expo-authentication.md) — browser localhost callbacks cannot reach a CLI running remotely; use device login.
