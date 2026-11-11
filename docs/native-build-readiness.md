@@ -62,8 +62,21 @@ confirmed a distribution certificate is listed and the profile identifier and
 expiration match the regenerated Apple profile. This does not establish
 certificate/private-key usability, certificate-to-profile pairing, or actual
 Game Center entitlements. No credentials were changed during this inspection.
-Image configuration was subsequently completed with owner approval. Deployed
-backend compatibility still needs review before a separately approved cloud build.
+Image configuration was subsequently completed with owner approval.
+
+**Read-only backend review:** deployment metadata reports a public successful
+deployment at the configured backend URL, and GET `/api/health` returned 200.
+The production/shared `GAME_CENTER_BUNDLE_IDS` override is absent (including
+secret existence), so the deployed verifier depends on its bundled default.
+The workspace default is correct, but no deployed source revision was proven.
+OPTIONS on the identity URL returned the generic global-middleware response,
+not endpoint-presence evidence. No production data was queried or changed.
+Do not call backend Game Center/social readiness verified on this evidence.
+
+A separately approved cloud build can establish native compilation/signing
+independently of backend acceptance. A successful build must not be treated
+as proof of deployed Game Center verification or friend/invite behavior.
+Backend publication and TestFlight submission remain separate approval gates.
 
 ## Historical SDK 54 scope
 

@@ -185,6 +185,16 @@ JS exports and a working web preview are not proof of native compatibility.
 - [ ] Obtain the existing app's numeric App Store Connect Apple ID for submission.
 - [ ] Verify the intended backend has the matching Game Center/social code;
   publish it only with separate approval.
+  Read-only review confirmed deployment metadata reports a public successful
+  deployment at the configured URL and GET `/api/health` returns 200.
+  No shared/production `GAME_CENTER_BUNDLE_IDS` environment override or secret
+  was present; current workspace code defaults to `app.replit.sketchduel`.
+  This does not establish the default in the deployed revision. OPTIONS on the
+  identity URL returned generic 200/OK, which the global middleware serves even
+  for missing routes; it is not evidence the identity endpoint is deployed.
+  No identity proofs, authenticated sockets, database queries, or writes were
+  used. Deployed identity/social compatibility remains unverified pending
+  release provenance or actual device acceptance.
 
 No native build or TestFlight submission has been verified in this work.
 
