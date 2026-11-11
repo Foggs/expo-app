@@ -180,8 +180,10 @@ JS exports and a working web preview are not proof of native compatibility.
   does not prove usable signing.
   Owner confirmed an unexpired distribution certificate, found the matching
   profile invalid, then confirmed the regenerated profile is active.
-  EAS possession of the matching private key, use of the regenerated profile,
-  and its actual Game Center entitlement remain unverified.
+  Owner then confirmed EAS lists a distribution certificate and a profile whose
+  identifier and expiration match the regenerated Apple profile.
+  Certificate/private-key usability, certificate-to-profile pairing, and the
+  actual Game Center entitlement remain unverified until further checks/build.
 - [ ] Obtain the existing app's numeric App Store Connect Apple ID for submission.
 - [ ] Verify the intended backend has the matching Game Center/social code;
   publish it only with separate approval.
@@ -232,6 +234,11 @@ Do not mark an intended action or a successful JS bundle as a native test pass.
 | 2026-11-11 | SDK 58 stage | Owner approved local SDK 58 work. Installed Expo 58.0.24 / React Native 0.88.1 / React 19.3.0. Dependency check, Doctor 20/20, TypeScript, 172 tests, three-platform exports, clean install, home preview, and isolated results-navigation browser checks passed. Lint: zero errors, ten warnings; audit: 16 moderate, zero high/critical. No native build, signing changes, upload, or merge. |
 | 2026-11-11 | Native readiness review | Reviewed current EAS profile, Apple identity/entitlement, tracked native source and ignore rules, and documented Xcode 27.2 image. Production URL confirmed from deployment metadata; health check passed, deployed Game Center behavior unverified. Current EAS access/build number, actual upload archive, and usable signing remain unverified because no EAS CLI is available in this session. No cloud build, signing change, submission, or backend publication occurred. |
 | 2026-11-11 | Owner-run readiness checks | Owner confirmed device login, matching Expo project ID, remote iOS build number 2, and all three Game Center native/config files in the EAS archive. Owner reported regenerating the invalid provisioning profile and confirmed it is active. EAS signing credentials, actual profile entitlements, native compilation, and device acceptance remain unverified. No cloud build or submission authorized. |
+
+Latest signing review: the owner inspected the EAS production credentials
+summary and confirmed a listed distribution certificate and matching regenerated
+profile identifier/expiration. No credentials were generated, replaced,
+downloaded, or revoked through this review. No signed build has been performed.
 
 ## References
 

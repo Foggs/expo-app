@@ -56,10 +56,13 @@ remote iOS build number was 2, and the inspected EAS archive contained the modul
 configuration, Swift source, and podspec. The owner found the matching Apple
 profile invalid, regenerated it, and confirmed it is active. These are
 owner-reported checks, not independent verification of signing or entitlements.
-The next checkpoint is reviewing EAS-held signing credentials without generating,
-replacing, revoking, or downloading credentials. Confirm the regenerated profile
-is the one EAS uses and that EAS has the matching distribution private key before
-calling signing ready.
+The owner subsequently reviewed the EAS production credentials summary and
+confirmed a distribution certificate is listed and the profile identifier and
+expiration match the regenerated Apple profile. This does not establish
+certificate/private-key usability, certificate-to-profile pairing, or actual
+Game Center entitlements. No credentials were changed during this inspection.
+Image configuration and deployed backend compatibility still need review before
+a separately approved cloud build.
 
 ## Historical SDK 54 scope
 
