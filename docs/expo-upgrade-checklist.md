@@ -226,7 +226,10 @@ Game Center runtime or backend acceptance.
 
 ### TestFlight submission preparation
 
-The owner approved preparation only. No Apple upload or submission has run.
+The owner approved preparation, then explicitly approved submitting build 5.
+One non-interactive submission attempt stopped at authentication setup:
+`App Store Connect API Keys cannot be set up in --non-interactive mode.`
+No successful upload or submission was reported.
 Use the existing build; do not rebuild, increment its number, use `--latest`,
 or configure automatic submission.
 
@@ -239,7 +242,14 @@ certificate/profile does not establish an App Store Connect submission API key.
 If setup is needed, use EAS's interactive credential flow after approval; do not
 copy private keys or passwords into project files or chat.
 
-Prepared command, **not executed**, to be used only after separate upload approval:
+Next authentication step in the owner's interactive Replit Shell:
+`npx eas-cli@27.7.2 credentials --platform ios`, select the production profile,
+then **App Store Connect: Manage your API Key**. Review the options before
+creating or assigning a key. Build-signing credentials are separate and should
+not be deleted or regenerated for this issue.
+
+Prepared interactive command, not yet executed (the non-interactive attempt
+above stopped before submission):
 
 ```sh
 npx eas-cli@27.7.2 submit --platform ios --profile production --id fddabe5c-571d-4259-8137-ffad31905993 --no-auto-testflight-setup
