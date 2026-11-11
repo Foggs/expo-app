@@ -86,7 +86,7 @@ const styles = StyleSheet.create({
     position: "relative",
   },
   canvasOverlay: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     backgroundColor: "rgba(0, 0, 0, 0.15)",
     marginHorizontal: 16,
     marginVertical: 8,

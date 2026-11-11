@@ -7,18 +7,15 @@
     "icon": "./assets/images/icon.png",
     "scheme": "sketchduel",
     "userInterfaceStyle": "automatic",
-    "newArchEnabled": true,
-    "splash": {
-      "image": "./assets/images/splash-icon.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#1a1a2e"
-    },
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "app.replit.sketchduel",
       "buildNumber": "1",
       "infoPlist": {
-        "LSApplicationQueriesSchemes": ["fb-messenger", "sms"],
+        "LSApplicationQueriesSchemes": [
+          "fb-messenger",
+          "sms"
+        ],
         "ITSAppUsesNonExemptEncryption": false,
         "NSGKFriendListUsageDescription": "SketchDuel shows which of your Game Center friends play, so you can see who's online and invite them to a match."
       },
@@ -57,15 +54,24 @@
         "NSPrivacyAccessedAPITypes": [
           {
             "NSPrivacyAccessedAPIType": "NSPrivacyAccessedAPICategoryUserDefaults",
-            "NSPrivacyAccessedAPITypeReasons": ["CA92.1"]
+            "NSPrivacyAccessedAPITypeReasons": [
+              "CA92.1"
+            ]
           },
           {
             "NSPrivacyAccessedAPIType": "NSPrivacyAccessedAPICategoryFileTimestamp",
-            "NSPrivacyAccessedAPITypeReasons": ["C617.1", "0A2A.1", "3B52.1"]
+            "NSPrivacyAccessedAPITypeReasons": [
+              "C617.1",
+              "0A2A.1",
+              "3B52.1"
+            ]
           },
           {
             "NSPrivacyAccessedAPIType": "NSPrivacyAccessedAPICategoryDiskSpace",
-            "NSPrivacyAccessedAPITypeReasons": ["E174.1", "85F4.1"]
+            "NSPrivacyAccessedAPITypeReasons": [
+              "E174.1",
+              "85F4.1"
+            ]
           }
         ]
       }
@@ -90,7 +96,20 @@
         }
       ],
       "expo-font",
-      "expo-web-browser"
+      "expo-web-browser",
+      "expo-asset",
+      "expo-image",
+      "expo-secure-store",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/images/splash-icon.png",
+          "resizeMode": "contain",
+          "backgroundColor": "#1a1a2e",
+          "enableFullScreenImage_legacy": true
+        }
+      ],
+      "expo-status-bar"
     ],
     "extra": {
       "eas": {

@@ -1,8 +1,7 @@
 import { LinearGradient } from "expo-linear-gradient";
 import * as Linking from "expo-linking";
-import { router, useLocalSearchParams } from "expo-router";
+import { router, useIsFocused, useLocalSearchParams } from "expo-router";
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { useIsFocused } from "@react-navigation/native";
 import { Platform, StyleSheet, View } from "react-native";
 import { ROOM_CODE_LENGTH } from "@shared/friendRoom";
 import {
@@ -214,11 +213,11 @@ export default function HomeScreen() {
   }));
 
   const handlePressIn = () => {
-    buttonScale.value = withSpring(0.95);
+    buttonScale.set(withSpring(0.95));
   };
 
   const handlePressOut = () => {
-    buttonScale.value = withSpring(1);
+    buttonScale.set(withSpring(1));
   };
 
   const handleFindMatch = useCallback(() => {

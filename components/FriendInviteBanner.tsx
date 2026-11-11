@@ -31,7 +31,7 @@ export default function FriendInviteBanner() {
   const invite = incoming[0] ?? null;
   const inviteId = invite?.inviteId ?? null;
   const [answeringId, setAnsweringId] = useState<string | null>(null);
-  const [now, setNow] = useState(Date.now());
+  const [now, setNow] = useState(() => Date.now());
 
   useEffect(() => {
     if (!inviteId) return;

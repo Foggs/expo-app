@@ -58,7 +58,7 @@ const VISIBILITY_OPTIONS: {
 
 /** Seconds left until `expiresAt`, updated every second. */
 function useSecondsLeft(expiresAt: number | null): number {
-  const [now, setNow] = useState(Date.now());
+  const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
     if (expiresAt === null) return;
     setNow(Date.now());
