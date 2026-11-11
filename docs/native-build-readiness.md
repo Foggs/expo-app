@@ -5,7 +5,53 @@
 > baseline route below is optional historical preparation, not a prerequisite
 > or authorization to start a build. The checklist controls the sequence.
 
-## Scope
+## SDK 58 readiness review — 2026-11-11
+
+The owner approved readiness checks, not a cloud build or signing changes.
+Installed Expo is 58.0.24. The historical SDK 54 results below are not the
+current candidate.
+
+- The production profile remains a store-distributed physical-iPhone Release
+  build with remote numbering and auto-increment, without auto-submission.
+- The Apple bundle ID remains `app.replit.sketchduel`, with the Game Center
+  entitlement and friend-list permission description declared.
+- Both Swift and podspec files are tracked and not Git-ignored; there is no
+  `.easignore`. This supports source inclusion but is not an inspection of the
+  final EAS upload archive. Inspect the actual archive before building.
+- Expo's current infrastructure reference lists
+  `macos-tahoe-26.6-xcode-27.2` with Node 22.23.4 and CocoaPods 1.17.0.
+  This is the proposed explicit image for the SDK 58 candidate. The profile
+  currently leaves image unset (`auto`); no image configuration was changed.
+  SDK 58 supplies the scene lifecycle required for Xcode 27/iOS 27.
+- Deployment metadata confirms the profile's backend URL,
+  `https://sketch-duel.replit.app`, is the public production deployment, and its
+  health endpoint responded successfully. This does not establish that deployed
+  identity verification, social endpoints, or bundle-ID allowlists match this
+  branch. Do not publish the backend without separate approval.
+- EAS CLI is not installed or available in the current shell/cache. The owner's
+  earlier login and remote-number initialization remain owner-reported history,
+  not current authenticated evidence. No credentials or signing files were read.
+- Apple portal access does not prove a valid distribution certificate or a
+  provisioning profile containing Game Center. Capability changes can invalidate
+  older profiles; use a profile regenerated after Game Center was enabled.
+  Do not assume EAS automatically enables Game Center: it is not listed in the
+  current capability-sync support table.
+
+**Next checkpoint:** in an authenticated EAS terminal, check project access and
+the remote iOS build number without starting a build:
+
+```sh
+npx eas-cli@27.7.2 project:info
+npx eas-cli@27.7.2 build:version:get --platform ios --profile production
+```
+
+These commands were documented, not executed during this review. Do not run
+`build:version:set` or reset a number that has advanced. Before any cloud build,
+also inspect the actual upload archive, choose/configure the reviewed image,
+verify signing and backend readiness, and obtain separate build/signing approval.
+Native compilation, device acceptance, and TestFlight submission remain undone.
+
+## Historical SDK 54 scope
 
 Prepare a native SDK 54 baseline before considering an SDK upgrade. Keep Game
 Center sign-in, identity verification, friends, privacy, invites, and rematches.

@@ -52,6 +52,11 @@ completed. Owner confirmations are not independent native verification.
   Node 22.23.4 meets both SDKs' Node requirements. Choose and verify the
   Xcode/EAS image separately before any approved native build; native toolchain
   selection is not yet complete.
+
+  Readiness review on 2026-11-11 identified the documented
+  `macos-tahoe-26.6-xcode-27.2` image (Node 22.23.4, CocoaPods 1.17.0)
+  as the proposed SDK 58 candidate. The profile still uses default `auto`;
+  configuring the image and inspecting the actual EAS archive remain pending.
 - [x] Document the exact dependency/migration commands and stage acceptance
   checks before making changes. Keep npm and the existing lockfile.
 - [x] Obtain owner approval for the SDK 57 dependency-changing stage.
@@ -219,6 +224,7 @@ Do not mark an intended action or a successful JS bundle as a native test pass.
 | 2026-11-11 | Safe fallback | Missing Game Center native module now returns unavailable without reading or rotating stored identity. Focused tests (13), TypeScript, targeted lint, and frontend restart passed. No Expo Go/device test or SDK change performed. |
 | 2026-11-11 | SDK 57 stage | Installed Expo 57.0.32 / React Native 0.86.3 / React 19.2.3. Dependency check, online Doctor 21/21, TypeScript, 172 tests, three-platform JS exports, clean npm install, and web home-screen screenshot passed. Lint: zero errors, ten disclosed warnings. Game Center autolinking/config checked, not natively compiled. Paused before SDK 58 and cloud builds for owner approval. |
 | 2026-11-11 | SDK 58 stage | Owner approved local SDK 58 work. Installed Expo 58.0.24 / React Native 0.88.1 / React 19.3.0. Dependency check, Doctor 20/20, TypeScript, 172 tests, three-platform exports, clean install, home preview, and isolated results-navigation browser checks passed. Lint: zero errors, ten warnings; audit: 16 moderate, zero high/critical. No native build, signing changes, upload, or merge. |
+| 2026-11-11 | Native readiness review | Reviewed current EAS profile, Apple identity/entitlement, tracked native source and ignore rules, and documented Xcode 27.2 image. Production URL confirmed from deployment metadata; health check passed, deployed Game Center behavior unverified. Current EAS access/build number, actual upload archive, and usable signing remain unverified because no EAS CLI is available in this session. No cloud build, signing change, submission, or backend publication occurred. |
 
 ## References
 
