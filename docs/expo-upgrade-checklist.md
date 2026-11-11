@@ -248,6 +248,12 @@ then **App Store Connect: Manage your API Key**. Review the options before
 creating or assigning a key. Build-signing credentials are separate and should
 not be deleted or regenerated for this issue.
 
+**Authentication setup result:** the owner confirmed EAS created and assigned
+the App Store Connect API key after selecting the `APP_MANAGER` role.
+This is owner-reported setup success, not a successful upload. No private key
+contents were requested or copied into the project. Obtain confirmation before
+retrying submission of the same build 5; no rebuild is needed.
+
 Prepared interactive command, not yet executed (the non-interactive attempt
 above stopped before submission):
 
