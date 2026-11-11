@@ -37,7 +37,7 @@ current candidate.
   Do not assume EAS automatically enables Game Center: it is not listed in the
   current capability-sync support table.
 
-**Next checkpoint:** in an authenticated EAS terminal, check project access and
+**Earlier checkpoint:** in an authenticated EAS terminal, check project access and
 the remote iOS build number without starting a build:
 
 ```sh
@@ -50,6 +50,16 @@ These commands were documented, not executed during this review. Do not run
 also inspect the actual upload archive, choose/configure the reviewed image,
 verify signing and backend readiness, and obtain separate build/signing approval.
 Native compilation, device acceptance, and TestFlight submission remain undone.
+
+**Subsequent owner-run results:** device login succeeded, project ID matched,
+remote iOS build number was 2, and the inspected EAS archive contained the module
+configuration, Swift source, and podspec. The owner found the matching Apple
+profile invalid, regenerated it, and confirmed it is active. These are
+owner-reported checks, not independent verification of signing or entitlements.
+The next checkpoint is reviewing EAS-held signing credentials without generating,
+replacing, revoking, or downloading credentials. Confirm the regenerated profile
+is the one EAS uses and that EAS has the matching distribution private key before
+calling signing ready.
 
 ## Historical SDK 54 scope
 

@@ -173,9 +173,15 @@ JS exports and a working web preview are not proof of native compatibility.
 - [x] Owner reported highest existing Apple build number is 2 and initialized
   Expo's remote starting number to 2. The next increment is expected to be 3.
 - [ ] Recheck remote number before building; do not lower it if it has advanced.
+  Owner subsequently confirmed authenticated project ID matches and remote
+  iOS number is 2. Recheck again if another build occurs before this candidate.
 - [ ] Verify signing team, valid distribution certificate, and provisioning
   profile containing the enabled Game Center entitlement. Portal access alone
   does not prove usable signing.
+  Owner confirmed an unexpired distribution certificate, found the matching
+  profile invalid, then confirmed the regenerated profile is active.
+  EAS possession of the matching private key, use of the regenerated profile,
+  and its actual Game Center entitlement remain unverified.
 - [ ] Obtain the existing app's numeric App Store Connect Apple ID for submission.
 - [ ] Verify the intended backend has the matching Game Center/social code;
   publish it only with separate approval.
@@ -225,6 +231,7 @@ Do not mark an intended action or a successful JS bundle as a native test pass.
 | 2026-11-11 | SDK 57 stage | Installed Expo 57.0.32 / React Native 0.86.3 / React 19.2.3. Dependency check, online Doctor 21/21, TypeScript, 172 tests, three-platform JS exports, clean npm install, and web home-screen screenshot passed. Lint: zero errors, ten disclosed warnings. Game Center autolinking/config checked, not natively compiled. Paused before SDK 58 and cloud builds for owner approval. |
 | 2026-11-11 | SDK 58 stage | Owner approved local SDK 58 work. Installed Expo 58.0.24 / React Native 0.88.1 / React 19.3.0. Dependency check, Doctor 20/20, TypeScript, 172 tests, three-platform exports, clean install, home preview, and isolated results-navigation browser checks passed. Lint: zero errors, ten warnings; audit: 16 moderate, zero high/critical. No native build, signing changes, upload, or merge. |
 | 2026-11-11 | Native readiness review | Reviewed current EAS profile, Apple identity/entitlement, tracked native source and ignore rules, and documented Xcode 27.2 image. Production URL confirmed from deployment metadata; health check passed, deployed Game Center behavior unverified. Current EAS access/build number, actual upload archive, and usable signing remain unverified because no EAS CLI is available in this session. No cloud build, signing change, submission, or backend publication occurred. |
+| 2026-11-11 | Owner-run readiness checks | Owner confirmed device login, matching Expo project ID, remote iOS build number 2, and all three Game Center native/config files in the EAS archive. Owner reported regenerating the invalid provisioning profile and confirmed it is active. EAS signing credentials, actual profile entitlements, native compilation, and device acceptance remain unverified. No cloud build or submission authorized. |
 
 ## References
 
