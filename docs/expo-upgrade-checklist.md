@@ -230,17 +230,16 @@ The owner approved preparation only. No Apple upload or submission has run.
 Use the existing build; do not rebuild, increment its number, use `--latest`,
 or configure automatic submission.
 
-Pending input: the numeric **Apple ID of the SketchDuel app record**, found in
-App Store Connect → Apps → SketchDuel → App Information → General Information.
-This is not an Apple account login, team ID, bundle ID, or Expo project ID.
-After confirming it, add `submit.production.ios.ascAppId` in `eas.json`.
+The owner supplied the numeric **Apple ID of the SketchDuel app record**:
+`6758966766`. Configured `submit.production.ios.ascAppId` in `eas.json` with
+that value. This targets the owner-identified existing app; no authenticated
+Apple lookup has independently verified the app-record mapping.
 Submission authentication is separate from build signing: a valid distribution
 certificate/profile does not establish an App Store Connect submission API key.
 If setup is needed, use EAS's interactive credential flow after approval; do not
 copy private keys or passwords into project files or chat.
 
-Prepared command, **not executed**, to be used only after separate upload approval
-and app-target configuration:
+Prepared command, **not executed**, to be used only after separate upload approval:
 
 ```sh
 npx eas-cli@27.7.2 submit --platform ios --profile production --id fddabe5c-571d-4259-8137-ffad31905993 --no-auto-testflight-setup
