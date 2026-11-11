@@ -11,3 +11,4 @@
 - [Audit compatibility](audit-remaining-advisories.md) — avoid audit-driven framework downgrades; verify Metro compatibility before forcing transitive overrides.
 - [Apple app identity](apple-app-identity.md) — existing App Store Connect record uses app.replit.sketchduel; preserve that record.
 - [Remote Expo authentication](remote-expo-authentication.md) — browser localhost callbacks cannot reach a CLI running remotely; use device login.
+- [EAS archive storage](eas-archive-storage.md) — exclude dependency caches; EAS staging can exhaust the smaller temporary filesystem despite free workspace space.

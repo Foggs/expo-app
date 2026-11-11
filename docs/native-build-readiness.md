@@ -74,6 +74,16 @@ success messages. Signing and actual Game Center entitlements are still not
 proven by a native build. Recheck the remote number before retrying; preserve
 the advanced number rather than resetting it.
 
+The next attempt advanced 3 to 4, then failed before upload with local ENOSPC:
+EAS copied the workspace dependency cache into its temporary staging area.
+The workspace had ample storage but `/tmp` was nearly full. The fix excludes
+`/.cache/` through `.gitignore`, which EAS uses when no `.easignore` exists,
+and removes disposable earlier test installs and abandoned staging output.
+An actual local EAS archive inspection then succeeded (101 MB, zero cache
+files, all required Game Center source/config files included). No cloud build
+was launched by this inspection. Recheck remote numbering before retrying;
+expect 5 if the current remote number remains 4.
+
 **Read-only backend review:** deployment metadata reports a public successful
 deployment at the configured backend URL, and GET `/api/health` returned 200.
 The production/shared `GAME_CENTER_BUNDLE_IDS` override is absent (including

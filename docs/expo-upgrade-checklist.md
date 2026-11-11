@@ -260,8 +260,16 @@ confirmed creation of a new distribution certificate, assignment to SketchDuel,
 and creation of the Apple provisioning profile for `app.replit.sketchduel`.
 No certificate revocation was reported. Credential generation is not a successful
 signed build or verification of the profile's actual Game Center entitlement.
-Recheck the remote number before retrying; do not reset 3 to 2. The next
-auto-incremented attempt is expected to use 4 if the remote number is still 3.
+The retry advanced 3 to 4 and passed credential selection, then failed locally
+before upload with ENOSPC while copying the 2.1 GB workspace dependency cache.
+Excluded `/.cache/` via `.gitignore` (EAS's default upload exclusions). Removed
+disposable prior clean-install test directories and abandoned EAS staging files;
+`/tmp` free space increased from about 42 MB to 2.9 GB before archive verification.
+Actual `build:inspect --stage archive` then succeeded: 101 MB, zero cache files,
+and all three required Game Center native/config files present.
+No cloud build or native compilation was reached in this retry.
+Recheck the remote number before another attempt; the next auto-increment is
+expected to use 5 if the remote number is still 4. Never reset the number.
 
 ## References
 
