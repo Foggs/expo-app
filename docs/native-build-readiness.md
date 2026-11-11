@@ -64,6 +64,16 @@ certificate/private-key usability, certificate-to-profile pairing, or actual
 Game Center entitlements. No credentials were changed during this inspection.
 Image configuration was subsequently completed with owner approval.
 
+**Later signing correction:** the approved non-interactive build attempt
+incremented 2 to 3 but failed in credential setup, before native compilation.
+Interactive inspection then showed no project credentials and no distribution
+certificates available in EAS, superseding the earlier summary assessment.
+With owner approval, EAS created a new distribution certificate, assigned it to
+SketchDuel, and created an Apple provisioning profile. The owner supplied these
+success messages. Signing and actual Game Center entitlements are still not
+proven by a native build. Recheck the remote number before retrying; preserve
+the advanced number rather than resetting it.
+
 **Read-only backend review:** deployment metadata reports a public successful
 deployment at the configured backend URL, and GET `/api/health` returned 200.
 The production/shared `GAME_CENTER_BUNDLE_IDS` override is absent (including

@@ -249,10 +249,19 @@ Validated the JSON and preserved store distribution, Release configuration,
 remote numbering, auto-increment, environment settings, and no auto-submission.
 No cloud build was started.
 
-Latest signing review: the owner inspected the EAS production credentials
-summary and confirmed a listed distribution certificate and matching regenerated
-profile identifier/expiration. No credentials were generated, replaced,
-downloaded, or revoked through this review. No signed build has been performed.
+Latest signing setup: the first approved non-interactive build attempt advanced
+the remote number from 2 to 3, then failed during credential setup before native
+compilation. Subsequent authenticated inspection reported no configured project
+credentials and no reusable distribution certificates in EAS, superseding the
+earlier owner-reported credential-summary assessment.
+
+With separate owner approval, the owner ran EAS credential setup. Its output
+confirmed creation of a new distribution certificate, assignment to SketchDuel,
+and creation of the Apple provisioning profile for `app.replit.sketchduel`.
+No certificate revocation was reported. Credential generation is not a successful
+signed build or verification of the profile's actual Game Center entitlement.
+Recheck the remote number before retrying; do not reset 3 to 2. The next
+auto-incremented attempt is expected to use 4 if the remote number is still 3.
 
 ## References
 
