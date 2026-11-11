@@ -2,6 +2,7 @@ import { Platform } from "react-native";
 import {
   authenticateGameCenter,
   fetchGameCenterIdentityProof,
+  isGameCenterAvailable,
 } from "@/modules/game-center";
 import { apiRequest } from "@/lib/query-client";
 import {
@@ -49,6 +50,8 @@ const deps: GameCenterLinkDeps = {
 export async function signInWithGameCenter(
   options: { relinkWhenUnchanged: boolean },
 ): Promise<GameCenterSignInResult> {
-  if (Platform.OS !== "ios") return { status: "unavailable", rotatedToken: false };
+  if (Platform.OS !== "ios" || !isGameCenterAvailable()) {
+    return { status: "unavailable", rotatedToken: false };
+  }
   return runGameCenterSignIn(deps, options);
 }

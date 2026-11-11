@@ -1,6 +1,6 @@
 # SketchDuel Expo upgrade checklist
 
-Last updated: 2026-11-10
+Last updated: 2026-11-11
 
 ## Goal and rules
 
@@ -35,6 +35,9 @@ completed. Owner confirmations are not independent native verification.
   excludes this custom native module. Do not remove Game Center to bypass it.
 - [ ] Establish Game Center's SDK 58 compatibility through native compilation
   and actual device behavior; source inspection cannot establish this.
+- [x] Guard the Expo Go / missing-native-module path so core-flow checks do not
+  rotate a saved Game Center identity. Focused regression tests pass; no device
+  or Expo Go run has been performed.
 
 ## 2. Establish a native-capable upgrade route — next; blocked
 
@@ -139,6 +142,7 @@ Do not mark an intended action or a successful JS bundle as a native test pass.
 | Date | Step | Result / evidence |
 | --- | --- | --- |
 | 2026-11-10 | Review and setup | SDK 54 remains installed; custom native limitation identified; owner confirmed Apple/Expo setup and remote number initialization. No upgrade or native build performed. |
+| 2026-11-11 | Safe fallback | Missing Game Center native module now returns unavailable without reading or rotating stored identity. Focused tests (13), TypeScript, targeted lint, and frontend restart passed. No Expo Go/device test or SDK change performed. |
 
 ## References
 
