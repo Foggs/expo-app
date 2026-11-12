@@ -182,7 +182,7 @@ JS exports and a working web preview are not proof of native compatibility.
   identifier and expiration match the regenerated Apple profile.
   Certificate/private-key usability, certificate-to-profile pairing, and the
   actual Game Center entitlement remain unverified until further checks/build.
-- [ ] Obtain the existing app's numeric App Store Connect Apple ID for submission.
+- [x] Obtain the existing app's numeric App Store Connect Apple ID for submission.
 - [ ] Verify the intended backend has the matching Game Center/social code;
   publish it only with separate approval.
   Read-only review confirmed deployment metadata reports a public successful
@@ -196,8 +196,32 @@ JS exports and a working web preview are not proof of native compatibility.
   used. Deployed identity/social compatibility remains unverified pending
   release provenance or actual device acceptance.
 
-Cloud build 5 finished successfully in EAS. TestFlight submission and real-device
-Game Center acceptance remain unverified.
+Cloud build 5 finished successfully in EAS. App Store Connect subsequently
+reported version 1.0.0 (5) processed as VALID and IN_BETA_TESTING internally.
+The owner confirmed iPhone launch reaches home and displays Game Center's welcome,
+but Friends eventually shows “Sign in to Game Center.” Full Game Center
+acceptance has therefore not passed.
+
+### Production diagnosis after the iPhone sign-in failure
+
+Read-only investigation at 2026-11-12 00:59 UTC examined the preceding 24 hours.
+The only listed successful deployment build was created October 23, whereas
+local history introduced the Game Center identity route on November 8.
+Deployment metadata did not expose a source revision, so stale backend code
+is a candidate cause, not a proven cause.
+
+Endpoint metrics showed one request to `/api/identity/game-center`, about
+10 ms average latency and no recorded 4xx/5xx. They do not identify the
+method, caller, or exact response; generic OPTIONS handling can reach this path.
+Targeted error and proof-rejection logs returned no entries. Absence of logged
+errors does not prove the owner's identity link succeeded.
+
+Source review confirmed the Friends screen also displays the sign-in message
+when server identity linking fails. This can explain the apparent disagreement
+with Apple's welcome, but does not identify the specific failure.
+No identity POST, authenticated probe, player query, production data change,
+or publication occurred. Next review backend publish readiness and risks, or
+obtain device-error/serving-revision evidence before choosing a remedy.
 
 ## 6. Build and submit the upgraded candidate — build succeeded, submission preparation
 
