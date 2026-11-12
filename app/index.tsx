@@ -5,6 +5,7 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 import { Platform, ScrollView, StyleSheet, View } from "react-native";
 import { ROOM_CODE_LENGTH } from "@shared/friendRoom";
 import {
+  cancelAnimation,
   useAnimatedStyle,
   useSharedValue,
   withRepeat,
@@ -15,6 +16,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import FriendsMatchModal from "@/components/FriendsMatchModal";
 import HomeHero from "@/components/HomeHero";
+import HomeHowToPlayModal from "@/components/HomeHowToPlayModal";
 import HomePrimaryActions from "@/components/HomePrimaryActions";
 import InviteMatchModal from "@/components/InviteMatchModal";
 import { INVITE_MATCH_TIMEOUT_MS, inviteMatchFailure } from "@/lib/social/inviteMatchGuard";
@@ -25,6 +27,7 @@ import { useGameWebSocket } from "@/contexts/WebSocketContext";
 import { useScreenPadding } from "@/hooks/useScreenPadding";
 import { describeGameCenterStatus } from "@/lib/social/friendsAvailability";
 import { useThemeColors } from "@/hooks/useThemeColors";
+import { useHomeShine } from "@/hooks/useHomeShine";
 import { impactLight, impactMedium, notifySuccess } from "@/lib/platformFeedback";
 import {
   parseFriendInviteCode,
@@ -39,10 +42,10 @@ export default function HomeScreen() {
   const { topPadding, bottomPadding } = useScreenPadding(insets);
 
   const buttonScale = useSharedValue(1);
-  const pulseOpacity = useSharedValue(0.4);
   const searchPulse = useSharedValue(0.6);
   const navigatedRef = useRef(false);
   const [isFriendsModalOpen, setIsFriendsModalOpen] = useState(false);
+  const [isHowToPlayOpen, setIsHowToPlayOpen] = useState(false);
   const [friendRoomInput, setFriendRoomInput] = useState("");
   const playerIdentity = usePlayerIdentity();
   const { acceptedRoom, consumeAcceptedRoom, clearRematchFriend, nameFor, availability } = useSocial();
@@ -72,6 +75,7 @@ export default function HomeScreen() {
   } = useGameWebSocket();
 
   const isSearching = matchStatus === "queueing" || matchStatus === "matched";
+  const { randomShineStyle, friendsShineStyle, canAnimate } = useHomeShine(isFocused);
   const isFriendFlowActive = friendRoomStatus !== "idle";
   const showFriendsModal = (isFriendsModalOpen || isFriendFlowActive) && !inviteMatch;
 
@@ -184,26 +188,21 @@ export default function HomeScreen() {
   }, [flowState, retryDelayMs]);
 
   useEffect(() => {
-    pulseOpacity.value = withRepeat(
-      withSequence(withTiming(0.8, { duration: 1500 }), withTiming(0.4, { duration: 1500 })),
-      -1,
-      true
-    );
-  }, [pulseOpacity]);
-
-  useEffect(() => {
-    if (isSearching) {
+    if (isSearching && canAnimate) {
       searchPulse.value = withRepeat(
         withSequence(withTiming(1, { duration: 1000 }), withTiming(0.6, { duration: 1000 })),
         -1,
         true
       );
+    } else {
+      searchPulse.value = 0.6;
     }
-  }, [isSearching, searchPulse]);
+    return () => cancelAnimation(searchPulse);
+  }, [isSearching, canAnimate, searchPulse]);
 
-  const pulseStyle = useAnimatedStyle(() => ({
-    opacity: pulseOpacity.value,
-  }));
+  useEffect(() => {
+    if (!canAnimate) buttonScale.set(1);
+  }, [canAnimate, buttonScale]);
 
   const buttonAnimatedStyle = useAnimatedStyle(() => ({
     transform: [{ scale: buttonScale.value }],
@@ -214,10 +213,12 @@ export default function HomeScreen() {
   }));
 
   const handlePressIn = () => {
+    if (!canAnimate) return;
     buttonScale.set(withSpring(0.95));
   };
 
   const handlePressOut = () => {
+    if (!canAnimate) return;
     buttonScale.set(withSpring(1));
   };
 
@@ -281,6 +282,15 @@ export default function HomeScreen() {
   const handleOpenSettings = useCallback(() => {
     impactLight();
     router.push("/settings");
+  }, []);
+
+  const handleOpenHowToPlay = useCallback(() => {
+    impactLight();
+    setIsHowToPlayOpen(true);
+  }, []);
+
+  const handleCloseHowToPlay = useCallback(() => {
+    setIsHowToPlayOpen(false);
   }, []);
 
   const handleFriendRoomInput = useCallback(
@@ -386,19 +396,25 @@ export default function HomeScreen() {
 
         <HomePrimaryActions
           colors={colors}
-          pulseStyle={pulseStyle}
+          randomShineStyle={randomShineStyle}
+          friendsShineStyle={friendsShineStyle}
           buttonAnimatedStyle={buttonAnimatedStyle}
           isSearching={isSearching}
           onOpenGallery={() => {
             impactLight();
             router.push("/gallery");
           }}
+          onOpenHowToPlay={handleOpenHowToPlay}
           onOpenFriends={handleOpenFriends}
           onFindMatch={handleFindMatch}
           onPressIn={handlePressIn}
           onPressOut={handlePressOut}
         />
       </ScrollView>
+
+      {isFocused && (
+        <HomeHowToPlayModal visible={isHowToPlayOpen} onClose={handleCloseHowToPlay} />
+      )}
 
       {isFocused && (
         <MatchmakingModal

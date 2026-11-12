@@ -35,7 +35,7 @@ export default function GalleryScreen() {
   const { colors } = useThemeColors();
   const { topPadding, bottomPadding } = useScreenPadding(insets);
 
-  const { data: drawings = [], isLoading, isError, refetch } = useQuery<GalleryDrawing[]>({
+  const { data: drawings = [], isLoading, isError, refetch, isFetching } = useQuery<GalleryDrawing[]>({
     queryKey: ["/api/gallery"],
   });
 
@@ -146,13 +146,27 @@ export default function GalleryScreen() {
       {isLoading ? (
         <View style={styles.centered}>
           <ActivityIndicator size="large" color={colors.tint} />
+          <Text style={[styles.emptyHint, { color: colors.textSecondary }]} accessibilityLiveRegion="polite">
+            Loading gallery…
+          </Text>
         </View>
       ) : isError ? (
         <View style={styles.centered}>
           <Ionicons name="cloud-offline-outline" size={48} color={colors.border} />
           <Text style={[styles.emptyText, { color: colors.textSecondary }]}>Couldn&apos;t load gallery</Text>
-          <Pressable onPress={() => refetch()} accessibilityRole="button">
-            <Text style={[styles.emptyHint, { color: colors.tint }]}>Tap to retry</Text>
+          <Text style={[styles.emptyHint, { color: colors.textSecondary }]}>
+            Check your connection and try again.
+          </Text>
+          <Pressable
+            onPress={() => refetch()}
+            disabled={isFetching}
+            accessibilityRole="button"
+            accessibilityState={{ disabled: isFetching }}
+            style={styles.retryButton}
+          >
+            <Text style={[styles.emptyHint, { color: colors.tint }]}>
+              {isFetching ? "Trying again…" : "Try Again"}
+            </Text>
           </Pressable>
         </View>
       ) : drawings.length === 0 ? (
@@ -198,6 +212,12 @@ export default function GalleryScreen() {
 }
 
 const styles = StyleSheet.create({
+  retryButton: {
+    minHeight: 44,
+    minWidth: 100,
+    alignItems: "center",
+    justifyContent: "center",
+  },
   container: {
     flex: 1,
   },

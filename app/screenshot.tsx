@@ -17,6 +17,7 @@ import GameStatusOverlays from "@/components/GameStatusOverlays";
 import GameToolbar from "@/components/GameToolbar";
 import GameTurnIndicator from "@/components/GameTurnIndicator";
 import HomeHero from "@/components/HomeHero";
+import HomeHowToPlayModal from "@/components/HomeHowToPlayModal";
 import HomePrimaryActions from "@/components/HomePrimaryActions";
 import MatchmakingModal from "@/components/MatchmakingModal";
 import ResultsActionButtons from "@/components/ResultsActionButtons";
@@ -28,6 +29,7 @@ import { useThemeColors, type ThemeColors } from "@/hooks/useThemeColors";
 
 const NOOP = () => undefined;
 const FROZEN_STYLE = { opacity: 1, transform: [{ scale: 1 }] };
+const FROZEN_SHINE_STYLE = { opacity: 0, transform: [{ translateX: -150 }, { rotate: "22deg" }] };
 
 function makeStroke(id: string, color: string, width: number, path: string): Stroke {
   return { id, color, strokeWidth: width, path };
@@ -112,10 +114,12 @@ function HomeView({ colors, isDark }: { colors: ThemeColors; isDark: boolean }) 
         <HomeHero colors={colors} onOpenSettings={NOOP} />
         <HomePrimaryActions
           colors={colors}
-          pulseStyle={FROZEN_STYLE}
+          randomShineStyle={FROZEN_SHINE_STYLE}
+          friendsShineStyle={FROZEN_SHINE_STYLE}
           buttonAnimatedStyle={FROZEN_STYLE}
           isSearching={false}
           onOpenGallery={NOOP}
+          onOpenHowToPlay={NOOP}
           onOpenFriends={NOOP}
           onFindMatch={NOOP}
           onPressIn={NOOP}
@@ -123,6 +127,15 @@ function HomeView({ colors, isDark }: { colors: ThemeColors; isDark: boolean }) 
         />
       </View>
     </FullscreenWrapper>
+  );
+}
+
+function HowToPlayView({ colors, isDark }: { colors: ThemeColors; isDark: boolean }) {
+  return (
+    <>
+      <HomeView colors={colors} isDark={isDark} />
+      <HomeHowToPlayModal visible onClose={NOOP} />
+    </>
   );
 }
 
@@ -433,6 +446,7 @@ function DetailView({ colors, isDark }: { colors: ThemeColors; isDark: boolean }
 
 const VIEWS: Record<string, React.ComponentType<{ colors: ThemeColors; isDark: boolean }>> = {
   home: HomeView,
+  "how-to-play": HowToPlayView,
   matchmaking: MatchmakingView,
   friends: FriendsView,
   "get-ready": GetReadyView,

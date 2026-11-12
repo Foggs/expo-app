@@ -1,20 +1,18 @@
 import { fetch } from "expo/fetch";
 import { QueryClient, QueryFunction } from "@tanstack/react-query";
+import { Platform } from "react-native";
 import { resolveNativeApiBaseUrl } from "@/lib/network/endpoints";
+import { withRequestDeadline } from "@/lib/network/requestDeadline";
 
 /**
  * Gets the base URL for the Express API server (e.g., "http://localhost:3000")
  * @returns {string} The API base URL
  */
 export function getApiUrl(): string {
-  if (typeof window !== "undefined") {
-    const protocol = window.location.protocol === "https:" ? "https:" : "http:";
-    const host =
-      window.location.hostname === "localhost"
-        ? "127.0.0.1"
-        : window.location.hostname;
-    const port = process.env.EXPO_PUBLIC_SERVER_PORT || "5050";
-    return `${protocol}//${host}:${port}/`;
+  // Native also defines window, but it is not a browser Location object.
+  // Web uses the same origin; Metro forwards /api during development.
+  if (Platform.OS === "web" && typeof window !== "undefined") {
+    return `${window.location.origin}/`;
   }
 
   const domain = process.env.EXPO_PUBLIC_DOMAIN;
@@ -63,20 +61,28 @@ export const getQueryFn: <T>(options: {
   on401: UnauthorizedBehavior;
 }) => QueryFunction<T> =
   ({ on401: unauthorizedBehavior }) =>
-  async ({ queryKey }) => {
+  async ({ queryKey, signal }) => {
     const baseUrl = getApiUrl();
     const url = new URL(queryKey.join("/") as string, baseUrl);
 
-    const res = await fetch(url.toString(), {
-      credentials: "include",
-    });
+    return withRequestDeadline(async (requestSignal) => {
+      const res = await fetch(url.toString(), {
+        credentials: "include",
+        signal: requestSignal,
+      });
 
-    if (unauthorizedBehavior === "returnNull" && res.status === 401) {
-      return null;
-    }
+      if (unauthorizedBehavior === "returnNull" && res.status === 401) {
+        return null;
+      }
 
-    await throwIfResNotOk(res);
-    return await res.json();
+      await throwIfResNotOk(res);
+      const data = await res.json();
+      // A malformed response must not masquerade as an empty gallery.
+      if (queryKey[0] === "/api/gallery" && !Array.isArray(data)) {
+        throw new Error("The gallery returned an invalid response.");
+      }
+      return data;
+    }, { signal });
   };
 
 export const queryClient = new QueryClient({
