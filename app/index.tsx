@@ -2,7 +2,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import * as Linking from "expo-linking";
 import { router, useIsFocused, useLocalSearchParams } from "expo-router";
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { Platform, StyleSheet, View } from "react-native";
+import { Platform, ScrollView, StyleSheet, View } from "react-native";
 import { ROOM_CODE_LENGTH } from "@shared/friendRoom";
 import {
   useAnimatedStyle,
@@ -23,6 +23,7 @@ import { usePlayerIdentity } from "@/contexts/PlayerIdentityContext";
 import { useSocial } from "@/contexts/SocialContext";
 import { useGameWebSocket } from "@/contexts/WebSocketContext";
 import { useScreenPadding } from "@/hooks/useScreenPadding";
+import { describeGameCenterStatus } from "@/lib/social/friendsAvailability";
 import { useThemeColors } from "@/hooks/useThemeColors";
 import { impactLight, impactMedium, notifySuccess } from "@/lib/platformFeedback";
 import {
@@ -44,7 +45,7 @@ export default function HomeScreen() {
   const [isFriendsModalOpen, setIsFriendsModalOpen] = useState(false);
   const [friendRoomInput, setFriendRoomInput] = useState("");
   const playerIdentity = usePlayerIdentity();
-  const { acceptedRoom, consumeAcceptedRoom, clearRematchFriend, nameFor } = useSocial();
+  const { acceptedRoom, consumeAcceptedRoom, clearRematchFriend, nameFor, availability } = useSocial();
   /** Set while joining the room reserved by an accepted friend invite. */
   const [inviteMatch, setInviteMatch] = useState<{ friendName: string } | null>(null);
   /** Why joining the invited match stopped, when the server gave no reason. */
@@ -269,6 +270,19 @@ export default function HomeScreen() {
     setFriendRoomInput("");
   }, [leaveFriendRoom, clearFriendRoomError]);
 
+  const handleOpenFriendList = useCallback(() => {
+    impactLight();
+    setIsFriendsModalOpen(false);
+    setFriendRoomInput("");
+    clearFriendRoomError();
+    router.push("/friend-list");
+  }, [clearFriendRoomError]);
+
+  const handleOpenSettings = useCallback(() => {
+    impactLight();
+    router.push("/settings");
+  }, []);
+
   const handleFriendRoomInput = useCallback(
     (value: string) => {
       const next = value
@@ -355,13 +369,20 @@ export default function HomeScreen() {
         end={{ x: 1, y: 1 }}
       />
 
-      <View
-        style={[
+      <ScrollView
+        style={styles.scroll}
+        contentContainerStyle={[
           styles.content,
-          { paddingTop: topPadding + 40, paddingBottom: bottomPadding + 20 },
+          { paddingTop: topPadding + 8, paddingBottom: bottomPadding + 20 },
         ]}
+        showsVerticalScrollIndicator={false}
+        bounces={false}
       >
-        <HomeHero colors={colors} playerName={playerIdentity.displayName} />
+        <HomeHero
+          colors={colors}
+          playerName={playerIdentity.displayName}
+          onOpenSettings={handleOpenSettings}
+        />
 
         <HomePrimaryActions
           colors={colors}
@@ -373,19 +394,11 @@ export default function HomeScreen() {
             router.push("/gallery");
           }}
           onOpenFriends={handleOpenFriends}
-          onOpenFriendList={
-            Platform.OS === "ios"
-              ? () => {
-                  impactLight();
-                  router.push("/friend-list");
-                }
-              : undefined
-          }
           onFindMatch={handleFindMatch}
           onPressIn={handlePressIn}
           onPressOut={handlePressOut}
         />
-      </View>
+      </ScrollView>
 
       {isFocused && (
         <MatchmakingModal
@@ -426,6 +439,14 @@ export default function HomeScreen() {
           onCreateRoom={handleCreateFriendRoom}
           onJoinRoom={handleJoinFriendRoom}
           onClose={handleCloseFriendsModal}
+          gameCenter={
+            Platform.OS === "ios"
+              ? {
+                  status: describeGameCenterStatus(availability, playerIdentity.displayName).label,
+                  onPress: handleOpenFriendList,
+                }
+              : undefined
+          }
         />
       )}
     </View>
@@ -436,8 +457,11 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
-  content: {
+  scroll: {
     flex: 1,
+  },
+  content: {
+    flexGrow: 1,
     paddingHorizontal: 24,
   },
 });

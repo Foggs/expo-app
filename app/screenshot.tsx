@@ -108,8 +108,8 @@ function HomeView({ colors, isDark }: { colors: ThemeColors; isDark: boolean }) 
   const { topPadding, bottomPadding } = useScreenPadding(insets);
   return (
     <FullscreenWrapper colors={colors} isDark={isDark}>
-      <View style={[styles.homeContent, { paddingTop: topPadding + 40, paddingBottom: bottomPadding + 20 }]}>
-        <HomeHero colors={colors} />
+      <View style={[styles.homeContent, { paddingTop: topPadding + 8, paddingBottom: bottomPadding + 20 }]}>
+        <HomeHero colors={colors} onOpenSettings={NOOP} />
         <HomePrimaryActions
           colors={colors}
           pulseStyle={FROZEN_STYLE}

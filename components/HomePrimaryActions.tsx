@@ -4,8 +4,6 @@ import { LinearGradient } from "expo-linear-gradient";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import Animated from "react-native-reanimated";
 import type { ThemeColors } from "@/hooks/useThemeColors";
-import { openPrivacyPolicy } from "@/lib/privacyPolicy";
-import { openSupportContact } from "@/lib/supportContact";
 
 interface HomePrimaryActionsProps {
   colors: ThemeColors;
@@ -13,9 +11,8 @@ interface HomePrimaryActionsProps {
   buttonAnimatedStyle: any;
   isSearching: boolean;
   onOpenGallery: () => void;
+  /** Opens the Play with Friends hub (invite codes and Game Center friends). */
   onOpenFriends: () => void;
-  /** Opens the Game Center friends list. Omitted where Game Center is not available. */
-  onOpenFriendList?: () => void;
   onFindMatch: () => void;
   onPressIn: () => void;
   onPressOut: () => void;
@@ -28,52 +25,14 @@ export default function HomePrimaryActions({
   isSearching,
   onOpenGallery,
   onOpenFriends,
-  onOpenFriendList,
   onFindMatch,
   onPressIn,
   onPressOut,
 }: HomePrimaryActionsProps) {
   return (
-    <>
-      <Pressable
-        onPress={onOpenGallery}
-        style={[styles.galleryButton, { backgroundColor: colors.card }]}
-        accessibilityRole="button"
-        accessibilityLabel="View saved drawings gallery"
-      >
-        <Ionicons name="images" size={20} color={colors.tint} />
-        <Text style={[styles.galleryButtonText, { color: colors.text }]}>Gallery</Text>
-      </Pressable>
-
-      <Pressable
-        onPress={onOpenFriends}
-        style={[
-          styles.friendButton,
-          { borderColor: colors.tint, backgroundColor: colors.card },
-        ]}
-        accessibilityRole="button"
-        accessibilityLabel="Start a friends match"
-        accessibilityHint="Create or join a private room with a friend"
-      >
-        <Ionicons name="people" size={20} color={colors.tint} />
-        <Text style={[styles.friendButtonText, { color: colors.text }]}>Friends Match</Text>
-      </Pressable>
-
-      {onOpenFriendList && (
-        <Pressable
-          onPress={onOpenFriendList}
-          style={[styles.galleryButton, { backgroundColor: colors.card }]}
-          accessibilityRole="button"
-          accessibilityLabel="Game Center friends"
-          accessibilityHint="See which friends are online and invite them to a match"
-        >
-          <Ionicons name="person-add" size={20} color={colors.tint} />
-          <Text style={[styles.galleryButtonText, { color: colors.text }]}>Game Center Friends</Text>
-        </Pressable>
-      )}
-
-      <View style={styles.footer}>
-        <Animated.View style={[styles.pulseRing, pulseStyle]}>
+    <View style={styles.container}>
+      <View style={styles.randomPlay}>
+        <Animated.View style={[styles.pulseRing, pulseStyle]} pointerEvents="none">
           <LinearGradient
             colors={[colors.tint, colors.accent]}
             style={styles.pulseGradient}
@@ -82,129 +41,163 @@ export default function HomePrimaryActions({
           />
         </Animated.View>
 
-        <Animated.View style={buttonAnimatedStyle}>
+        <Animated.View style={[styles.fullWidth, buttonAnimatedStyle]}>
           <Pressable
             onPress={isSearching ? undefined : onFindMatch}
             onPressIn={isSearching ? undefined : onPressIn}
             onPressOut={isSearching ? undefined : onPressOut}
             disabled={isSearching}
             accessibilityRole="button"
-            accessibilityLabel="Find a match to play"
-            accessibilityHint="Searches for another player to start a drawing game"
+            accessibilityLabel="Random Play"
+            accessibilityHint="Matches you with another player for a drawing game"
             accessibilityState={{ disabled: isSearching }}
             style={{ opacity: isSearching ? 0.6 : 1 }}
           >
             <LinearGradient
               colors={[colors.tint, colors.accent]}
-              style={styles.findMatchButton}
+              style={styles.randomPlayButton}
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 1 }}
             >
-              <Ionicons name="search" size={24} color="#fff" />
-              <Text style={styles.buttonText}>Find Match</Text>
+              <Ionicons name="shuffle" size={24} color="#fff" />
+              <Text style={styles.randomPlayText} numberOfLines={1} maxFontSizeMultiplier={1.4}>
+                Random Play
+              </Text>
             </LinearGradient>
           </Pressable>
         </Animated.View>
       </View>
 
       <Pressable
-        onPress={openPrivacyPolicy}
-        style={styles.privacyLink}
-        accessibilityRole="link"
-        accessibilityLabel="Privacy Policy"
-        accessibilityHint="Opens the SketchDuel privacy policy"
-        hitSlop={8}
+        onPress={onOpenFriends}
+        style={({ pressed }) => [
+          styles.friendsButton,
+          { borderColor: colors.tint, backgroundColor: colors.card },
+          pressed && styles.pressed,
+        ]}
+        accessibilityRole="button"
+        accessibilityLabel="Play with Friends"
+        accessibilityHint="Share an invite code to play with your friends"
       >
-        <Text style={[styles.privacyLinkText, { color: colors.textSecondary }]}>
-          Privacy Policy
-        </Text>
+        <View style={[styles.friendsIcon, { backgroundColor: colors.tint + "1A" }]}>
+          <Ionicons name="people" size={22} color={colors.tint} />
+        </View>
+        <View style={styles.friendsText}>
+          <Text style={[styles.friendsTitle, { color: colors.text }]} maxFontSizeMultiplier={1.4}>
+            Play with Friends
+          </Text>
+          <Text style={[styles.friendsSubtitle, { color: colors.textSecondary }]} maxFontSizeMultiplier={1.4}>
+            Share an invite code to play with your friends
+          </Text>
+        </View>
+        <Ionicons name="chevron-forward" size={20} color={colors.textSecondary} />
       </Pressable>
+
       <Pressable
-        onPress={openSupportContact}
-        style={styles.privacyLink}
-        accessibilityRole="link"
-        accessibilityLabel="Contact Support"
-        accessibilityHint="Opens an email to SketchDuel support"
-        hitSlop={8}
+        onPress={onOpenGallery}
+        style={({ pressed }) => [styles.galleryButton, { backgroundColor: colors.card }, pressed && styles.pressed]}
+        accessibilityRole="button"
+        accessibilityLabel="Gallery"
+        accessibilityHint="Shows your saved drawings"
       >
-        <Text style={[styles.privacyLinkText, { color: colors.textSecondary }]}>
-          Contact Support
+        <Ionicons name="images" size={18} color={colors.tint} />
+        <Text style={[styles.galleryButtonText, { color: colors.text }]} maxFontSizeMultiplier={1.4}>
+          Gallery
         </Text>
       </Pressable>
-    </>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
+  container: {
+    width: "100%",
+    maxWidth: 380,
+    alignSelf: "center",
+    gap: 14,
+    paddingTop: 16,
+  },
+  randomPlay: {
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 6,
+  },
+  fullWidth: {
+    width: "100%",
+  },
+  pulseRing: {
+    position: "absolute",
+    left: 6,
+    right: 6,
+    top: 0,
+    bottom: 0,
+    borderRadius: 34,
+    overflow: "hidden",
+  },
+  pulseGradient: {
+    flex: 1,
+  },
+  randomPlayButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 12,
+    minHeight: 60,
+    paddingVertical: 16,
+    paddingHorizontal: 24,
+    borderRadius: 28,
+  },
+  randomPlayText: {
+    color: "#fff",
+    fontSize: 19,
+    fontFamily: "Inter_600SemiBold",
+  },
+  friendsButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    minHeight: 64,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    borderRadius: 20,
+    borderWidth: 1.5,
+  },
+  friendsIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  friendsText: {
+    flex: 1,
+    gap: 2,
+  },
+  friendsTitle: {
+    fontSize: 17,
+    fontFamily: "Inter_600SemiBold",
+  },
+  friendsSubtitle: {
+    fontSize: 13,
+    fontFamily: "Inter_400Regular",
+    lineHeight: 18,
+  },
   galleryButton: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     gap: 8,
     alignSelf: "center",
+    minHeight: 44,
     paddingVertical: 10,
-    paddingHorizontal: 20,
-    borderRadius: 20,
-    marginBottom: 8,
+    paddingHorizontal: 22,
+    borderRadius: 22,
   },
   galleryButtonText: {
     fontSize: 15,
     fontFamily: "Inter_500Medium",
   },
-  friendButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
-    alignSelf: "center",
-    borderWidth: 1,
-    paddingVertical: 10,
-    paddingHorizontal: 20,
-    borderRadius: 20,
-    marginBottom: 8,
-  },
-  friendButtonText: {
-    fontSize: 15,
-    fontFamily: "Inter_500Medium",
-  },
-  footer: {
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 20,
-  },
-  pulseRing: {
-    position: "absolute",
-    width: 220,
-    height: 64,
-    borderRadius: 32,
-    overflow: "hidden",
-  },
-  pulseGradient: {
-    flex: 1,
-  },
-  findMatchButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 12,
-    paddingVertical: 18,
-    paddingHorizontal: 48,
-    borderRadius: 28,
-    minWidth: 200,
-  },
-  buttonText: {
-    color: "#fff",
-    fontSize: 18,
-    fontFamily: "Inter_600SemiBold",
-  },
-  privacyLink: {
-    alignSelf: "center",
-    paddingVertical: 6,
-    paddingHorizontal: 12,
-  },
-  privacyLinkText: {
-    fontSize: 13,
-    fontFamily: "Inter_500Medium",
-    textDecorationLine: "underline",
+  pressed: {
+    opacity: 0.82,
   },
 });

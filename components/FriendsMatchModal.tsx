@@ -34,6 +34,8 @@ export interface FriendsMatchModalProps {
   onCreateRoom: () => void;
   onJoinRoom: () => void;
   onClose: () => void;
+  /** Game Center friends entry, shown below the invite-code actions where Game Center exists. */
+  gameCenter?: { status: string; onPress: () => void };
 }
 
 export default function FriendsMatchModal({
@@ -47,6 +49,7 @@ export default function FriendsMatchModal({
   onCreateRoom,
   onJoinRoom,
   onClose,
+  gameCenter,
 }: FriendsMatchModalProps) {
   const isLoading = status === "creating" || status === "joining";
   const isWaiting = status === "waiting_for_friend";
@@ -152,9 +155,11 @@ export default function FriendsMatchModal({
       cardStyle={styles.card}
     >
       <View style={styles.content}>
-        <Text style={[styles.title, { color: colors.text }]}>Friends Match</Text>
+        <Text style={[styles.title, { color: colors.text }]} accessibilityRole="header">
+          Play with Friends
+        </Text>
         <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
-          Create a room code or join your friend&apos;s room.
+          Share an invite code to play with your friends, or enter the code a friend sent you.
         </Text>
 
         {isWaiting && roomCode && inviteLink ? (
@@ -165,7 +170,7 @@ export default function FriendsMatchModal({
               </Text>
               <Text
                 style={[styles.roomCodeValue, { color: colors.tint }]}
-                accessibilityLabel={`Room code ${roomCode}`}
+                accessibilityLabel={`Invite code ${roomCode}`}
               >
                 {roomCode}
               </Text>
@@ -250,10 +255,10 @@ export default function FriendsMatchModal({
               disabled={isLoading}
               style={[styles.primaryButton, { backgroundColor: colors.tint }, isLoading && styles.disabled]}
               accessibilityRole="button"
-              accessibilityLabel="Create friend room"
+              accessibilityLabel="Create invite code"
             >
               <Ionicons name="add-circle-outline" size={20} color="#fff" />
-              <Text style={styles.primaryText}>Create Room</Text>
+              <Text style={styles.primaryText}>Create Invite Code</Text>
             </Pressable>
 
             <View style={styles.joinRow}>
@@ -263,21 +268,21 @@ export default function FriendsMatchModal({
                 autoCapitalize="characters"
                 autoCorrect={false}
                 maxLength={ROOM_CODE_LENGTH}
-                placeholder="Room Code"
+                placeholder="Invite Code"
                 placeholderTextColor={colors.textSecondary}
                 style={[
                   styles.input,
                   { borderColor: colors.border, color: colors.text, backgroundColor: colors.background },
                 ]}
-                accessibilityLabel="Enter room code"
-                accessibilityHint={`Enter a ${ROOM_CODE_LENGTH}-character room code`}
+                accessibilityLabel="Enter invite code"
+                accessibilityHint={`Enter a ${ROOM_CODE_LENGTH}-character invite code`}
               />
               <Pressable
                 onPress={onJoinRoom}
                 disabled={isLoading}
                 style={[styles.joinButton, { backgroundColor: colors.accent }, isLoading && styles.disabled]}
                 accessibilityRole="button"
-                accessibilityLabel="Join friend room"
+                accessibilityLabel="Join with invite code"
               >
                 <Text style={styles.joinText}>Join</Text>
               </Pressable>
@@ -286,6 +291,36 @@ export default function FriendsMatchModal({
         ) : null}
 
         {isLoading && <ActivityIndicator size="small" color={colors.tint} />}
+
+        {gameCenter && !isWaiting && !isLoading ? (
+          <>
+            <View style={styles.orRow}>
+              <View style={[styles.orLine, { backgroundColor: colors.border }]} />
+              <Text style={[styles.orText, { color: colors.textSecondary }]}>or</Text>
+              <View style={[styles.orLine, { backgroundColor: colors.border }]} />
+            </View>
+            <Pressable
+              onPress={gameCenter.onPress}
+              style={({ pressed }) => [
+                styles.gameCenterRow,
+                { borderColor: colors.border },
+                pressed && styles.pressed,
+              ]}
+              accessibilityRole="button"
+              accessibilityLabel={`Game Center Friends, ${gameCenter.status}`}
+              accessibilityHint="See which Game Center friends are online and invite them"
+            >
+              <Ionicons name="game-controller-outline" size={22} color={colors.tint} />
+              <View style={styles.gameCenterText}>
+                <Text style={[styles.gameCenterTitle, { color: colors.text }]}>Game Center Friends</Text>
+                <Text style={[styles.gameCenterStatus, { color: colors.textSecondary }]} numberOfLines={1}>
+                  {gameCenter.status}
+                </Text>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color={colors.textSecondary} />
+            </Pressable>
+          </>
+        ) : null}
 
         {roomError ? (
           <Text style={[styles.errorText, { color: colors.error }]} accessibilityRole="alert">
@@ -297,7 +332,7 @@ export default function FriendsMatchModal({
           onPress={onClose}
           style={[styles.closeButton, { borderColor: colors.border }]}
           accessibilityRole="button"
-          accessibilityLabel={isWaiting ? "Leave friend room" : "Close friends match"}
+          accessibilityLabel={isWaiting ? "Leave friend room" : "Close Play with Friends"}
         >
           <Text style={[styles.closeText, { color: colors.textSecondary }]}>
             {isWaiting ? "Leave Room" : "Close"}
@@ -441,6 +476,41 @@ const styles = StyleSheet.create({
   closeText: {
     fontSize: 15,
     fontFamily: "Inter_500Medium",
+  },
+  orRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  orLine: {
+    flex: 1,
+    height: StyleSheet.hairlineWidth,
+  },
+  orText: {
+    fontSize: 13,
+    fontFamily: "Inter_500Medium",
+  },
+  gameCenterRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    minHeight: 56,
+    borderWidth: 1,
+    borderRadius: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+  },
+  gameCenterText: {
+    flex: 1,
+    gap: 2,
+  },
+  gameCenterTitle: {
+    fontSize: 15,
+    fontFamily: "Inter_600SemiBold",
+  },
+  gameCenterStatus: {
+    fontSize: 13,
+    fontFamily: "Inter_400Regular",
   },
   disabled: {
     opacity: 0.6,

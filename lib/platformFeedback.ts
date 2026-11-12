@@ -1,8 +1,15 @@
 import * as Haptics from "expo-haptics";
 import { Platform } from "react-native";
 
+let hapticsEnabled = true;
+
+/** Follows the player's Haptic feedback setting; every helper below respects it. */
+export function setHapticsEnabled(enabled: boolean) {
+  hapticsEnabled = enabled;
+}
+
 function runNative(action: () => void) {
-  if (Platform.OS !== "web") {
+  if (Platform.OS !== "web" && hapticsEnabled) {
     action();
   }
 }

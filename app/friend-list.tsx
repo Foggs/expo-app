@@ -10,6 +10,7 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { usePlayerIdentity } from "@/contexts/PlayerIdentityContext";
 import { useSocial } from "@/contexts/SocialContext";
 import { useScreenPadding } from "@/hooks/useScreenPadding";
 import { useThemeColors, type ThemeColors } from "@/hooks/useThemeColors";
@@ -78,6 +79,7 @@ export default function FriendListScreen() {
   const { colors } = useThemeColors();
   const { topPadding, bottomPadding } = useScreenPadding(insets);
   const social = useSocial();
+  const identity = usePlayerIdentity();
   const { availability, refreshFriends } = social;
   const [prompting, setPrompting] = useState(false);
 
@@ -122,18 +124,38 @@ export default function FriendListScreen() {
       {availability === "checking" ? (
         <Centered>
           <ActivityIndicator size="large" color={colors.tint} />
+          <Text style={[styles.hint, { color: colors.textSecondary }]}>Connecting to Game Center…</Text>
         </Centered>
       ) : availability === "unsupported" ? (
         <Explanation
           icon="logo-apple"
           title="Game Center friends are on iPhone and iPad"
-          body="On this device, play with friends using a room code."
+          body="On this device, play with friends using an invite code."
         />
       ) : availability === "not_signed_in" ? (
         <Explanation
           icon="person-circle-outline"
           title="Sign in to Game Center"
-          body="Sign in to Game Center in the Settings app to see which of your friends play SketchDuel. You can still play friends with a room code."
+          body="Sign in to Game Center in the Settings app to see which of your friends play SketchDuel. You can still play friends with an invite code."
+        />
+      ) : availability === "game_center_unavailable" ? (
+        <Explanation
+          icon="cloud-offline-outline"
+          title="Game Center isn't available"
+          body="Game Center couldn't be reached on this device right now. You can still play friends with an invite code."
+        />
+      ) : availability === "link_failed" ? (
+        <Explanation
+          icon="cloud-offline-outline"
+          title="Couldn't connect to SketchDuel"
+          body={`You're signed in to Game Center${identity.displayName ? ` as ${identity.displayName}` : ""}, but SketchDuel's server couldn't confirm your account. Check your connection and try again, or use an invite code.`}
+          action={{
+            label: "Try Again",
+            onPress: () => {
+              impactLight();
+              identity.retryLink();
+            },
+          }}
         />
       ) : availability === "notDetermined" ? (
         <Explanation
@@ -146,20 +168,20 @@ export default function FriendListScreen() {
         <Explanation
           icon="lock-closed-outline"
           title="Friend access is turned off"
-          body="To see your Game Center friends here, open the Settings app, go to Game Center, and allow SketchDuel to access your friends. Until then, play friends with a room code."
+          body="To see your Game Center friends here, open the Settings app, go to Game Center, and allow SketchDuel to access your friends. Until then, play friends with an invite code."
           action={{ label: "Open Settings", onPress: social.openSettings }}
         />
       ) : availability === "restricted" ? (
         <Explanation
           icon="lock-closed-outline"
           title="Friend access is restricted"
-          body="Game Center friends aren't available on this device, for example because of Screen Time settings. You can still play friends with a room code."
+          body="Game Center friends aren't available on this device, for example because of Screen Time settings. You can still play friends with an invite code."
         />
       ) : availability === "unavailable" ? (
         <Explanation
           icon="cloud-offline-outline"
           title="Couldn't load your friends"
-          body="Game Center didn't return your friends list. Check your connection and try again, or use a room code."
+          body="Game Center didn't return your friends list. Check your connection and try again, or use an invite code."
           action={{ label: "Try Again", onPress: () => void refreshFriends({ prompt: false }) }}
         />
       ) : !social.connected || !social.loaded ? (
@@ -183,13 +205,13 @@ export default function FriendListScreen() {
               <Ionicons name="people-outline" size={40} color={colors.border} />
               <Text style={[styles.emptyTitle, { color: colors.text }]}>No friends here yet</Text>
               <Text style={[styles.hint, { color: colors.textSecondary }]}>
-                None of your Game Center friends play SketchDuel yet. Share a room code to play with someone.
+                None of your Game Center friends play SketchDuel yet. Share an invite code to play with someone.
               </Text>
             </View>
           }
           ListFooterComponent={
             <Pressable onPress={openRoomCodeInstead} style={styles.footerLink} accessibilityRole="button">
-              <Text style={[styles.linkText, { color: colors.tint }]}>Play with a room code instead</Text>
+              <Text style={[styles.linkText, { color: colors.tint }]}>Play with an invite code instead</Text>
             </Pressable>
           }
           contentContainerStyle={[styles.list, { paddingBottom: bottomPadding + 20 }]}
@@ -233,7 +255,7 @@ function Explanation({
         </Pressable>
       )}
       <Pressable onPress={openRoomCodeInstead} style={styles.footerLink} accessibilityRole="button">
-        <Text style={[styles.linkText, { color: colors.tint }]}>Use a room code</Text>
+        <Text style={[styles.linkText, { color: colors.tint }]}>Use an invite code</Text>
       </Pressable>
     </Centered>
   );

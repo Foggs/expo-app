@@ -9,7 +9,6 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import { Stack } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import React, { useEffect } from "react";
-import { useColorScheme } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { KeyboardProvider } from "react-native-keyboard-controller";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
@@ -19,14 +18,13 @@ import { queryClient } from "@/lib/query-client";
 import { PlayerIdentityProvider } from "@/contexts/PlayerIdentityContext";
 import { SocialProvider } from "@/contexts/SocialContext";
 import { WebSocketProvider } from "@/contexts/WebSocketContext";
-import Colors from "@/constants/colors";
+import { PreferencesProvider, usePreferences } from "@/contexts/PreferencesContext";
+import { useThemeColors } from "@/hooks/useThemeColors";
 
 SplashScreen.preventAutoHideAsync();
 
 function RootLayoutNav() {
-  const colorScheme = useColorScheme();
-  const isDark = colorScheme === "dark";
-  const colors = isDark ? Colors.dark : Colors.light;
+  const { colors } = useThemeColors();
 
   return (
     <Stack
@@ -53,6 +51,7 @@ function RootLayoutNav() {
         }}
       />
       <Stack.Screen name="friend-list" />
+      <Stack.Screen name="settings" />
       <Stack.Screen
         name="gallery"
         options={{
@@ -64,6 +63,15 @@ function RootLayoutNav() {
 }
 
 export default function RootLayout() {
+  return (
+    <PreferencesProvider>
+      <RootContent />
+    </PreferencesProvider>
+  );
+}
+
+function RootContent() {
+  const { loaded: preferencesLoaded } = usePreferences();
   const [fontsLoaded] = useFonts({
     Inter_400Regular,
     Inter_500Medium,
@@ -104,7 +112,7 @@ export default function RootLayout() {
     };
   }, []);
 
-  if (!fontsLoaded) {
+  if (!fontsLoaded || !preferencesLoaded) {
     return <LoadingScreen />;
   }
 

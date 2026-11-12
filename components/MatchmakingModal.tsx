@@ -124,7 +124,7 @@ export default function MatchmakingModal({
             accessibilityLiveRegion="polite"
             accessibilityRole="alert"
           >
-            Searching for opponent...
+            Searching
           </Text>
 
           {queuePosition > 0 && (

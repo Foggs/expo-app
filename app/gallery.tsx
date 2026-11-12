@@ -112,6 +112,11 @@ export default function GalleryScreen() {
     router.back();
   };
 
+  const handlePlay = () => {
+    impactLight();
+    router.dismissTo("/");
+  };
+
   const formatDate = (dateStr: string) => {
     const date = new Date(dateStr);
     return date.toLocaleDateString(undefined, {
@@ -154,9 +159,19 @@ export default function GalleryScreen() {
         <View style={styles.centered}>
           <Ionicons name="images-outline" size={48} color={colors.border} />
           <Text style={[styles.emptyText, { color: colors.textSecondary }]}>No saved drawings yet</Text>
-          <Text style={[styles.emptyHint, { color: colors.textSecondary }]}> 
+          <Text style={[styles.emptyHint, { color: colors.textSecondary }]}>
             Play a game and save your artwork from the results screen
           </Text>
+          <Pressable
+            onPress={handlePlay}
+            style={({ pressed }) => [styles.playButton, { backgroundColor: colors.tint }, pressed && styles.pressed]}
+            accessibilityRole="button"
+            accessibilityLabel="Play"
+            accessibilityHint="Returns to the home screen to start a game"
+          >
+            <Ionicons name="brush" size={18} color="#fff" />
+            <Text style={styles.playButtonText}>Play</Text>
+          </Pressable>
         </View>
       ) : (
         <FlatList
@@ -223,6 +238,24 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontFamily: "Inter_400Regular",
     textAlign: "center",
+  },
+  playButton: {
+    marginTop: 8,
+    minHeight: 48,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    paddingHorizontal: 28,
+    borderRadius: 14,
+  },
+  playButtonText: {
+    color: "#fff",
+    fontSize: 16,
+    fontFamily: "Inter_600SemiBold",
+  },
+  pressed: {
+    opacity: 0.82,
   },
   list: {
     paddingHorizontal: 16,

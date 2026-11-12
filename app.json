@@ -120,7 +120,8 @@
         "projectId": "29068319-a247-48ad-bc51-575c0c773ecd"
       },
       "privacyPolicyUrl": "https://sketchduel.app/privacy",
-      "supportEmail": "support@sketchduel.app"
+      "supportEmail": "support@sketchduel.app",
+      "appStoreId": "6758966766"
     },
     "experiments": {
       "typedRoutes": true,

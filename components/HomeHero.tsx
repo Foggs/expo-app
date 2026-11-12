@@ -1,17 +1,44 @@
 import React from "react";
 import { Ionicons } from "@expo/vector-icons";
-import { StyleSheet, Text, View } from "react-native";
+import { Pressable, StyleSheet, Text, useWindowDimensions, View } from "react-native";
 import type { ThemeColors } from "@/hooks/useThemeColors";
 
 interface HomeHeroProps {
   colors: ThemeColors;
   /** Game Center name of the signed-in player, when available. */
   playerName?: string | null;
+  /** Opens Settings from the gear at the top. */
+  onOpenSettings?: () => void;
 }
 
-export default function HomeHero({ colors, playerName }: HomeHeroProps) {
+/** Scales the heading with screen width so it never clips on narrow phones. */
+function titleFontSize(screenWidth: number): number {
+  return Math.round(Math.max(30, Math.min(48, screenWidth * 0.11)));
+}
+
+export default function HomeHero({ colors, playerName, onOpenSettings }: HomeHeroProps) {
+  const { width, height } = useWindowDimensions();
+  const fontSize = titleFontSize(width);
+  // Tighter spacing on short phones keeps both play buttons near the first screen.
+  const compact = height < 700;
+
   return (
     <>
+      <View style={styles.topBar}>
+        {onOpenSettings ? (
+          <Pressable
+            onPress={onOpenSettings}
+            style={({ pressed }) => [styles.settingsButton, { backgroundColor: colors.card }, pressed && styles.pressed]}
+            accessibilityRole="button"
+            accessibilityLabel="Settings"
+            accessibilityHint="Appearance, haptics, privacy, feedback and app information"
+            hitSlop={6}
+          >
+            <Ionicons name="settings-outline" size={22} color={colors.text} />
+          </Pressable>
+        ) : null}
+      </View>
+
       <View style={styles.header}>
         <View style={styles.logoContainer}>
           <View style={[styles.brushStroke, { backgroundColor: colors.tint }]} />
@@ -24,7 +51,14 @@ export default function HomeHero({ colors, playerName }: HomeHeroProps) {
           />
         </View>
 
-        <Text style={[styles.title, { color: colors.text }]} accessibilityRole="header">
+        <Text
+          style={[styles.title, { color: colors.text, fontSize, lineHeight: Math.round(fontSize * 1.2) }]}
+          accessibilityRole="header"
+          numberOfLines={1}
+          adjustsFontSizeToFit
+          minimumFontScale={0.6}
+          maxFontSizeMultiplier={1.2}
+        >
           SketchDuel
         </Text>
 
@@ -45,8 +79,8 @@ export default function HomeHero({ colors, playerName }: HomeHeroProps) {
         ) : null}
       </View>
 
-      <View style={styles.centerContent}>
-        <View style={styles.gameInfo}>
+      <View style={[styles.centerContent, compact && styles.centerContentCompact]}>
+        <View style={[styles.gameInfo, compact && styles.gameInfoCompact]}>
           <View style={styles.infoRow} accessible={true} accessibilityLabel="2 Players per game">
             <View style={[styles.iconContainer, { backgroundColor: colors.card }]}> 
               <Ionicons name="people" size={24} color={colors.tint} />
@@ -74,6 +108,21 @@ export default function HomeHero({ colors, playerName }: HomeHeroProps) {
 }
 
 const styles = StyleSheet.create({
+  topBar: {
+    flexDirection: "row",
+    justifyContent: "flex-end",
+    minHeight: 44,
+  },
+  settingsButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  pressed: {
+    opacity: 0.7,
+  },
   header: {
     alignItems: "center",
     gap: 16,
@@ -95,9 +144,10 @@ const styles = StyleSheet.create({
     transform: [{ rotate: "45deg" }],
   },
   title: {
-    fontSize: 42,
+    maxWidth: "100%",
     fontFamily: "Inter_700Bold",
     letterSpacing: -1,
+    textAlign: "center",
   },
   playerBadge: {
     flexDirection: "row",
@@ -115,12 +165,19 @@ const styles = StyleSheet.create({
     fontFamily: "Inter_600SemiBold",
   },
   centerContent: {
-    flex: 1,
+    flexGrow: 1,
     justifyContent: "center",
+    paddingVertical: 24,
+  },
+  centerContentCompact: {
+    paddingVertical: 12,
   },
   gameInfo: {
     gap: 20,
     alignItems: "center",
+  },
+  gameInfoCompact: {
+    gap: 10,
   },
   infoRow: {
     flexDirection: "row",
@@ -137,6 +194,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   infoText: {
+    flexShrink: 1,
     fontSize: 17,
     fontFamily: "Inter_500Medium",
   },

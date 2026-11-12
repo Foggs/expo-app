@@ -14,12 +14,15 @@ type PlayerIdentity = {
    * out or changed), so open connections can drop the old identity.
    */
   tokenGeneration: number;
+  /** Retries linking after the SketchDuel server could not confirm the account. */
+  retryLink(): void;
 };
 
 const PlayerIdentityContext = createContext<PlayerIdentity>({
   status: "checking",
   displayName: null,
   tokenGeneration: 0,
+  retryLink: () => undefined,
 });
 
 export function PlayerIdentityProvider({ children }: { children: React.ReactNode }) {
@@ -72,9 +75,16 @@ export function PlayerIdentityProvider({ children }: { children: React.ReactNode
     return () => subscription.remove();
   }, [attemptSignIn]);
 
+  const retryLink = useCallback(() => {
+    if (statusRef.current !== "error") return;
+    statusRef.current = "checking";
+    setStatus("checking");
+    attemptSignIn(false);
+  }, [attemptSignIn]);
+
   const value = useMemo(
-    () => ({ status, displayName, tokenGeneration }),
-    [status, displayName, tokenGeneration],
+    () => ({ status, displayName, tokenGeneration, retryLink }),
+    [status, displayName, tokenGeneration, retryLink],
   );
 
   return (

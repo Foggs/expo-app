@@ -14,6 +14,8 @@ export default defineConfig({
       "lib/network/__tests__/**/*.test.ts",
       "lib/identity/__tests__/**/*.test.ts",
       "lib/social/__tests__/**/*.test.ts",
+      "lib/preferences/__tests__/**/*.test.ts",
+      "lib/__tests__/**/*.test.ts",
       "server/__tests__/**/*.test.ts",
       "shared/__tests__/**/*.test.ts",
     ],

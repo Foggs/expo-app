@@ -21,6 +21,7 @@ import {
   type FriendsState,
   type FriendVisibility,
 } from "@/lib/social/friendsState";
+import { resolveFriendsAvailability, type FriendsAvailability } from "@/lib/social/friendsAvailability";
 import {
   getGameCenterFriendsAccess,
   loadGameCenterFriends,
@@ -28,8 +29,7 @@ import {
   type GameCenterFriendsAccess,
 } from "@/modules/game-center";
 
-/** Why the friend list cannot be shown, or "ready". */
-export type FriendsAvailability = "checking" | "not_signed_in" | "unsupported" | GameCenterFriendsAccess;
+export type { FriendsAvailability };
 
 type SocialContextValue = FriendsState & {
   availability: FriendsAvailability;
@@ -82,13 +82,7 @@ export function SocialProvider({ children }: { children: React.ReactNode }) {
   const wsRef = useRef<WebSocket | null>(null);
   const friendIdsRef = useRef<string[]>([]);
 
-  const availability: FriendsAvailability = !supported
-    ? "unsupported"
-    : identity.status === "checking"
-      ? "checking"
-      : !signedIn
-        ? "not_signed_in"
-        : access;
+  const availability = resolveFriendsAvailability({ supported, identityStatus: identity.status, access });
 
   const refreshFriends = useCallback(async ({ prompt }: { prompt: boolean }) => {
     if (!supported || !signedIn) return;
