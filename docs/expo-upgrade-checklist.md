@@ -223,6 +223,41 @@ No identity POST, authenticated probe, player query, production data change,
 or publication occurred. Next review backend publish readiness and risks, or
 obtain device-error/serving-revision evidence before choosing a remedy.
 
+### Backend publication readiness review — 2026-11-12
+
+The owner approved review, not publication. The read-only schema diff reports
+12 additive statements: five new tables for Game Center identities/proof
+replay protection and moderation, three nullable ownership/session columns,
+two foreign keys, and two indexes. No removals, truncations, structural data
+loss, backwards-compatibility warning, or other warning was reported.
+This confirms the managed production schema lacks structures the current
+backend requires; it does not establish the exact cause of the iPhone failure.
+No schema statements were executed.
+
+Backend bundling with the production esbuild flags succeeded (output redirected
+to a temporary file rather than changing deploy outputs). TypeScript passed.
+All 93 server/shared tests across 12 files passed, including identity verification,
+friends, reporting/blocking, and moderation delivery tests using isolated test
+databases. No production player records were queried or changed.
+
+Production has no Game Center bundle-ID override; current verifier defaults to
+`app.replit.sketchduel`. Moderation webhook configuration is absent, so external
+moderation notifications are not configured. That is separate from Game Center.
+
+Publishing affects the complete checkout, including moderation changes, not just
+the identity route. The deployment build also exports Expo assets before bundling
+the server; that full publishing command was not rerun during this review.
+Existing server-held rooms and sockets can be interrupted by deployment restart.
+Use the Publishing schema review to apply the additive schema changes; preserve
+production data and do not select an overwrite-from-development option.
+If the live publish preview introduces drops, truncations, or unexpected
+changes, stop and review them rather than accepting this earlier diff.
+
+Next gate: obtain explicit owner approval to proceed with publishing, then
+verify the new deployment and repeat the iPhone Game Center test. No new native
+build is currently needed; publishing is not guaranteed to resolve any separate
+native or Apple-proof issue.
+
 ## 6. Build and submit the upgraded candidate — build succeeded, submission preparation
 
 - [x] Confirm SDK 58 candidate, suitable build image, public backend address,
