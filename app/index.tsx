@@ -2,7 +2,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import * as Linking from "expo-linking";
 import { router, useIsFocused, useLocalSearchParams } from "expo-router";
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { Platform, ScrollView, StyleSheet, View } from "react-native";
+import { Platform, ScrollView, StyleSheet, useWindowDimensions, View } from "react-native";
 import { ROOM_CODE_LENGTH } from "@shared/friendRoom";
 import {
   cancelAnimation,
@@ -17,7 +17,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import FriendsMatchModal from "@/components/FriendsMatchModal";
 import HomeHero from "@/components/HomeHero";
 import HomeHowToPlayModal from "@/components/HomeHowToPlayModal";
-import HomePrimaryActions from "@/components/HomePrimaryActions";
+import { HomePlayActions, HomeSecondaryActions } from "@/components/HomePrimaryActions";
 import InviteMatchModal from "@/components/InviteMatchModal";
 import { INVITE_MATCH_TIMEOUT_MS, inviteMatchFailure } from "@/lib/social/inviteMatchGuard";
 import MatchmakingModal from "@/components/MatchmakingModal";
@@ -37,6 +37,8 @@ import {
 export default function HomeScreen() {
   const { inviteCode, useRoomCode } = useLocalSearchParams<{ inviteCode?: string; useRoomCode?: string }>();
   const isFocused = useIsFocused();
+  const { height: windowHeight } = useWindowDimensions();
+  const primaryActionsOffset = Math.min(36, Math.max(0, (windowHeight - 650) * 0.18));
   const insets = useSafeAreaInsets();
   const { isDark, colors } = useThemeColors();
   const { topPadding, bottomPadding } = useScreenPadding(insets);
@@ -394,21 +396,32 @@ export default function HomeScreen() {
           onOpenSettings={handleOpenSettings}
         />
 
-        <HomePrimaryActions
+        <View
+          style={[
+            styles.primaryActionsArea,
+            windowHeight < 650 && styles.primaryActionsAreaCompact,
+            { transform: [{ translateY: -primaryActionsOffset }] },
+          ]}
+        >
+          <HomePlayActions
+            colors={colors}
+            randomShineStyle={randomShineStyle}
+            friendsShineStyle={friendsShineStyle}
+            buttonAnimatedStyle={buttonAnimatedStyle}
+            isSearching={isSearching}
+            onOpenFriends={handleOpenFriends}
+            onFindMatch={handleFindMatch}
+            onPressIn={handlePressIn}
+            onPressOut={handlePressOut}
+          />
+        </View>
+        <HomeSecondaryActions
           colors={colors}
-          randomShineStyle={randomShineStyle}
-          friendsShineStyle={friendsShineStyle}
-          buttonAnimatedStyle={buttonAnimatedStyle}
-          isSearching={isSearching}
           onOpenGallery={() => {
             impactLight();
             router.push("/gallery");
           }}
           onOpenHowToPlay={handleOpenHowToPlay}
-          onOpenFriends={handleOpenFriends}
-          onFindMatch={handleFindMatch}
-          onPressIn={handlePressIn}
-          onPressOut={handlePressOut}
         />
       </ScrollView>
 
@@ -479,5 +492,13 @@ const styles = StyleSheet.create({
   content: {
     flexGrow: 1,
     paddingHorizontal: 24,
+  },
+  primaryActionsArea: {
+    flexGrow: 1,
+    justifyContent: "center",
+    paddingVertical: 16,
+  },
+  primaryActionsAreaCompact: {
+    paddingVertical: 4,
   },
 });

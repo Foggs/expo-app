@@ -1,7 +1,7 @@
 import React from "react";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Pressable, StyleSheet, Text, useWindowDimensions, View } from "react-native";
 import Animated from "react-native-reanimated";
 import type { ThemeColors } from "@/hooks/useThemeColors";
 
@@ -36,20 +36,45 @@ function ButtonShine({ animatedStyle, colors }: { animatedStyle: any; colors: Th
 }
 
 export default function HomePrimaryActions({
+  ...props
+}: HomePrimaryActionsProps) {
+  return (
+    <View style={styles.container}>
+      <HomePlayActions {...props} />
+      <HomeSecondaryActions {...props} />
+    </View>
+  );
+}
+
+type HomePlayActionsProps = Pick<
+  HomePrimaryActionsProps,
+  | "colors"
+  | "randomShineStyle"
+  | "friendsShineStyle"
+  | "buttonAnimatedStyle"
+  | "isSearching"
+  | "onOpenFriends"
+  | "onFindMatch"
+  | "onPressIn"
+  | "onPressOut"
+>;
+
+export function HomePlayActions({
   colors,
   randomShineStyle,
   friendsShineStyle,
   buttonAnimatedStyle,
   isSearching,
-  onOpenGallery,
-  onOpenHowToPlay,
   onOpenFriends,
   onFindMatch,
   onPressIn,
   onPressOut,
-}: HomePrimaryActionsProps) {
+}: HomePlayActionsProps) {
+  const { height } = useWindowDimensions();
+  const compact = height < 650;
+
   return (
-    <View style={styles.container}>
+    <View style={[styles.playActions, compact && styles.playActionsCompact]}>
       <Animated.View style={[styles.fullWidth, buttonAnimatedStyle]}>
         <Pressable
           onPress={isSearching ? undefined : onFindMatch}
@@ -62,6 +87,7 @@ export default function HomePrimaryActions({
           accessibilityState={{ disabled: isSearching }}
           style={({ pressed }) => [
             styles.actionButton,
+            compact && styles.actionButtonCompact,
             { borderColor: colors.tint, backgroundColor: colors.card },
             isSearching && styles.disabled,
             pressed && !isSearching && styles.pressed,
@@ -87,6 +113,7 @@ export default function HomePrimaryActions({
         onPress={onOpenFriends}
         style={({ pressed }) => [
           styles.actionButton,
+          compact && styles.actionButtonCompact,
           { borderColor: colors.tint, backgroundColor: colors.card },
           pressed && styles.pressed,
         ]}
@@ -108,23 +135,33 @@ export default function HomePrimaryActions({
         </View>
         <Ionicons name="chevron-forward" size={20} color={colors.textSecondary} />
       </Pressable>
+    </View>
+  );
+}
 
-      <View style={styles.secondaryActions}>
-        <Pressable
-          onPress={onOpenGallery}
-          style={({ pressed }) => [styles.secondaryButton, { backgroundColor: colors.card }, pressed && styles.pressed]}
-          accessibilityRole="button"
-          accessibilityLabel="Gallery"
-          accessibilityHint="Shows your saved drawings"
-        >
-          <Ionicons name="images" size={18} color={colors.tint} />
-          <Text style={[styles.secondaryText, { color: colors.text }]} maxFontSizeMultiplier={1.4}>
-            Gallery
-          </Text>
-        </Pressable>
+type HomeSecondaryActionsProps = Pick<
+  HomePrimaryActionsProps,
+  "colors" | "onOpenGallery" | "onOpenHowToPlay"
+>;
+
+export function HomeSecondaryActions({
+  colors,
+  onOpenGallery,
+  onOpenHowToPlay,
+}: HomeSecondaryActionsProps) {
+  const { height } = useWindowDimensions();
+  const compact = height < 650;
+
+  return (
+      <View style={[styles.secondaryActions, compact && styles.secondaryActionsCompact]}>
         <Pressable
           onPress={onOpenHowToPlay}
-          style={({ pressed }) => [styles.secondaryButton, { backgroundColor: colors.card }, pressed && styles.pressed]}
+          style={({ pressed }) => [
+            styles.secondaryButton,
+            compact && styles.secondaryButtonCompact,
+            { backgroundColor: colors.card },
+            pressed && styles.pressed,
+          ]}
           accessibilityRole="button"
           accessibilityLabel="How to Play"
           accessibilityHint="Shows the quick game rules"
@@ -134,8 +171,24 @@ export default function HomePrimaryActions({
             How to Play
           </Text>
         </Pressable>
+        <Pressable
+          onPress={onOpenGallery}
+          style={({ pressed }) => [
+            styles.secondaryButton,
+            compact && styles.secondaryButtonCompact,
+            { backgroundColor: colors.card },
+            pressed && styles.pressed,
+          ]}
+          accessibilityRole="button"
+          accessibilityLabel="Gallery"
+          accessibilityHint="Shows your saved drawings"
+        >
+          <Ionicons name="images" size={18} color={colors.tint} />
+          <Text style={[styles.secondaryText, { color: colors.text }]} maxFontSizeMultiplier={1.4}>
+            Gallery
+          </Text>
+        </Pressable>
       </View>
-    </View>
   );
 }
 
@@ -144,8 +197,14 @@ const styles = StyleSheet.create({
     width: "100%",
     maxWidth: 380,
     alignSelf: "center",
+    gap: 20,
+  },
+  playActions: {
+    width: "100%",
     gap: 14,
-    paddingTop: 16,
+  },
+  playActionsCompact: {
+    gap: 10,
   },
   fullWidth: {
     width: "100%",
@@ -161,6 +220,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     borderRadius: 20,
     borderWidth: 1.5,
+  },
+  actionButtonCompact: {
+    minHeight: 72,
+    paddingVertical: 8,
   },
   actionIcon: {
     width: 40,
@@ -195,12 +258,13 @@ const styles = StyleSheet.create({
     transform: [{ rotate: "22deg" }],
   },
   secondaryActions: {
-    flexDirection: "row",
-    flexWrap: "wrap",
+    flexDirection: "column",
     justifyContent: "center",
     alignItems: "center",
-    gap: 12,
-    paddingTop: 1,
+    gap: 10,
+  },
+  secondaryActionsCompact: {
+    gap: 6,
   },
   secondaryButton: {
     flexDirection: "row",
@@ -211,6 +275,10 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     paddingHorizontal: 18,
     borderRadius: 22,
+  },
+  secondaryButtonCompact: {
+    minHeight: 40,
+    paddingVertical: 8,
   },
   secondaryText: {
     fontSize: 15,

@@ -20,9 +20,8 @@ function titleFontSize(screenWidth: number): number {
 
 export default function HomeHero({ colors, playerName, onOpenSettings }: HomeHeroProps) {
   const { width, height } = useWindowDimensions();
-  const fontSize = titleFontSize(width);
-  // Tighter spacing on short phones keeps both play buttons near the first screen.
-  const compact = height < 700;
+  const compact = height < 650;
+  const fontSize = Math.min(titleFontSize(width), compact ? 32 : 48);
 
   return (
     <>
@@ -41,11 +40,19 @@ export default function HomeHero({ colors, playerName, onOpenSettings }: HomeHer
         ) : null}
       </View>
 
-      <View style={styles.header}>
-        <Image source={SPLASH_ICON} style={styles.logo} resizeMode="contain" accessibilityLabel="SketchDuel logo" />
+      <View style={[styles.header, compact && styles.headerCompact]}>
+        <Image
+          source={SPLASH_ICON}
+          style={[styles.logo, compact && styles.logoCompact]}
+          resizeMode="contain"
+          accessibilityLabel="SketchDuel logo"
+        />
 
         <Text
-          style={[styles.title, { color: colors.text, fontSize, lineHeight: Math.round(fontSize * 1.2) }]}
+          style={[
+            styles.title,
+            { color: colors.text, fontSize, lineHeight: Math.round(fontSize * 1.2) },
+          ]}
           accessibilityRole="header"
           numberOfLines={1}
           adjustsFontSizeToFit
@@ -72,7 +79,6 @@ export default function HomeHero({ colors, playerName, onOpenSettings }: HomeHer
         ) : null}
       </View>
 
-      <View style={[styles.centerContent, compact && styles.centerContentCompact]} />
     </>
   );
 }
@@ -95,11 +101,18 @@ const styles = StyleSheet.create({
   },
   header: {
     alignItems: "center",
-    gap: 16,
+    gap: 12,
+  },
+  headerCompact: {
+    gap: 8,
   },
   logo: {
     width: 80,
     height: 80,
+  },
+  logoCompact: {
+    width: 64,
+    height: 64,
   },
   title: {
     maxWidth: "100%",
@@ -121,13 +134,5 @@ const styles = StyleSheet.create({
     flexShrink: 1,
     fontSize: 15,
     fontFamily: "Inter_600SemiBold",
-  },
-  centerContent: {
-    flexGrow: 1,
-    justifyContent: "center",
-    paddingVertical: 24,
-  },
-  centerContentCompact: {
-    paddingVertical: 12,
   },
 });

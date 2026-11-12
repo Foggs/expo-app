@@ -1,7 +1,7 @@
 import { LinearGradient } from "expo-linear-gradient";
 import { useLocalSearchParams } from "expo-router";
 import React, { useRef } from "react";
-import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 
@@ -18,7 +18,7 @@ import GameToolbar from "@/components/GameToolbar";
 import GameTurnIndicator from "@/components/GameTurnIndicator";
 import HomeHero from "@/components/HomeHero";
 import HomeHowToPlayModal from "@/components/HomeHowToPlayModal";
-import HomePrimaryActions from "@/components/HomePrimaryActions";
+import { HomePlayActions, HomeSecondaryActions } from "@/components/HomePrimaryActions";
 import MatchmakingModal from "@/components/MatchmakingModal";
 import ResultsActionButtons from "@/components/ResultsActionButtons";
 import ResultsPlayersInfo from "@/components/ResultsPlayersInfo";
@@ -107,23 +107,34 @@ function FullscreenWrapper({ colors, isDark, children }: { colors: ThemeColors; 
 
 function HomeView({ colors, isDark }: { colors: ThemeColors; isDark: boolean }) {
   const insets = useSafeAreaInsets();
+  const { height } = useWindowDimensions();
   const { topPadding, bottomPadding } = useScreenPadding(insets);
   return (
     <FullscreenWrapper colors={colors} isDark={isDark}>
       <View style={[styles.homeContent, { paddingTop: topPadding + 8, paddingBottom: bottomPadding + 20 }]}>
         <HomeHero colors={colors} onOpenSettings={NOOP} />
-        <HomePrimaryActions
+        <View
+          style={[
+            styles.primaryActionsArea,
+            { transform: [{ translateY: -Math.min(36, Math.max(0, (height - 650) * 0.18)) }] },
+          ]}
+        >
+          <HomePlayActions
+            colors={colors}
+            randomShineStyle={FROZEN_SHINE_STYLE}
+            friendsShineStyle={FROZEN_SHINE_STYLE}
+            buttonAnimatedStyle={FROZEN_STYLE}
+            isSearching={false}
+            onOpenFriends={NOOP}
+            onFindMatch={NOOP}
+            onPressIn={NOOP}
+            onPressOut={NOOP}
+          />
+        </View>
+        <HomeSecondaryActions
           colors={colors}
-          randomShineStyle={FROZEN_SHINE_STYLE}
-          friendsShineStyle={FROZEN_SHINE_STYLE}
-          buttonAnimatedStyle={FROZEN_STYLE}
-          isSearching={false}
           onOpenGallery={NOOP}
           onOpenHowToPlay={NOOP}
-          onOpenFriends={NOOP}
-          onFindMatch={NOOP}
-          onPressIn={NOOP}
-          onPressOut={NOOP}
         />
       </View>
     </FullscreenWrapper>
@@ -469,7 +480,8 @@ export default function ScreenshotScreen() {
 const styles = StyleSheet.create({
   wrapper: { flex: 1 },
   flex: { flex: 1 },
-  homeContent: { flex: 1, paddingHorizontal: 24 },
+  homeContent: { flexGrow: 1, paddingHorizontal: 24 },
+  primaryActionsArea: { flexGrow: 1, justifyContent: "center", paddingVertical: 16 },
   resultsContent: { paddingHorizontal: 24 },
   resultsHeader: { alignItems: "center", gap: 8, marginBottom: 24 },
   resultsTitle: { fontSize: 32, fontFamily: "Inter_700Bold" },
