@@ -140,6 +140,48 @@ passing local checks does not deploy these fixes or establish live Game Center
 acceptance. Production publication and schema changes still require separate
 approval, followed by on-device identity/friends/gameplay checks.
 
+## Publishing and schema review — 2026-11-13
+
+The owner approved reviewing the next step, not applying it.
+
+- Refreshed deployment metadata: public Autoscale deployment at
+  `https://sketch-duel.replit.app`, current build marked successful.
+  This metadata does not establish that current workspace code is live.
+- Refreshed schema preview: the same 12 additive statements described above,
+  with no removals, truncations, warnings, structural-data-loss flags, or
+  backwards-compatibility flags. This preview applies to the managed database;
+  the actual Publish dialog remains the final review point.
+- Build/run configuration remains the validated static Expo + server build and
+  `npm run server:prod`. No database migration hook is needed or authorized.
+- **Hosting risk to resolve before publishing:** the current server holds
+  matchmaking queues, connections, game rooms, friend rooms, and locks in
+  process memory. Autoscale can scale to zero or serve multiple instances;
+  separate instances do not share these structures. Replit documentation
+  recommends Reserved VM for continuously running, stateful WebSocket servers.
+  A single Reserved VM is the recommended deployment model for the current
+  architecture, pending review of settings/cost and separate owner approval.
+  It does not make memory survive restarts or publication.
+
+Proposed sequence:
+
+1. Review hosting settings and the single-instance Reserved VM option. Do not
+   change the target or publish until separately authorized.
+2. Confirm the production database connection in publishing settings uses the
+   intended managed database; do not expose connection credentials.
+3. Owner reviews and approves the actual schema preview in Publish. Expect
+   five new tables, three nullable columns, two foreign keys, and two indexes.
+   Stop for unexpected drops, renames, or overwrite prompts. Do not select
+   overwrite-production-data.
+4. Publish the approved backend and managed schema together through Replit's
+   publishing flow, during a quiet period: live matches/connections can be
+   interrupted by a server restart.
+5. Recheck live health, schema, and deployment errors; then validate Game Center
+   sign-in, friend invites, a complete match, Gallery, and moderation on
+   TestFlight build 7 before deciding whether a new native build is required.
+
+No deployment settings, production schema, or player data were changed.
+Reference: https://docs.replit.com/features/publishing/deployment-types
+
 ## Goal and rules
 
 Upgrade Expo, preserve Game Center, then build and test the upgraded app on an
