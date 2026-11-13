@@ -53,6 +53,7 @@ type HomePlayActionsProps = Pick<
   | "friendsShineStyle"
   | "buttonAnimatedStyle"
   | "isSearching"
+  | "onOpenHowToPlay"
   | "onOpenFriends"
   | "onFindMatch"
   | "onPressIn"
@@ -65,6 +66,7 @@ export function HomePlayActions({
   friendsShineStyle,
   buttonAnimatedStyle,
   isSearching,
+  onOpenHowToPlay,
   onOpenFriends,
   onFindMatch,
   onPressIn,
@@ -135,42 +137,55 @@ export function HomePlayActions({
         </View>
         <Ionicons name="chevron-forward" size={20} color={colors.textSecondary} />
       </Pressable>
+      <HowToPlayButton colors={colors} onPress={onOpenHowToPlay} compact={compact} />
     </View>
+  );
+}
+
+function HowToPlayButton({
+  colors,
+  onPress,
+  compact,
+}: {
+  colors: ThemeColors;
+  onPress: () => void;
+  compact: boolean;
+}) {
+  return (
+    <Pressable
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.secondaryButton,
+        compact && styles.secondaryButtonCompact,
+        { backgroundColor: colors.card },
+        pressed && styles.pressed,
+      ]}
+      accessibilityRole="button"
+      accessibilityLabel="How to Play"
+      accessibilityHint="Shows the quick game rules"
+    >
+      <Ionicons name="book-outline" size={18} color={colors.tint} />
+      <Text style={[styles.secondaryText, { color: colors.text }]} maxFontSizeMultiplier={1.4}>
+        How to Play
+      </Text>
+    </Pressable>
   );
 }
 
 type HomeSecondaryActionsProps = Pick<
   HomePrimaryActionsProps,
-  "colors" | "onOpenGallery" | "onOpenHowToPlay"
+  "colors" | "onOpenGallery"
 >;
 
 export function HomeSecondaryActions({
   colors,
   onOpenGallery,
-  onOpenHowToPlay,
 }: HomeSecondaryActionsProps) {
   const { height } = useWindowDimensions();
   const compact = height < 650;
 
   return (
       <View style={[styles.secondaryActions, compact && styles.secondaryActionsCompact]}>
-        <Pressable
-          onPress={onOpenHowToPlay}
-          style={({ pressed }) => [
-            styles.secondaryButton,
-            compact && styles.secondaryButtonCompact,
-            { backgroundColor: colors.card },
-            pressed && styles.pressed,
-          ]}
-          accessibilityRole="button"
-          accessibilityLabel="How to Play"
-          accessibilityHint="Shows the quick game rules"
-        >
-          <Ionicons name="book-outline" size={18} color={colors.tint} />
-          <Text style={[styles.secondaryText, { color: colors.text }]} maxFontSizeMultiplier={1.4}>
-            How to Play
-          </Text>
-        </Pressable>
         <Pressable
           onPress={onOpenGallery}
           style={({ pressed }) => [

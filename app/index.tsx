@@ -409,6 +409,7 @@ export default function HomeScreen() {
             friendsShineStyle={friendsShineStyle}
             buttonAnimatedStyle={buttonAnimatedStyle}
             isSearching={isSearching}
+            onOpenHowToPlay={handleOpenHowToPlay}
             onOpenFriends={handleOpenFriends}
             onFindMatch={handleFindMatch}
             onPressIn={handlePressIn}
@@ -421,7 +422,6 @@ export default function HomeScreen() {
             impactLight();
             router.push("/gallery");
           }}
-          onOpenHowToPlay={handleOpenHowToPlay}
         />
       </ScrollView>
 

@@ -125,6 +125,7 @@ function HomeView({ colors, isDark }: { colors: ThemeColors; isDark: boolean }) 
             friendsShineStyle={FROZEN_SHINE_STYLE}
             buttonAnimatedStyle={FROZEN_STYLE}
             isSearching={false}
+            onOpenHowToPlay={NOOP}
             onOpenFriends={NOOP}
             onFindMatch={NOOP}
             onPressIn={NOOP}
@@ -134,7 +135,6 @@ function HomeView({ colors, isDark }: { colors: ThemeColors; isDark: boolean }) 
         <HomeSecondaryActions
           colors={colors}
           onOpenGallery={NOOP}
-          onOpenHowToPlay={NOOP}
         />
       </View>
     </FullscreenWrapper>
