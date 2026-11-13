@@ -182,6 +182,46 @@ Proposed sequence:
 No deployment settings, production schema, or player data were changed.
 Reference: https://docs.replit.com/features/publishing/deployment-types
 
+### Reserved VM setup review — 2026-11-13
+
+Read-only review confirmed:
+
+- Current live deployment is still public Autoscale. No target change was made.
+- The existing server build/run commands are suitable for a Reserved VM. One
+  Node process serves HTTP and WebSockets, binds `0.0.0.0`, and reads `PORT`
+  (workspace configuration currently sets 5000).
+- Recommended initial size: **one dedicated 1 vCPU / 4 GiB Reserved VM** for
+  initial testing/release, not a demonstrated concurrent-player capacity.
+  Current official pricing guidance lists $0.0486/hour (about $35 per 30-day
+  month) before applicable credits and additional usage charges.
+  The smaller shared 0.5 vCPU / 2 GiB option is $0.0208/hour (about $15 per
+  30-day month), but offers less CPU headroom. Confirm the actual selected
+  machine and price in Publishing before committing to ongoing spend.
+- Database usage and outbound transfer are separate from the VM estimate.
+- Replit documentation says switching deployment type retains the existing
+  `replit.app` URL and only takes effect on republishing. Preserve that URL:
+  TestFlight build 7 already targets it.
+- **Port review required during preparation:** published Autoscale/Reserved VM
+  apps support one external port. Workspace configuration currently has several
+  preview port mappings, with 8081 (development Metro) mapped to external 80.
+  Confirm production routing sends public HTTP/WebSocket traffic to the backend
+  port, not Metro, and exposes only one production port. The current successful
+  deployment is not proof these workspace mappings are appropriate on republish.
+  Do not remove development preview mappings without considering their use.
+- A Reserved VM avoids distributing these in-memory rooms across autoscaled
+  processes but does not persist them across restarts, failures, or publishing.
+  Publish during a quiet period and verify real two-device play afterward.
+
+Next approval is for preparing the deployment configuration only. Machine
+selection, final schema approval, and publishing remain user-controlled gates.
+No additional EAS build or App Store submission is part of this step.
+
+Sources:
+- https://docs.replit.com/features/publishing/deployment-types
+- https://docs.replit.com/billing/aug-cloud-billing-updates
+- https://docs.replit.com/features/project-setup/ports
+- https://docs.replit.com/features/publishing/after-you-publish
+
 ## Goal and rules
 
 Upgrade Expo, preserve Game Center, then build and test the upgraded app on an
