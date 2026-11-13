@@ -20,3 +20,9 @@ Agent-shell EAS authentication may not persist across turns; verify `eas whoami`
 **Why:** The CLI session that started an approved cloud build was unavailable to the agent in a later turn, preventing status checks and submission.
 
 **How to apply:** Treat build authorization as distinct from shell authentication; do not claim a follow-on EAS action started unless its command returned a submission/build record.
+
+The Expo connection can read builds but may lack permission to read stored iOS credentials for submission. Connecting Expo does not establish EAS CLI authentication.
+
+**Why:** Submission returned an iOS-credentials authorization denial with scoped RUN/VIEW access even after one OAuth reauthorization.
+
+**How to apply:** If this denial recurs after a single reconnect, stop reconnecting. Use EAS CLI instead; chain device login, `whoami`, and the separately approved submission in the same Shell invocation to avoid gaps between authentication and execution.
