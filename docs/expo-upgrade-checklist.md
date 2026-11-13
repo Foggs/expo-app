@@ -86,6 +86,45 @@ A workspace `.replit` diff adding the `postgresql-16` module appeared during
 the tooling checks. It was not manually edited or reverted; no deployment
 configuration fields changed. The only deliberate file edit was this report.
 
+## Local build and backend validation — 2026-11-13
+
+The owner separately approved local build/test execution after the read-only
+review. This section supersedes the earlier statement that the complete
+publishing command had not yet been run; it does not authorize publication.
+
+- **PASS — complete publishing build:** ran
+  `npm run expo:static:build && npm run server:build` with the confirmed production
+  domain supplied only to the build process. Both minified native JavaScript
+  bundles, both manifests, 53 assets, and `server_dist/index.js` were generated.
+  This is the configured local publishing command, not a new EAS native build.
+- Manifest checks confirmed both launch URLs use `https://sketch-duel.replit.app`,
+  both referenced bundle files exist, and both manifests declare `dev: false`.
+  `node --check server_dist/index.js` passed.
+- **PASS — backend/shared tests:** all 93 tests across 12 files passed using
+  `env -u DATABASE_URL npx vitest run server/__tests__ shared/__tests__ --maxWorkers 2 --hookTimeout 30000`.
+  Database integration tests created and removed disposable local PostgreSQL
+  clusters; neither the normal development nor production database was used.
+- **PASS — TypeScript:** `npx tsc --noEmit` exited successfully.
+- **FAIL — supplemental server/shared lint:** `npx eslint server shared`
+  reported one existing error and 16 warnings. The error is
+  `expo/no-dynamic-env-var` at `server/moderation-notifications.ts:58`, where
+  server code reads `process.env[SIGNING_SECRET_ENV_KEY]`. This is a lint-rule
+  failure, not an observed runtime or test failure. It was reported, not hidden
+  or fixed during this validation-only step.
+- The managed frontend workflow was paused to prevent the build from reusing
+  development Metro, then restored after the build. Both managed workflows are
+  running; startup logs show no crash.
+- Generated output is excluded from source snapshots through `.gitignore` and
+  `.replitignore`; the publishing build recreates it. No app logic, dependencies,
+  secrets, production schema/data, or deployment settings were changed.
+
+**Next gate:** resolve or explicitly disposition the server lint finding, then
+review publishing and the fresh production schema preview with the owner.
+The previously observed live identity 404 and schema gap remain unresolved:
+passing local checks does not deploy these fixes or establish live Game Center
+acceptance. Production publication and schema changes still require separate
+approval, followed by on-device identity/friends/gameplay checks.
+
 ## Goal and rules
 
 Upgrade Expo, preserve Game Center, then build and test the upgraded app on an

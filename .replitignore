@@ -1,0 +1,3 @@
+# Generated locally; the publishing build recreates these directories.
+/static-build/
+/server_dist/
