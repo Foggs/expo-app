@@ -286,9 +286,11 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     gap: 8,
+    alignSelf: "center",
+    width: 136,
     minHeight: 44,
     paddingVertical: 10,
-    paddingHorizontal: 18,
+    paddingHorizontal: 10,
     borderRadius: 22,
   },
   secondaryButtonCompact: {
