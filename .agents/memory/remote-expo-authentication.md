@@ -23,6 +23,6 @@ Agent-shell EAS authentication may not persist across turns; verify `eas whoami`
 
 The Expo connection can read builds but may lack permission to read stored iOS credentials for submission. Connecting Expo does not establish EAS CLI authentication.
 
-**Why:** Submission returned an iOS-credentials authorization denial with scoped RUN/VIEW access even after one OAuth reauthorization.
+**Why:** Submission returned an iOS-credentials authorization denial with scoped RUN/VIEW access even after one OAuth reauthorization. Chaining device login, account verification, and submission in the owner's Shell successfully scheduled the upload.
 
 **How to apply:** If this denial recurs after a single reconnect, stop reconnecting. Use EAS CLI instead; chain device login, `whoami`, and the separately approved submission in the same Shell invocation to avoid gaps between authentication and execution.
