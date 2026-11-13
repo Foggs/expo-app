@@ -118,8 +118,23 @@ publishing command had not yet been run; it does not authorize publication.
   `.replitignore`; the publishing build recreates it. No app logic, dependencies,
   secrets, production schema/data, or deployment settings were changed.
 
-**Next gate:** resolve or explicitly disposition the server lint finding, then
-review publishing and the fresh production schema preview with the owner.
+### Approved server lint correction — 2026-11-13
+
+After separate owner approval, scoped `expo/no-dynamic-env-var` off for backend
+files only. Node reads these variables at runtime, so Expo's static client
+lookup restriction does not apply. No application code or signing behavior
+changed.
+
+- **PASS — server/shared lint:** `npx eslint server shared` now exits successfully
+  with zero errors and the same 16 existing warnings.
+- Effective ESLint configuration checks confirmed the rule is disabled for the
+  backend and remains an error for client and shared code.
+- The preceding build, test, and TypeScript results remain applicable: only
+  lint configuration and this checklist changed. No workflow restart, new
+  native build, publication, or production database change was performed.
+
+**Next gate:** review publishing and the fresh production schema preview with
+the owner.
 The previously observed live identity 404 and schema gap remain unresolved:
 passing local checks does not deploy these fixes or establish live Game Center
 acceptance. Production publication and schema changes still require separate

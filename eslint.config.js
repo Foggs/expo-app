@@ -12,5 +12,13 @@ module.exports = defineConfig([
       // synchronization visible without refactoring gameplay during an SDK upgrade.
       "react-hooks/set-state-in-effect": "warn",
     },
+  },
+  {
+    files: ["server/**/*.{js,cjs,mjs,ts,tsx}"],
+    rules: {
+      // Node reads environment variables at runtime; Expo's static client
+      // environment lookup restriction does not apply to the backend.
+      "expo/no-dynamic-env-var": "off",
+    },
   }
 ]);
