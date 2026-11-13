@@ -156,6 +156,7 @@ function HowToPlayButton({
       onPress={onPress}
       style={({ pressed }) => [
         styles.secondaryButton,
+        styles.howToPlayButton,
         compact && styles.secondaryButtonCompact,
         { backgroundColor: colors.card },
         pressed && styles.pressed,
@@ -292,6 +293,9 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     paddingHorizontal: 10,
     borderRadius: 22,
+  },
+  howToPlayButton: {
+    marginTop: 6,
   },
   secondaryButtonCompact: {
     minHeight: 40,
