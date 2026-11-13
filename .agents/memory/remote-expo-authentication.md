@@ -11,6 +11,6 @@ Use an authentication flow intended for remote terminals when Expo CLI runs in R
 
 Interactive EAS device login can require a final matching-number selection in the terminal after browser approval. Have the owner complete that selection in their Shell, wait for `Logged in as`, and verify with `whoami` before retrying a build.
 
-**Why:** Browser-side approval and owner confirmation did not establish an authenticated CLI session; both the agent's and owner's build commands still rejected authentication. The CLI implements a separate terminal matching step.
+**Why:** Browser-side approval and owner confirmation did not establish an authenticated CLI session; both the agent's and owner's build commands still rejected authentication. Completing device login through its final terminal confirmation restored CLI access. The CLI implements a separate terminal matching step.
 
 **How to apply:** Explain the full browser-to-terminal sequence rather than repeatedly asking whether the owner is signed in. Never ask them to send the matching number or authentication codes through chat.
