@@ -14,3 +14,9 @@ Interactive EAS device login can require a final matching-number selection in th
 **Why:** Browser-side approval and owner confirmation did not establish an authenticated CLI session; both the agent's and owner's build commands still rejected authentication. Completing device login through its final terminal confirmation restored CLI access. The CLI implements a separate terminal matching step.
 
 **How to apply:** Explain the full browser-to-terminal sequence rather than repeatedly asking whether the owner is signed in. Never ask them to send the matching number or authentication codes through chat.
+
+Agent-shell EAS authentication may not persist across turns; verify `eas whoami` immediately before each cloud build or submission. If it is unavailable, use the owner's already-authenticated Shell rather than restarting login unnecessarily.
+
+**Why:** The CLI session that started an approved cloud build was unavailable to the agent in a later turn, preventing status checks and submission.
+
+**How to apply:** Treat build authorization as distinct from shell authentication; do not claim a follow-on EAS action started unless its command returned a submission/build record.
