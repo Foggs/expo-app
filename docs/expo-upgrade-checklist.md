@@ -1,6 +1,90 @@
 # SketchDuel Expo upgrade checklist
 
-Last updated: 2026-11-11
+Last updated: 2026-11-13
+
+## Latest checkpoint — backend read-only review, 2026-11-13
+
+Build 7 finished successfully and the owner subsequently accepted its appearance
+in TestFlight. This does not establish Game Center identity linking, friend
+invites, moderation, or complete gameplay acceptance. Earlier build-5 and
+pre-submission notes below are historical, not the current release status.
+
+**Verdict: backend readiness is blocked.** A real production Game Center identity
+request returned 404, and the managed production schema still lacks structures
+required by current source. No production changes were made during this review.
+
+### Target and health
+
+- Fresh deployment metadata identifies a public, successful autoscale deployment
+  at `https://sketch-duel.replit.app`.
+- The production profile in the recorded build-7 source revision targets that
+  same URL. This checks source configuration, not an extraction of the installed
+  IPA's effective runtime configuration.
+- GET `/api/health` returned HTTP 200 at 2026-11-13T16:59:28.632Z.
+  The current health handler only returns status/time/uptime; it does not query
+  the database or verify authenticated features.
+- Source and Drizzle configuration use `DATABASE_URL`; reviewed project
+  documentation names PostgreSQL and does not document an alternate external
+  production database. Schema reads explicitly targeted Replit's managed
+  production read replica and development database, not the default dev target.
+  Deployed connection credentials were not inspected; deployment metadata does
+  not independently prove the exact runtime connection or source revision.
+
+### Fresh schema comparison
+
+Read only catalog metadata: public columns/types/defaults/nullability, primary
+and unique keys, foreign keys, and index definitions. No player records were read.
+
+- Production contains four application tables; development/current schema define
+  nine. Existing common column definitions and constraints match in the reviewed
+  catalogs; new structures account for the reported differences.
+- Missing production tables: `game_center_proof_uses`, `player_accounts`,
+  `player_device_links`, `player_blocks`, and `moderation_reports`.
+- Missing nullable text columns: `games.player1_session_key`,
+  `games.player2_session_key`, and `gallery_drawings.owner_player_key`.
+- The fresh publishing comparison still reports **12 additive SQL statements**:
+  five table creations (including their primary/unique constraints), three
+  added columns, two moderation foreign keys, and two explicit indexes.
+- No drops, truncations, structural-data-loss flags, backwards-compatibility
+  flags, or warnings were returned. This is an advisory comparison, not permission
+  to apply it or a guarantee of a risk-free rollout; recheck the actual publishing
+  preview before approval.
+
+### Runtime telemetry investigation
+
+Read-only investigation window: 2026-11-12T16:59:18.374Z through
+2026-11-13T16:59:18.374Z UTC.
+
+- Runtime log evidence: `POST /api/identity/game-center 404 in 2ms` at
+  2026-11-13T16:34:34.045Z. Endpoint metrics corroborate one request and one 4xx.
+  Current workspace source registers this POST route. No synthetic identity
+  request or authentication attempt was made during the review.
+- Deployment history lists one successful build, created October 23, 2026.
+  Revision-scoped logs tie the observed runtime to that build; its source commit
+  is not exposed. Stale deployment is strongly indicated, but exact deployed
+  source contents remain unverified.
+- Aggregate request metric: 41 requests and one 4xx. The 5xx metric returned no
+  points, not a measured zero. A Gallery GET 200 does not establish ownership,
+  saving, or authenticated functionality.
+- The investigation examined 93 error-classified entries: 57 internal probe
+  HTTP-500 messages, eight internal probe connection refusals, and 28 Node module
+  warning lines. These are not equivalent to 93 failed user requests; the causes
+  of the internal probe failures remain unestablished.
+- No database-specific, friends, invites, or moderation errors, or successful
+  Game Center identity requests, appeared in the examined logs. Lack of evidence
+  does not mean those features passed.
+
+### Boundaries and next gate
+
+No SQL changes, publishing, service restarts, authenticated app actions, or
+local build/test execution were performed. The next step is a separately
+approved local full publishing build and relevant backend tests, followed by
+review of production update risks. Publication/schema application still requires
+separate owner approval and must preserve existing production data.
+
+A workspace `.replit` diff adding the `postgresql-16` module appeared during
+the tooling checks. It was not manually edited or reverted; no deployment
+configuration fields changed. The only deliberate file edit was this report.
 
 ## Goal and rules
 
